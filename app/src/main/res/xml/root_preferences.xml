@@ -1,0 +1,48 @@
+<PreferenceScreen
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        app:title="@string/messages_header">
+
+        <EditTextPreference
+            app:defaultValue="HASUB-2023"
+            app:key="current_batch_id"
+            app:title="@string/signature_title"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            app:key="another_driver_id"
+            app:title="@string/another_driver_id"
+            app:useSimpleSummaryProvider="true"/>
+
+        <EditTextPreference
+            app:key="driver_id"
+            app:title="@string/driver_id"
+            app:useSimpleSummaryProvider="true"/>
+
+        <EditTextPreference
+            app:key="syn_orders_id"
+            app:title="@string/syn_orders_id"
+            app:useSimpleSummaryProvider="true"/>
+
+        <EditTextPreference
+            app:key="transfer_package_id"
+            app:title="@string/transfer_package_id"
+            app:useSimpleSummaryProvider="true"/>
+
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:title="@string/sync_header">
+
+        <SwitchPreferenceCompat
+            app:key="auto_save_scan"
+            app:title="@string/sync_title" />
+
+        <SwitchPreferenceCompat
+            app:key="auto_commit"
+            app:title="@string/commit_title" />
+
+    </PreferenceCategory>
+</PreferenceScreen>

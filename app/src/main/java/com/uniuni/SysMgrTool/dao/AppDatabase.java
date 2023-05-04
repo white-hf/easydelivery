@@ -1,0 +1,12 @@
+package com.uniuni.SysMgrTool.dao;
+
+import androidx.room.Database;
+import androidx.room.RoomDatabase;
+import androidx.room.TypeConverters;
+
+@Database(entities = {ScannedRecord.class,OrderIdRecord.class},version = 1)
+@TypeConverters(DateConverter.class)
+public abstract class AppDatabase extends RoomDatabase{
+    public abstract ScannedRecordDao getScannedRecordDao();
+    public abstract OrderIdRecordDao getOrderIdRecordDao();
+}

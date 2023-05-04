@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <FrameLayout
+        android:id="@+id/content_frame"
+        android:layout_width="match_parent"
+        android:layout_height="229dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_scan_parcel"
+            android:layout_width="47dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="扫货"
+            android:textDirection="rtl" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_query_svr"
+            android:layout_width="wrap_content"
+            android:layout_height="37dp"
+            android:layout_weight="1"
+            android:text="查件"
+            android:textDirection="rtl" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_operate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="操作"
+            android:textDirection="rtl" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/textPackId"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:autofillHints=""
+        android:ems="10"
+        android:inputType="textPersonName"
+        android:singleLine="false"
+        android:textAlignment="center"
+        android:textColor="#F44336"
+        android:textSize="60sp"
+        android:textStyle="bold"
+        tools:ignore="SpeakableTextPresentCheck" />
+
+    <TextView
+        android:id="@+id/textViewScanSummary"
+        android:layout_width="match_parent"
+        android:layout_height="228dp"
+        android:textSize="16sp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerBarCodeList"
+        android:layout_width="match_parent"
+        android:layout_height="19dp">
+
+    </androidx.recyclerview.widget.RecyclerView>
+</LinearLayout>

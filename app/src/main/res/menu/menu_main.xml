@@ -1,0 +1,23 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context="com.uniuni.SysMgrTool.ScannerActivity">
+
+
+    <item
+        android:id="@+id/action_down"
+        android:checkable="false"
+        android:checked="false"
+        android:icon="@android:drawable/stat_sys_download_done"
+        android:title="实时"
+
+        android:visible="true"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/action_up"
+        android:icon="@android:drawable/stat_sys_upload_done"
+        android:title="待定"
+        app:showAsAction="ifRoom" />
+
+
+</menu>

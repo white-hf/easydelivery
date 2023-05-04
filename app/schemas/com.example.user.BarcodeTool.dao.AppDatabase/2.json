@@ -1,0 +1,138 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "e7377583f2190004fe10f9b13c801889",
+    "entities": [
+      {
+        "tableName": "scanned_record",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`tid` TEXT NOT NULL, `orderId` INTEGER, `orderSn` TEXT, `pickId` INTEGER, `staffId` INTEGER, `driverId` INTEGER, `staffName` TEXT, `scannedTime` INTEGER, `scannedLocation` TEXT, `wareHouseId` INTEGER, `batchId` TEXT, `blockId` INTEGER, `isCommitted` INTEGER, `committedDate` INTEGER, PRIMARY KEY(`tid`))",
+        "fields": [
+          {
+            "fieldPath": "tid",
+            "columnName": "tid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "orderId",
+            "columnName": "orderId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "orderSn",
+            "columnName": "orderSn",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "pickId",
+            "columnName": "pickId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "staffId",
+            "columnName": "staffId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "driverId",
+            "columnName": "driverId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "staffName",
+            "columnName": "staffName",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "scannedTime",
+            "columnName": "scannedTime",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "scannedLocation",
+            "columnName": "scannedLocation",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "wareHouseId",
+            "columnName": "wareHouseId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "batchId",
+            "columnName": "batchId",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "blockId",
+            "columnName": "blockId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "isCommitted",
+            "columnName": "isCommitted",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "committedDate",
+            "columnName": "committedDate",
+            "affinity": "INTEGER",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "columnNames": [
+            "tid"
+          ],
+          "autoGenerate": false
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "orderid_record",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`tid` TEXT NOT NULL, `createDate` INTEGER, PRIMARY KEY(`tid`))",
+        "fields": [
+          {
+            "fieldPath": "tid",
+            "columnName": "tid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createDate",
+            "columnName": "createDate",
+            "affinity": "INTEGER",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "columnNames": [
+            "tid"
+          ],
+          "autoGenerate": false
+        },
+        "indices": [],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e7377583f2190004fe10f9b13c801889')"
+    ]
+  }
+}
