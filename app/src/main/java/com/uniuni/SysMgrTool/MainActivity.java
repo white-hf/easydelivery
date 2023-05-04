@@ -50,11 +50,8 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
-    public static MainActivity instance;
-
     private AppCompatButton btn_save;
     AppCompatButton  btn_order_detail;
-    private String BarcodeValue,BarcodeType;
     private EditText mEditText;
     private EditText mPickId;
     private Spinner spinner;
@@ -63,7 +60,7 @@ public class MainActivity extends AppCompatActivity {
 
     private Bitmap bit;
 
-    private ArrayList<String> mSearchOrder = new ArrayList<String>();
+    private final ArrayList<String> mSearchOrder = new ArrayList<>();
     private MyAdapter mSearchOrderAdapter;
 
     private ListView mLvSearchOrder;
@@ -71,20 +68,18 @@ public class MainActivity extends AppCompatActivity {
     private AlertDialog mLoginDialog;
     private AlertDialog.Builder  mSystemOperationDialog;
 
-    private boolean mBright = false;
+    private final boolean mBright = false;
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        instance = this;
-
         setContentView(R.layout.activity_barcode);
         //btn_save = (AppCompatButton)findViewById(R.id.btn_)
 
         MySingleton.getInstance().ScanText = "";
-        mPickId   = (EditText)findViewById(R.id.editTextPickNumber);
+        mPickId   = findViewById(R.id.editTextPickNumber);
 
         mSearchOrderAdapter = new MyAdapter(mSearchOrder , this);
         mLvSearchOrder = (ListView) findViewById(R.id.lv_search_order);
@@ -181,14 +176,6 @@ public class MainActivity extends AppCompatActivity {
 
                         Intent intent = new Intent(getApplication(), ScannerActivity.class);
                         startActivity(intent);
-                        // Gets a handle to the clipboard service.
-                        //ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                        // Creates a new text clip to put on the clipboard
-                       // ClipData clip = ClipData.newPlainText("text", mEditText.getText());
-                        // Set the clipboard's primary clip.
-                        //clipboard.setPrimaryClip(clip);
-
-                       // Toast.makeText(MainActivity.this, "copied to clipboard", Toast.LENGTH_SHORT).show();
                         return true;
                     }
                 }
@@ -531,8 +518,8 @@ public class MainActivity extends AppCompatActivity {
 
         BarcodeEncoder encoder = new BarcodeEncoder();
         try {
-            BarcodeValue = mEditText.getText().toString();
-            BarcodeType = spinner.getSelectedItem().toString();
+            String BarcodeValue = mEditText.getText().toString();
+            String BarcodeType = spinner.getSelectedItem().toString();
             int mHeight = 200,mWidth = 800;
             if(BarcodeType.equals("QR_CODE")){
                 mHeight = 500;
