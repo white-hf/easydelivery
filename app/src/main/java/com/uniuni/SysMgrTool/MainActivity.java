@@ -127,9 +127,7 @@ public class MainActivity extends AppCompatActivity {
                 if (mEditText.hasFocus() && txt.length() == 4)
                 {
                     //if user has typed four characters, search the whole order id asynchronously
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
+                    new Thread(()->{
                             OrderIdRecord[] results = MySingleton.getInstance().getmMydb().searchOrderIds(txt);
                             if (results == null || results.length == 0)
                                 return;
@@ -140,9 +138,7 @@ public class MainActivity extends AppCompatActivity {
                                 mSearchOrder.add(o.tid);
                             }
 
-                            runOnUiThread(new Runnable() {
-                                @Override
-                                public void run() {
+                            runOnUiThread(()-> {
                                     if (mSearchOrder.size() == 1) {
                                         mEditText.setText(results[0].tid);
                                         btn_order_detail.performClick();
@@ -156,19 +152,14 @@ public class MainActivity extends AppCompatActivity {
                                         mLvSearchOrder.requestFocus();
                                         mLvSearchOrder.bringToFront();
                                     }
-                                }
-                            });
-                        }
-                    }).start();
-
+                                });
+                        }).start();
                 }
             }
         });
 
 
-        mEditText.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
+        mEditText.setOnTouchListener((v,event)->{
                 final int DRAWABLE_RIGHT = 2;
 
                 if(event.getAction() == MotionEvent.ACTION_UP) {
@@ -180,40 +171,30 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 return false;
-            }
-        });
+            });
 
-        AppCompatButton btn_Setting = (AppCompatButton)findViewById(R.id.btn_setting);
-        btn_Setting.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
+        AppCompatButton btn_Setting = findViewById(R.id.btn_setting);
+        btn_Setting.setOnClickListener((view)->{
                 Intent intent = new Intent(getApplication(), SettingsActivity.class);
                 startActivity(intent);
-            }
-        });
+            });
 
 
 
 
         AppCompatButton btn_viewScannedData = (AppCompatButton)findViewById(R.id.btn_scanneddata);
-        btn_viewScannedData.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
+        btn_viewScannedData.setOnClickListener((v)->{
                 ScannedDataFragment dialog = ScannedDataFragment.newInstance("1","2");
                 dialog.show(getSupportFragmentManager(),"");
-            }
-        });
+            });
 
 
         AppCompatButton  btn_Barcode_scan = (AppCompatButton)findViewById(R.id. btn_Barcode_scan);
         btn_Barcode_scan.setText(R.string.action_scan);
-        btn_Barcode_scan.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
+        btn_Barcode_scan.setOnClickListener((v)->{
                 Intent intent = new Intent(getApplication(), ScannerActivity.class);
                 startActivity(intent);
-            }
-        });
+            });
 
 
         spinner = (Spinner)findViewById(R.id.spinner);
@@ -239,7 +220,7 @@ public class MainActivity extends AppCompatActivity {
         String transferPackages = MySingleton.getInstance().getProperty(MySingleton.ITEM_TRANSFER_PACKAGE_ID);
 
         String[] ids = transferPackages.split("\\s+");
-        if (ids == null || ids.length % 3 != 0) {
+        if (ids.length % 3 != 0) {
 
             Toast.makeText(MainActivity.this, R.string.invaid_transfer_package_id, Toast.LENGTH_SHORT).show();
             return;
@@ -287,7 +268,7 @@ public class MainActivity extends AppCompatActivity {
             return;
 
         String[] orderLoaderIds = ids.split(",");
-        if (orderLoaderIds == null || orderLoaderIds.length == 0)
+        if (orderLoaderIds.length == 0)
             return;
 
         String currentBatchId = MySingleton.getInstance().getProperty(MySingleton.ITEM_CURRENT_BATCH_ID);
@@ -390,7 +371,6 @@ public class MainActivity extends AppCompatActivity {
                   TextView textView= viewHolder.itemView.findViewById(R.id.mtext);
                   Log.d("debug", "Value : " + textView.getText().toString());
                   mEditText.setText(textView.getText().toString());
-                  getCode();
               }
             }
         });
@@ -415,13 +395,9 @@ public class MainActivity extends AppCompatActivity {
         final int selectedIndex[] = { 0 };
 
         mSystemOperationDialog.setSingleChoiceItems(opertionsArray, 0,
-                new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
+                (dialog,which)->{
                         selectedIndex[0] = which;
-
-                    }
-                });
+                    });
 
         mSystemOperationDialog.setPositiveButton(R.string.str_confirm,
                 new DialogInterface.OnClickListener() {
@@ -513,36 +489,7 @@ public class MainActivity extends AppCompatActivity {
         mLoginDialog = dialog.create();
     }
 
-    public void getCode() {
-        ImageView ivCode = (ImageView) findViewById(R.id.imageView);
 
-        BarcodeEncoder encoder = new BarcodeEncoder();
-        try {
-            String BarcodeValue = mEditText.getText().toString();
-            String BarcodeType = spinner.getSelectedItem().toString();
-            int mHeight = 200,mWidth = 800;
-            if(BarcodeType.equals("QR_CODE")){
-                mHeight = 500;
-                mWidth = 500;
-            }
-            bit = encoder.encodeBitmap(mEditText.getText().toString(), (BarcodeFormat)spinner.getSelectedItem(), mWidth, mHeight);
-            ivCode.setImageBitmap(bit);
-
-
-            //btn_save.setVisibility(View.VISIBLE);
-        } catch (WriterException e) {
-            e.printStackTrace();
-            Toast.makeText(MainActivity.this, "It doesn't work", Toast.LENGTH_SHORT).show();
-        }
-
-        if(!CodeArray.contains(BarcodeValue)){
-            CodeArray.add(BarcodeValue);
-            if(CodeArray.size() > 8){
-                CodeArray.remove(0);
-            }
-        }
-    }
-    
     public void hideSoftKeyboard() {
         if(getCurrentFocus()!=null) {
             InputMethodManager inputMethodManager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
@@ -557,7 +504,6 @@ public class MainActivity extends AppCompatActivity {
 
         if(!MySingleton.getInstance().ScanText.equals("")){
             mEditText.setText(MySingleton.getInstance().ScanText);
-            getCode();
             MySingleton.getInstance().ScanText="";
         }
     }
