@@ -1,0 +1,237 @@
+package com.uniuni.SysMgrTool.View;
+
+// MapFragment.java
+
+import static android.content.Context.LOCATION_SERVICE;
+
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.drawable.Drawable;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.Fragment;
+
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.MapView;
+import com.google.android.gms.maps.MapsInitializer;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.model.BitmapDescriptor;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
+
+
+import com.uniuni.SysMgrTool.MySingleton;
+import com.uniuni.SysMgrTool.R;
+import com.uniuni.SysMgrTool.dao.DeliveryInfo;
+
+import java.util.ArrayList;
+
+import com.google.maps.android.clustering.Cluster;
+import com.google.maps.android.clustering.ClusterManager;
+
+public class MapFragment extends Fragment implements OnMapReadyCallback,LocationListener {
+
+    private MapView mapView;
+    private GoogleMap googleMap;
+
+    private LocationManager locationManager;
+
+    private ClusterManager<DeliveryInfo> clusterManager;
+
+    @Nullable
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        View view = inflater.inflate(R.layout.fragment_map, container, false);
+
+        mapView = view.findViewById(R.id.mapView);
+        mapView.onCreate(savedInstanceState);
+        mapView.getMapAsync(this);
+        try {
+            MapsInitializer.initialize(requireActivity().getApplicationContext());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        mapView.onResume();
+        // 检查位置权限
+        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(getActivity(), new String[]{
+                    Manifest.permission.ACCESS_FINE_LOCATION
+            }, 1);
+        } else {
+            getLocation();
+        }
+
+        return view;
+    }
+
+    private void getLocation() {
+        try {
+            locationManager = (LocationManager) getActivity().getSystemService(LOCATION_SERVICE);
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 5, this);
+        } catch (SecurityException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void onLocationChanged(Location location) {
+        // 当位置改变时，这里可以获取到最新的位置
+        double latitude = location.getLatitude();
+        double longitude = location.getLongitude();
+
+        // 使用经纬度数据
+        LatLng markerLatLng = new LatLng(latitude, longitude);
+        //googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(markerLatLng, 12));
+    }
+
+    @Override
+    public void onProviderDisabled(String provider) {
+        // 当GPS定位提供者被用户关闭时，会调用这个方法
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {
+        // 当GPS定位提供者被用户开启时，会调用这个方法
+    }
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+        // 定位提供者状态改变时，会调用这个方法
+    }
+
+
+    @Override
+    public void onMapReady(GoogleMap map) {
+        googleMap = map;
+        googleMap.setMyLocationEnabled(true);
+
+        // Initialize ClusterManager
+        clusterManager = new ClusterManager<>(this.getActivity(), googleMap);
+
+        MySingleton.getInstance().getmMydb().loadDeliveryInfoFromDb();
+
+        ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getListDeliveryInfo();
+
+        LatLng firstMarker = null;
+        for (DeliveryInfo info :lst)
+        {
+            addCustomMarker(info);
+            clusterManager.addItem(info);
+
+            if (firstMarker == null) {
+                firstMarker = new LatLng(info.getLatitude(), info.getLongitude());
+            }
+
+        }
+
+        // 添加标记点，这里是示例，你需要根据你的数据添加标记
+        if (firstMarker != null) {
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstMarker, 12));
+        }
+
+        clusterManager.setOnClusterClickListener(cluster->{
+            Toast.makeText(this.getActivity(), "Cluster clicked with " + cluster.getSize() + " items", Toast.LENGTH_SHORT).show();
+            return false;
+        });
+
+        clusterManager.setOnClusterItemClickListener(item->{
+            Toast.makeText(this.getActivity(), "Package number: " + item.getRouteNumber(), Toast.LENGTH_SHORT).show();
+            return false;
+        });
+
+        // Set marker click listener
+        googleMap.setOnMarkerClickListener(marker->{
+                // Show toast with package number
+                Toast.makeText(this.getActivity(), "Package number: " + marker.getTitle(), Toast.LENGTH_SHORT).show();
+                return false;
+            });
+        // For zooming automatically to the location of the marker
+        //CameraPosition cameraPosition = new CameraPosition.Builder().target(sydney).zoom(15).build();
+        //googleMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
+
+        // 将地图移动到标记点位置
+    }
+
+
+    private void addCustomMarker(DeliveryInfo pkg) {
+        // Create a custom marker bitmap with the package number
+        BitmapDescriptor icon = BitmapDescriptorFactory.fromBitmap(
+                getMarkerBitmapFromView(pkg.getRouteNumber()));
+
+        // Add the marker to the map
+        googleMap.addMarker(new MarkerOptions()
+                .position(new LatLng(pkg.getLatitude(), pkg.getLongitude()))
+                .icon(icon).title(pkg.getRouteNumber()));
+    }
+    private Bitmap getMarkerBitmapFromView(String number) {
+        // Load the bitmap from drawable resource
+        Bitmap backgroundBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.package_marker);
+
+        // Create a mutable bitmap with same dimensions as backgroundBitmap
+        Bitmap bitmap = backgroundBitmap.copy(Bitmap.Config.ARGB_8888, true);
+
+        // Draw the package number on the bitmap
+        Canvas canvas = new Canvas(bitmap);
+
+        // Initialize the paint object
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTextSize(24); // Adjust text size as needed
+        paint.setTextAlign(Paint.Align.CENTER);
+
+        // Calculate text position
+        float xPos = canvas.getWidth() / 2;
+        float yPos = (canvas.getHeight() / 2) - ((paint.descent() + paint.ascent()) / 2);
+
+        // Draw the text
+        canvas.drawText(number, xPos, yPos, paint);
+
+        return bitmap;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        mapView.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        mapView.onPause();
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        mapView.onDestroy();
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        mapView.onLowMemory();
+    }
+}
