@@ -11,7 +11,11 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
 
+import com.uniuni.SysMgrTool.Event.Event;
+import com.uniuni.SysMgrTool.Event.Subscriber;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.Request.InsertOperationLogReq;
@@ -19,8 +23,9 @@ import com.uniuni.SysMgrTool.Request.UpdateShippingStatusReq;
 import com.uniuni.SysMgrTool.Response.OrderDetailData;
 import com.uniuni.SysMgrTool.ServerInterface;
 
-public class OderDetailView extends DialogFragment {
+public class OderDetailView extends DialogFragment implements Subscriber {
 
+    public final static String ORDER_DIALOG = "orderdetail";
     private String mResut;
     private DialogFragment myHandle;
     private final int choiceSelfPick = 0;
@@ -184,4 +189,24 @@ public class OderDetailView extends DialogFragment {
     }
 
 
+    @Override
+    public void receive(Event event) {
+        Event<OrderDetailData> eOrderDetailData = (Event<OrderDetailData>) event;
+
+        FragmentManager mFm = this.getParentFragmentManager();
+        if (mFm.isDestroyed())
+            return;
+
+        String orderText = MySingleton.getInstance().formatOrderDetailInfo(eOrderDetailData.getMessage());
+        Fragment f = mFm.findFragmentByTag(ORDER_DIALOG);
+        if (f != null) {
+
+        } else {
+            this.setmOrderDetailData(eOrderDetailData.getMessage());
+            this.setmMsg(orderText);
+            this.show(mFm, ORDER_DIALOG);
+
+            MySingleton.getInstance().getPublisher().unsubscribe(Event.EVENT_ORDER_DETAIL, this);
+        }
+    }
 }

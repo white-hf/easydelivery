@@ -1,29 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="com.uniuni.SysMgrTool" >
+    xmlns:tools="http://schemas.android.com/tools" >
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
     <uses-feature android:name="android.hardware.camera" />
+
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
-
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-
-    <uses-permission android:name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS"
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission
+        android:name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS"
         tools:ignore="ProtectedPermissions" />
 
-
-
     <application
-        android:name="com.uniuni.SysMgrTool.MySingleton"
+        android:name=".MySingleton"
         android:allowBackup="true"
         android:icon="@mipmap/sharp_fullscreen_black_18dp"
         android:label="@string/app_name"
@@ -32,9 +30,35 @@
         android:screenOrientation="portrait"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
-        tools:ignore="GoogleAppIndexingWarning">
+        tools:ignore="GoogleAppIndexingWarning" >
         <activity
-            android:name="com.uniuni.SysMgrTool.View.SettingsActivity"
+            android:name=".View.CameraActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light" />
+        <!--
+             TODO: Before you run your application, you need a Google Maps API key.
+
+             To get one, follow the directions here:
+
+                https://developers.google.com/maps/documentation/android-sdk/get-api-key
+
+             Once you have your API key (it starts with "AIza"), define a new property in your
+             project's local.properties file (e.g. MAPS_API_KEY=Aiza...), and replace the
+             "YOUR_API_KEY" string in this file with "${MAPS_API_KEY}".
+        -->
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version" />
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyCQPKK8eTUR5sWkD1DfaVfGfa9g07n6fAI" />
+
+        <activity
+            android:name=".View.DeliveringActivity"
+            android:exported="false"
+            android:label="@string/title_activity_delivering" />
+        <activity
+            android:name=".View.SettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings" >
             <meta-data
@@ -42,10 +66,10 @@
                 android:value="" />
         </activity>
         <activity
-            android:name="com.uniuni.SysMgrTool.MainActivity"
+            android:name=".View.MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/AppTheme.NoActionBar"
+            android:theme="@style/Theme.AppCompat.Light"
             android:windowSoftInputMode="adjustNothing" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -53,8 +77,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name="com.uniuni.SysMgrTool.ScannerActivity" >
+        <activity android:name=".View.ScannerActivity" />
+        <activity
+            android:name=".View.FullImageActivity"
+            android:theme="@style/Theme.AppCompat.Light" >
+
         </activity>
+
     </application>
 
 </manifest>

@@ -1,4 +1,4 @@
-package com.uniuni.SysMgrTool;
+package com.uniuni.SysMgrTool.View;
 
 import static com.uniuni.SysMgrTool.MySingleton.ITEM_SYN_ORDERS_ID;
 
@@ -7,6 +7,7 @@ import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Camera;
 import android.os.Bundle;
 import android.os.Looper;
 import android.text.Editable;
@@ -19,7 +20,6 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -34,15 +34,14 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.uniuni.SysMgrTool.Event.Event;
+import com.uniuni.SysMgrTool.MySingleton;
+import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.Request.TransferPackagesReq;
-import com.uniuni.SysMgrTool.View.MyAdapter;
-import com.uniuni.SysMgrTool.View.ScannedDataFragment;
-import com.uniuni.SysMgrTool.View.SettingsActivity;
+import com.uniuni.SysMgrTool.Task.MyHandler;
 import com.uniuni.SysMgrTool.dao.OrderIdRecord;
 import com.uniuni.SysMgrTool.routeplanning.PlaceManager;
 import com.google.zxing.BarcodeFormat;
-import com.google.zxing.WriterException;
-import com.journeyapps.barcodescanner.BarcodeEncoder;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -179,11 +178,21 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(intent);
             });
 
+        AppCompatButton btn_delivery = findViewById(R.id.btn_delivery);
+        btn_delivery.setOnClickListener((view)->{
+            //Intent intent = new Intent(getApplication(), DeliveringActivity.class);
+            Intent intent = new Intent(getApplication(), CameraActivity.class);
+
+            startActivity(intent);
+        });
+
+
 
 
 
         AppCompatButton btn_viewScannedData = (AppCompatButton)findViewById(R.id.btn_scanneddata);
         btn_viewScannedData.setOnClickListener((v)->{
+                MySingleton.getInstance().getServerInterface().getDeliveringList(5010);
                 ScannedDataFragment dialog = ScannedDataFragment.newInstance("1","2");
                 dialog.show(getSupportFragmentManager(),"");
             });
@@ -242,6 +251,11 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(MainActivity.this, R.string.operation_completion, Toast.LENGTH_SHORT).show();
     }
 
+    private void startDispatch()
+    {
+        MySingleton.getInstance().getServerInterface().startDispatchByOne(MySingleton.getInstance().getLoginInfo().loginId.intValue());
+    }
+
     private void checkRoutePlan()
     {
         PlaceManager mgr = new PlaceManager();
@@ -249,6 +263,17 @@ public class MainActivity extends AppCompatActivity {
         String s = mgr.getJudgeResult();
 
         MySingleton.getInstance().saveOrderIds();
+
+/*        new Thread(()->{
+            try {
+                String ss = mgr.checkPlaceFromThirdPart();
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }).start();*/
+
 
         if (s.isEmpty()) {
             Toast.makeText(MainActivity.this, R.string.str_no_route_error, Toast.LENGTH_SHORT).show();
@@ -263,6 +288,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void cacheOrderId()
     {
+        MySingleton.getInstance().getServerInterface().getDeliveringList(Integer.valueOf(MySingleton.getInstance().getLoginInfo().loginId));
+
         String ids = MySingleton.getInstance().getProperty(ITEM_SYN_ORDERS_ID);
         if (ids == null || ids.isEmpty())
             return;
@@ -316,11 +343,14 @@ public class MainActivity extends AppCompatActivity {
 
     private void initOrderDetail()
     {
-        myHandler = new MyHandler(Looper.getMainLooper() , getSupportFragmentManager());
+        myHandler = new MyHandler(Looper.getMainLooper());
         btn_order_detail = (AppCompatButton)findViewById(R.id.btn_queryOrderDetail);
         btn_order_detail.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                OderDetailView mOderDetailView = new OderDetailView(null);
+                MySingleton.getInstance().getPublisher().subscribe(Event.EVENT_ORDER_DETAIL, mOderDetailView);
+
                 handleGetOrderDetailEvent();
             }
         });
@@ -390,7 +420,7 @@ public class MainActivity extends AppCompatActivity {
         mSystemOperationDialog = new AlertDialog.Builder(this);
 
         mSystemOperationDialog.setTitle(R.string.operation_choose);
-        final String[] opertionsArray = new String[] { "Cache Order Id", "Transfer Packages", "Check Route Plan"};
+        final String[] opertionsArray = new String[] { "Cache Order Id", "Transfer Packages", "Check Route Plan", "Start Dispatch"};
 
         final int selectedIndex[] = { 0 };
 
@@ -413,6 +443,9 @@ public class MainActivity extends AppCompatActivity {
                                 break;
                             case 2:
                                 checkRoutePlan();
+                                break;
+                            case 3:
+                                startDispatch();
                                 break;
                             default:
                                 break;
@@ -446,8 +479,8 @@ public class MainActivity extends AppCompatActivity {
         EditText loginPasswordEt = (EditText) myLoginView
                 .findViewById(R.id.my_login_password_et);
 
-        loginAccountEt.setText("");
-        loginPasswordEt.setText("");
+        loginAccountEt.setText(MySingleton.getInstance().getLoginInfo().loginName);
+        loginPasswordEt.setText("37505");
 
         dialog.setPositiveButton(R.string.str_confirm,
                 new DialogInterface.OnClickListener() {
@@ -470,9 +503,14 @@ public class MainActivity extends AppCompatActivity {
                         }
                         else
                         {
-                            MySingleton.getInstance().getLoginInfo().loginName = name;
-                            MySingleton.getInstance().getLoginInfo().loginLocation = spinnerLocation.getSelectedItem().toString();
-                            MySingleton.getInstance().getServerInterface().login(name , pwd);
+                            if (MySingleton.getInstance().isNumeric(name)) //login from app
+                            {
+                                MySingleton.getInstance().getServerInterface().appLogin(name,pwd);
+                            }else {
+                                MySingleton.getInstance().getLoginInfo().loginName = name;
+                                MySingleton.getInstance().getLoginInfo().loginLocation = spinnerLocation.getSelectedItem().toString();
+                                MySingleton.getInstance().getServerInterface().login(name, pwd);
+                            }
                         }
                     }
                 });

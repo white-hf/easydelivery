@@ -16,6 +16,9 @@ public class Place implements Cloneable {
     private boolean bBigGap = false;
 
 
+    private String address;
+
+
     private ArrayList<Place> otherPlaces = new ArrayList<>();
 
     public String getTid() {
@@ -76,6 +79,14 @@ public class Place implements Cloneable {
         }
 
         return p;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
     }
 
     public void initOtherPlaces(List<Place> lstAll)
@@ -140,6 +151,15 @@ public class Place implements Cloneable {
         dist = rad2deg(dist);
         double miles = dist * 60 * 1.1515;
         return miles;
+    }
+
+    public boolean checkDistance(double lat1, double lon1)
+    {
+        double m = distance(lat1,lon1,alon,lon);
+        if (m > MAX_MILES)
+            return true;
+        else
+            return false;
     }
 
     //将角度转换为弧度

@@ -62,6 +62,8 @@ public class  ScanOrder implements Serializable
     private String lat;
     private String lng;
 
+    private String address;
+
     private int lastStatus;
 
     public int getLastStatus() {
@@ -112,5 +114,11 @@ public class  ScanOrder implements Serializable
         this.driverId = driverId;
     }
 
+    public String getAddress() {
+        return address;
+    }
 
+    public void setAddress(String address) {
+        this.address = address;
+    }
 }

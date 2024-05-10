@@ -45,12 +45,20 @@ public class GsonRequest<T> extends JsonRequest<T> {
 
             try {
                 JSONObject jsonObj = new JSONObject(jsonString);
-                if (!jsonObj.getString("status").equalsIgnoreCase("SUCCESS"))
+                if (jsonObj.has("status") && !jsonObj.getString("status").equalsIgnoreCase("SUCCESS"))
                 {
                     Exception e = new Exception(jsonObj.getString("ret_msg"));
 
                     ErrResponse er = new ErrResponse(e);
                     er.setErrCode(jsonObj.getInt("err_code"));
+                    return Response.error(er);
+                }
+
+                if (jsonObj.has("biz_code") && !jsonObj.getString("biz_code").equalsIgnoreCase("COMMON.QUERY.SUCCESS"))
+                {
+                    Exception e = new Exception(jsonObj.getString("biz_message"));
+
+                    ErrResponse er = new ErrResponse(e);
                     return Response.error(er);
                 }
 

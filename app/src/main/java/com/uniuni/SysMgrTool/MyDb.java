@@ -1,6 +1,6 @@
 package com.uniuni.SysMgrTool;
 
-import static com.uniuni.SysMgrTool.MyHandler.MSG_LOADED_SCANNED_DATA;
+import static com.uniuni.SysMgrTool.Task.MyHandler.MSG_LOADED_SCANNED_DATA;
 
 import android.content.Context;
 import android.os.Handler;
@@ -9,9 +9,12 @@ import android.os.Message;
 
 import androidx.room.Room;
 
+import com.uniuni.SysMgrTool.Response.DeliveringListData;
 import com.uniuni.SysMgrTool.bean.ScanOrder;
 import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.dao.AppDatabase;
+import com.uniuni.SysMgrTool.dao.DeliveryInfo;
+import com.uniuni.SysMgrTool.dao.DeliveryInfoDao;
 import com.uniuni.SysMgrTool.dao.OrderIdRecord;
 import com.uniuni.SysMgrTool.dao.OrderIdRecordDao;
 import com.uniuni.SysMgrTool.dao.ScannedRecord;
@@ -27,10 +30,12 @@ public class MyDb {
     public static final int MSG_UPDATE_SCAN = 1;
     public static final int MSG_LOAD_DATA   = 2;
     public static final int MSG_SAVE_IDS = 3;
+    public static final int MSG_SAVE_DELIVERY_INFO = 4;
 
     private ScannedRecordDao scannedRecordDao;
 
     private OrderIdRecordDao orderIdRecordDao;
+    private DeliveryInfoDao deliveryInfoDao;
 
     public OrderIdRecordDao getOrderIdRecordDao() {
         return orderIdRecordDao;
@@ -92,7 +97,11 @@ public class MyDb {
                                 System.out.println("ok");
 
                             orderIdRecordDao.addRecord(r);
-                        } else if (ServerInterface.RESPONSE_GET_ORDER_LIST == msg.arg1) {
+                        }else if (MSG_SAVE_DELIVERY_INFO == msg.arg1) {
+                            DeliveringListData d = (DeliveringListData) msg.obj;
+                            saveDeliveringListData(d);
+                        }
+                        else if (ServerInterface.RESPONSE_GET_ORDER_LIST == msg.arg1) {
                             MySingleton.getInstance().saveOrderIds();
                         }
                     } catch (Exception e) {
@@ -129,6 +138,32 @@ public class MyDb {
         Message m = Message.obtain();
         m.arg1   = MSG_SAVE_IDS;
         m.obj = order;
+
+        mHandler.sendMessage(m);
+    }
+
+    public void saveDeliveringListData(DeliveringListData d)
+    {
+        String batchId = MySingleton.getInstance().getProperty(MySingleton.ITEM_CURRENT_BATCH_ID);
+
+        DeliveryInfo info = new DeliveryInfo();
+        info.setRouteNumber(String.valueOf(d.getRoute_no()));
+        info.setLatitude(Double.valueOf(d.getLat()));
+        info.setLongitude(Double.valueOf(d.getLng()));
+        info.setAddress(d.getAddress());
+        info.setName(d.getName());
+        info.setPhone(d.getMobile());
+        info.setUnitNumber(d.getUnit_number());
+        info.setBatchNumber(batchId);
+
+        deliveryInfoDao.insert(info);
+    }
+
+    public void sendSaveDeliveryInfoMsg(DeliveringListData info)
+    {
+        Message m = Message.obtain();
+        m.arg1    = MSG_SAVE_DELIVERY_INFO;
+        m.obj     = info;
 
         mHandler.sendMessage(m);
     }
@@ -181,9 +216,39 @@ public class MyDb {
                 AppDatabase.class, "uniuni").build();
         scannedRecordDao = db.getScannedRecordDao();
         orderIdRecordDao = db.getOrderIdRecordDao();
-
+        deliveryInfoDao  = db.deliveryInfoDao();
         LooperThread.start();
     }
 
+    public boolean loadDeliveryInfoFromDb()
+    {
+        if (!MySingleton.getInstance().isLoadDeliveryInfo())
+        {
+            return true;
+        }
 
+        String batchId = MySingleton.getInstance().getProperty(MySingleton.ITEM_CURRENT_BATCH_ID);
+        Integer driverId = MySingleton.getInstance().getIntProperty(MySingleton.ITEM_DRIVER_ID);
+
+        if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
+            return false;
+        }
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                List<DeliveryInfo>  records = deliveryInfoDao.findByBatchNumber(batchId);
+
+                if (records == null || records.isEmpty())
+                    return;
+
+                for (DeliveryInfo r : records) {
+                    MySingleton.getInstance().addDeliveryInfo(r);
+                }
+
+            }
+        }).start();
+
+        return true;
+    }
 }

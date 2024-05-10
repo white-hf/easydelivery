@@ -18,21 +18,28 @@ import androidx.preference.PreferenceManager;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.Volley;
+import com.uniuni.SysMgrTool.Event.Publisher;
 import com.uniuni.SysMgrTool.Response.DateTime;
 import com.uniuni.SysMgrTool.Response.OrderDetailData;
 import com.uniuni.SysMgrTool.Response.Path;
+import com.uniuni.SysMgrTool.Task.MyHandler;
 import com.uniuni.SysMgrTool.bean.ScanOrder;
 import com.uniuni.SysMgrTool.common.FileLog;
+import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.ScannedRecord;
 
 import java.io.FileOutputStream;
 import java.io.ObjectOutputStream;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MySingleton extends Application {
     public static String ScanText ;
@@ -50,6 +57,7 @@ public class MySingleton extends Application {
 
     private static MySingleton instance;
     private RequestQueue requestQueue;
+    private com.uniuni.SysMgrTool.Event.Publisher publisher;
 
 
     public  Context getCtx() {
@@ -60,6 +68,7 @@ public class MySingleton extends Application {
 
     private ServerInterface mServerInterface;
 
+    private ArrayList<DeliveryInfo> listDeliveryInfo = new ArrayList<>();
     private HashMap<String, ScanOrder> mHashOrders;
     private HashMap<String , String> mHashArea = new HashMap<>();
     private MyHandler myHandler;
@@ -89,6 +98,11 @@ public class MySingleton extends Application {
         }catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    public boolean isLoadDeliveryInfo()
+    {
+        return listDeliveryInfo.isEmpty();
     }
 
     public MyDb getmMydb() {
@@ -131,12 +145,19 @@ public class MySingleton extends Application {
         mHashArea.put("B3R" , "Herring Cove南");
         mHashArea.put("B3P" , "Herring Cove");
 
-        myHandler = new  MyHandler(Looper.getMainLooper() , null);
+        myHandler = new  MyHandler(Looper.getMainLooper());
         mServerInterface = new ServerInterface(myHandler);
+
+        publisher = new Publisher();
 
         mMydb.initDb(ctx);
 
         FileLog.getInstance().init();
+    }
+
+    public Publisher getPublisher()
+    {
+        return publisher;
     }
 
     public void sendMessage(Message m)
@@ -186,6 +207,15 @@ public class MySingleton extends Application {
     public void addScanOrder(String id, ScanOrder o)
     {
         mHashOrders.put(id , o);
+    }
+    public void addDeliveryInfo(DeliveryInfo p)
+    {
+        listDeliveryInfo.add(p);
+    }
+
+    public ArrayList<DeliveryInfo> getListDeliveryInfo()
+    {
+        return listDeliveryInfo;
     }
 
     public void saveOrderIds() {
@@ -414,5 +444,13 @@ public class MySingleton extends Application {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    public boolean isNumeric(String str){
+        Pattern pattern = Pattern.compile("[0-9]*");
+        Matcher isNum = pattern.matcher(str);
+        if( !isNum.matches() ){
+            return false;
+        }  return true;
     }
 }

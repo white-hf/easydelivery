@@ -14,7 +14,11 @@ import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.RequestFuture;
-import com.uniuni.SysMgrTool.common.ErrResponse;
+import com.uniuni.SysMgrTool.Request.AppLoginReq;
+import com.uniuni.SysMgrTool.Request.AuditScanDispatch;
+import com.uniuni.SysMgrTool.Response.AppLoginRsp;
+import com.uniuni.SysMgrTool.Response.AppRsp;
+import com.uniuni.SysMgrTool.Task.MyHandler;
 import com.uniuni.SysMgrTool.common.ErrResponse;
 import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.common.GeneticReq;
@@ -58,21 +62,26 @@ public class ServerInterface {
     public static String gToken = "";
 
     private static final String DOMAIN_STRING = "https://map.cluster.uniexpress.org/";
+    private static final String DOMAIN_API    = "https://delivery-service-api.uniuni.ca/";
     private static final String URL_GET_ORDER_BY_DRIVER = DOMAIN_STRING
             + "map/getdriverordersinbatchlist?driver_id=%d&batch_list=%s&hide_associated=1&hide_sub_referrer=0&branch=17";
 
     private static final String URL_GET_ORDER_DETAIL = DOMAIN_STRING
             + "map/getorderdetail?tno=%s";
 
+    public static final String URL_AUDIT_SCAN_DISPATCH    = DOMAIN_API    + "delivery/scan/batch/%d";
     public static final String URL_UPDATE_SHIPPING_STATUS = DOMAIN_STRING + "driver/updateshippingstatus";
     public static final String URL_INSERT_OPERATION_LOG   = DOMAIN_STRING + "driver/insertoperationlog";
     public static final String URL_CHANGE_STATE           = DOMAIN_STRING + "driver/restoretostate?tno=%s&state=%d&warehouse=%d&version=1";
     public static final String URL_QUERY_TRANSITION       = DOMAIN_STRING + "map/getnexttransition?current_state=%d";
     public static final String URL_QUERY_NEW_STORAGE_ID   = DOMAIN_STRING + "business/getnewstorageinfo?warehouse=17";
+    public static final String URL_QUERY_SCAN_DISPATCH_ID = DOMAIN_API    + "delivery/scan/batch/reports?warehouse=17&driver_id=%d";
 
     public static final String URL_TRANSFER_PACKAGES      = DOMAIN_STRING + "cargo/transferpackagesinrange";
 
     private static final String URL_LOGIN   = DOMAIN_STRING + "map/login";
+    private static final String URL_APP_LOGIN = DOMAIN_API + "auth/login";
+    private static final String URL_DELIVERING_LIST = DOMAIN_API + "delivery/parcels/delivering?driver_id=%d";
 
     private MyHandler myHandler;
 
@@ -214,6 +223,13 @@ public class ServerInterface {
         logReq.setMemo("");
 
         insertOperationLog(logReq);
+    }
+
+    public void getDeliveringList(Integer id)
+    {
+        String realUrl = String.format(URL_DELIVERING_LIST, MySingleton.getInstance().getLoginInfo().loginId);
+
+        getRequestWithRsp(id , realUrl , null , AppRsp.class, myHandler);
     }
 
     public String putinStorage(OrderDetailData data)
@@ -368,6 +384,18 @@ public class ServerInterface {
         postRequestWithRsp(0 , realUrl , req , LoginResponse.class , myHandler);
     }
 
+    public void appLogin(String name , String password)
+    {
+        if (name == null || name.isEmpty() ||  password == null || password.isEmpty())
+            return;
+
+        AppLoginReq req =  new AppLoginReq();
+        req.setPassword(password);
+        req.setCredential_id(name);
+
+        postRequestWithRsp(0 , URL_APP_LOGIN , req , AppLoginRsp.class , myHandler);
+    }
+
     public  void insertOperationLog(InsertOperationLogReq req)
     {
         if (req == null || req.getOrder_id() == null ||
@@ -387,6 +415,28 @@ public class ServerInterface {
         }
 
         postRequest(o , URL_INSERT_OPERATION_LOG , false);
+
+    }
+
+    public void startDispatchByOne(Integer driverId)
+    {
+        if (driverId == null)
+            return;
+
+        String url = String.format(URL_QUERY_SCAN_DISPATCH_ID , driverId.intValue());
+
+        AuditScanDispatch req = new AuditScanDispatch();
+        req.setStatus("CONFIRM");
+
+        postRequestWithRsp(driverId.intValue() , url , req , null,null);
+    }
+
+    private void auditScanDispatch(Integer scanDispatchId)
+    {
+        String url  = String.format(URL_AUDIT_SCAN_DISPATCH, scanDispatchId.intValue());
+        NewStorageInfoQueryResponse rsp = synPostRequestWithRsp(Request.Method.PUT , url , null, NewStorageInfoQueryResponse.class);
+        if (rsp == null || rsp.getData() == null)
+        {}
 
     }
 
@@ -447,11 +497,19 @@ public class ServerInterface {
         return null;
     }
 
-    private  <T , R extends ResponseBase> void postRequestWithRsp(int key , String url , T req , Class<R> clazz  , Handler h)
+    private  <T , R > void getRequestWithRsp(int key , String url , T req , Class<R> clazz  , Handler h) {
+        commRequestWithRsp(Request.Method.GET , key , url , req , clazz , h);
+    }
+
+    private  <T , R > void postRequestWithRsp(int key , String url , T req , Class<R> clazz  , Handler h) {
+        commRequestWithRsp(Request.Method.POST , key , url , req , clazz , h);
+    }
+
+    private  <T , R > void commRequestWithRsp(int m , int key , String url , T req , Class<R> clazz  , Handler h)
     {
         // Request a string response from the provided URL.
         GeneticReq<T , R> geneticReq = new GeneticReq<T , R>
-                (url , req ,  clazz , new Response.Listener<R>() {
+                (m , url , req ,  clazz , new Response.Listener<R>() {
                     @Override
                     public void onResponse(R response) {
                         try {
@@ -562,7 +620,7 @@ public class ServerInterface {
                                         Message m = Message.obtain();
                                         m.what = RESPONSE_GET_ORDER_DETAIL;
                                         m.arg1 = RESPONSE_GET_ORDER_DETAIL;
-                                        m.obj = d;
+                                        m.obj = response;
 
                                         h.sendMessage(m);
                                     }
@@ -636,6 +694,7 @@ public class ServerInterface {
                                         scanOrder.setLat(o.getLat());
                                         scanOrder.setLng(o.getLng());
                                         scanOrder.setLastStatus(o.getPath_code());
+                                        scanOrder.setAddress(o.getAddress());
 
                                         MySingleton.getInstance().addScanOrder(scanOrder.getId(),scanOrder);
                                         c++;

@@ -4,7 +4,9 @@ import static java.lang.Thread.sleep;
 
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.bean.ScanOrder;
+import com.uniuni.SysMgrTool.thirdpart.ThirdApi;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -35,6 +37,7 @@ public class PlaceManager {
             p.setTid(o.getId());
             p.setLon((Double.valueOf(o.getLng())));
             p.setAlon(Double.valueOf(o.getLat()));
+            p.setAddress(o.getAddress());
 
             mLstPlace.add(p);
         }
@@ -58,6 +61,33 @@ public class PlaceManager {
                         .append(p.getPickId())
                         .append(":");
             }
+        }
+
+        return sb.toString();
+    }
+
+    public String checkPlaceFromThirdPart() throws IOException, InterruptedException {
+        ThirdApi api = new ThirdApi();
+        StringBuffer sb = new StringBuffer();
+
+        Double[] coordinate = new Double[2];
+        for(Place p : mLstPlace)
+        {
+            Double lan = null;
+            Double lon = null;
+            boolean r = api.parseAddress(p.getAddress() , coordinate);
+            if (r)
+            {
+                if (p.checkDistance(coordinate[0],coordinate[1]))
+                {
+                    sb.append(p.getTid())
+                            .append("-")
+                            .append(p.getTid())
+                            .append(":");
+                }
+            }
+
+            sleep(5000);
         }
 
         return sb.toString();

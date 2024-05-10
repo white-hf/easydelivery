@@ -1,4 +1,4 @@
-package com.uniuni.SysMgrTool;
+package com.uniuni.SysMgrTool.View;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -23,6 +23,14 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.uniuni.SysMgrTool.Event.Event;
+import com.uniuni.SysMgrTool.Event.Subscriber;
+import com.uniuni.SysMgrTool.MyDb;
+import com.uniuni.SysMgrTool.MySingleton;
+import com.uniuni.SysMgrTool.R;
+import com.uniuni.SysMgrTool.Response.OrderDetailData;
+import com.uniuni.SysMgrTool.ServerInterface;
+import com.uniuni.SysMgrTool.Task.MyHandler;
 import com.uniuni.SysMgrTool.bean.ScanOrder;
 import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.dao.ScannedRecord;
@@ -37,7 +45,7 @@ import me.dm7.barcodescanner.zxing.ZXingScannerView;
 import android.os.Vibrator;
 
 
-public class ScannerActivity extends AppCompatActivity implements ZXingScannerView.ResultHandler {
+public class ScannerActivity extends AppCompatActivity implements ZXingScannerView.ResultHandler, Subscriber {
 
     private ZXingScannerView mScannerView;
 
@@ -58,10 +66,10 @@ public class ScannerActivity extends AppCompatActivity implements ZXingScannerVi
     public void onCreate(Bundle state) {
         super.onCreate(state);
 
-        mMyhandler = new MyHandler(getMainLooper() , getSupportFragmentManager());
+        mMyhandler = new MyHandler(getMainLooper());
         setContentView(R.layout.activity_scanner);
 
-        mMyhandler.setScannerActivity(this);
+        MySingleton.getInstance().getPublisher().subscribe(Event.EVENT_ORDER_DETAIL, this);
 
         mTextPackId = (TextView)findViewById(R.id.textPackId);
         mTextScanSummary= (TextView)findViewById(R.id.textViewScanSummary);
@@ -392,5 +400,20 @@ public class ScannerActivity extends AppCompatActivity implements ZXingScannerVi
     public void onPause() {
         super.onPause();
         mScannerView.stopCamera();
+    }
+
+    @Override
+    public void receive(Event event) {
+        Event<OrderDetailData> eOrderDetailData = (Event<OrderDetailData>) event;
+
+        final OrderDetailData message = eOrderDetailData.getMessage();
+        String orderText = MySingleton.getInstance().formatOrderDetailInfo(message);
+
+        if (!this.isOperateModel()) {
+            this.setScanSummary(orderText);
+            this.setScannedStatus(message.getOrders().getOrder_id(), message.getOrders().getOrder_sn());
+        }
+
+        MySingleton.getInstance().getPublisher().unsubscribe(Event.EVENT_ORDER_DETAIL,this);
     }
 }
