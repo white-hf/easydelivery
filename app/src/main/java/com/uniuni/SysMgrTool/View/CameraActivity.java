@@ -1,11 +1,5 @@
 package com.uniuni.SysMgrTool.View;
 
-import static com.uniuni.SysMgrTool.R.*;
-
-import static java.security.AccessController.getContext;
-
-import android.Manifest;
-import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -20,22 +14,9 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
 import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.common.BitmapUtils;
-
-import android.hardware.Camera;
-import android.os.Bundle;
-import android.view.View;
-import android.widget.Button;
-import android.widget.FrameLayout;
-
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -140,6 +121,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     @Override
     protected void onPause() {
+        closeCamera();
         super.onPause();
         sensorManager.unregisterListener(this);
     }
@@ -259,6 +241,14 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 PackageManager.PERMISSION_GRANTED;
     }
 
+    private void closeCamera()
+    {
+        if (mCameraDevice != null) {
+            mCameraDevice.close();
+            mCameraDevice = null;
+        }
+    }
+
     // 相机状态回调
     private final CameraDevice.StateCallback mCameraStateCallback =
             new CameraDevice.StateCallback() {
@@ -270,14 +260,14 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
                 @Override
                 public void onDisconnected(@NonNull CameraDevice cameraDevice) {
-                    cameraDevice.close();
-                    mCameraDevice = null;
+                    mCameraDevice = cameraDevice;
+                    closeCamera();
                 }
 
                 @Override
                 public void onError(@NonNull CameraDevice cameraDevice, int error) {
-                    cameraDevice.close();
-                    mCameraDevice = null;
+                    mCameraDevice = cameraDevice;
+                    closeCamera();
                 }
             };
 

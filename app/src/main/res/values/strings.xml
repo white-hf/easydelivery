@@ -116,4 +116,7 @@
         vestibulum. Fusce dictum libero quis erat maximus, vitae volutpat diam dignissim.
     </string>
     <string name="title_activity_camera">CameraActivity</string>
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="takephoto">拍照</string>
 </resources>
