@@ -1,0 +1,44 @@
+<!-- fragment_map.xml -->
+
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- 最上面一行文字显示区域 -->
+    <TextView
+        android:id="@+id/topTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp"
+        android:text="Top Text"
+        android:textSize="18sp"
+        android:textColor="@android:color/black" />
+
+    <!-- 搜索框 -->
+    <EditText
+        android:id="@+id/searchEditText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/topTextView"
+        android:layout_margin="8dp"
+        android:padding="8dp"
+        android:hint="Search"
+        android:background="@android:color/white"
+        android:imeOptions="actionSearch"
+        android:inputType="text"
+        android:singleLine="true" />
+
+    <!-- 地图视图区域 -->
+    <FrameLayout
+        android:id="@+id/mapViewContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/searchEditText">
+        <!-- 这里放置地图视图，例如 MapView -->
+         <com.google.android.gms.maps.MapView
+             android:id="@+id/mapView"
+             android:layout_width="match_parent"
+             android:layout_height="match_parent" />
+    </FrameLayout>
+
+</RelativeLayout>
