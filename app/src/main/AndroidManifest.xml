@@ -57,6 +57,7 @@
         <activity
             android:name=".View.DeliveringActivity"
             android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light"
             android:label="@string/title_activity_delivering" />
         <activity
             android:name=".View.SettingsActivity"

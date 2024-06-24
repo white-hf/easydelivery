@@ -24,6 +24,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.uniuni.SysMgrTool.Event.Event;
+import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.Event.Subscriber;
 import com.uniuni.SysMgrTool.MyDb;
 import com.uniuni.SysMgrTool.MySingleton;
@@ -69,7 +70,7 @@ public class ScannerActivity extends AppCompatActivity implements ZXingScannerVi
         mMyhandler = new MyHandler(getMainLooper());
         setContentView(R.layout.activity_scanner);
 
-        MySingleton.getInstance().getPublisher().subscribe(Event.EVENT_ORDER_DETAIL, this);
+        MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_ORDER_DETAIL, this);
 
         mTextPackId = (TextView)findViewById(R.id.textPackId);
         mTextScanSummary= (TextView)findViewById(R.id.textViewScanSummary);
@@ -414,6 +415,6 @@ public class ScannerActivity extends AppCompatActivity implements ZXingScannerVi
             this.setScannedStatus(message.getOrders().getOrder_id(), message.getOrders().getOrder_sn());
         }
 
-        MySingleton.getInstance().getPublisher().unsubscribe(Event.EVENT_ORDER_DETAIL,this);
+        MySingleton.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_ORDER_DETAIL,this);
     }
 }

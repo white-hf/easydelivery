@@ -9,10 +9,13 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.net.Uri;
+import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.core.os.HandlerCompat;
 import androidx.preference.PreferenceManager;
 
 import com.android.volley.Request;
@@ -20,13 +23,16 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.Volley;
 import com.uniuni.SysMgrTool.Event.Publisher;
 import com.uniuni.SysMgrTool.Response.DateTime;
+import com.uniuni.SysMgrTool.Response.DeliveringListData;
 import com.uniuni.SysMgrTool.Response.OrderDetailData;
 import com.uniuni.SysMgrTool.Response.Path;
 import com.uniuni.SysMgrTool.Task.MyHandler;
+import com.uniuni.SysMgrTool.Task.TaskBase;
 import com.uniuni.SysMgrTool.bean.ScanOrder;
 import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.ScannedRecord;
+import com.uniuni.SysMgrTool.manager.DeliveryinfoMgr;
 
 import java.io.FileOutputStream;
 import java.io.ObjectOutputStream;
@@ -36,6 +42,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TimeZone;
 
 import java.util.regex.Matcher;
@@ -68,12 +75,16 @@ public class MySingleton extends Application {
 
     private ServerInterface mServerInterface;
 
-    private ArrayList<DeliveryInfo> listDeliveryInfo = new ArrayList<>();
     private HashMap<String, ScanOrder> mHashOrders;
     private HashMap<String , String> mHashArea = new HashMap<>();
     private MyHandler myHandler;
     private MyDb mMydb = new MyDb();
     private LoginInfo mLoginInfo = new LoginInfo();
+
+    public DeliveryinfoMgr getdDeliveryinfoMgr() {
+        return dDeliveryinfoMgr;
+    }
+
 
     public  class LoginInfo{
         public String loginName = "m_laotang";
@@ -82,12 +93,41 @@ public class MySingleton extends Application {
         public Integer warehouseId = 17;
     }
 
+
+    private final Handler mainThreadHandler = HandlerCompat.createAsync(Looper.getMainLooper());
+    private Handler mDbHandler;
+    private DeliveryinfoMgr dDeliveryinfoMgr;
+
     public MySingleton() {
+
     }
 
-    public HashMap<String, ScanOrder> getmHashOrders() {
-        return mHashOrders;
+    public Handler getmDbHandler() {
+        return mDbHandler;
     }
+
+    private final Thread dbLooperThread = new Thread() {
+        private final Looper mLooper = Looper.myLooper();
+
+        public void run() {
+            Looper.prepare();
+
+            mDbHandler = new Handler(Objects.requireNonNull(mLooper)) {
+                public void handleMessage(@NonNull Message msg) {
+                    super.handleMessage(msg);
+
+                    TaskBase task = (TaskBase)msg.obj;
+                    task.doIt(msg);
+                }
+            };
+            Looper.loop();
+        }
+    };
+
+
+    public HashMap<String, ScanOrder> getmHashOrders() {
+            return mHashOrders;
+        }
 
     public void saveOrders()
     {
@@ -100,10 +140,6 @@ public class MySingleton extends Application {
         }
     }
 
-    public boolean isLoadDeliveryInfo()
-    {
-        return listDeliveryInfo.isEmpty();
-    }
 
     public MyDb getmMydb() {
         return mMydb;
@@ -149,9 +185,11 @@ public class MySingleton extends Application {
         mServerInterface = new ServerInterface(myHandler);
 
         publisher = new Publisher();
+        dbLooperThread.start();
 
         mMydb.initDb(ctx);
 
+        dDeliveryinfoMgr = new DeliveryinfoMgr();
         FileLog.getInstance().init();
     }
 
@@ -193,6 +231,9 @@ public class MySingleton extends Application {
 
     public Integer getIntProperty(String item) {
         Integer de = 0;
+        if (item == null || item.isEmpty())
+            return de;
+
         SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
         try {
             String s = settings.getString(item,"");
@@ -207,15 +248,6 @@ public class MySingleton extends Application {
     public void addScanOrder(String id, ScanOrder o)
     {
         mHashOrders.put(id , o);
-    }
-    public void addDeliveryInfo(DeliveryInfo p)
-    {
-        listDeliveryInfo.add(p);
-    }
-
-    public ArrayList<DeliveryInfo> getListDeliveryInfo()
-    {
-        return listDeliveryInfo;
     }
 
     public void saveOrderIds() {

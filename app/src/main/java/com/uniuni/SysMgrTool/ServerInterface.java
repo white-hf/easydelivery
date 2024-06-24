@@ -1,5 +1,6 @@
 package com.uniuni.SysMgrTool;
 
+import android.annotation.SuppressLint;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
@@ -62,7 +63,7 @@ public class ServerInterface {
     public static String gToken = "";
 
     private static final String DOMAIN_STRING = "https://map.cluster.uniexpress.org/";
-    private static final String DOMAIN_API    = "https://delivery-service-api.uniuni.ca/";
+    public static final String DOMAIN_API    = "https://delivery-service-api.uniuni.ca/";
     private static final String URL_GET_ORDER_BY_DRIVER = DOMAIN_STRING
             + "map/getdriverordersinbatchlist?driver_id=%d&batch_list=%s&hide_associated=1&hide_sub_referrer=0&branch=17";
 
@@ -227,7 +228,7 @@ public class ServerInterface {
 
     public void getDeliveringList(Integer id)
     {
-        String realUrl = String.format(URL_DELIVERING_LIST, MySingleton.getInstance().getLoginInfo().loginId);
+        @SuppressLint("DefaultLocale") String realUrl = String.format(URL_DELIVERING_LIST, MySingleton.getInstance().getLoginInfo().loginId);
 
         getRequestWithRsp(id , realUrl , null , AppRsp.class, myHandler);
     }
@@ -497,21 +498,21 @@ public class ServerInterface {
         return null;
     }
 
-    private  <T , R > void getRequestWithRsp(int key , String url , T req , Class<R> clazz  , Handler h) {
+    public   <T , RR > void getRequestWithRsp(int key , String url , T req , Class<RR> clazz  , Handler h) {
         commRequestWithRsp(Request.Method.GET , key , url , req , clazz , h);
     }
 
-    private  <T , R > void postRequestWithRsp(int key , String url , T req , Class<R> clazz  , Handler h) {
+    private  <T , RR > void postRequestWithRsp(int key , String url , T req , Class<RR> clazz  , Handler h) {
         commRequestWithRsp(Request.Method.POST , key , url , req , clazz , h);
     }
 
-    private  <T , R > void commRequestWithRsp(int m , int key , String url , T req , Class<R> clazz  , Handler h)
+    private  <T , RR > void commRequestWithRsp(int m , int key , String url , T req , Class<RR> clazz  , Handler h)
     {
         // Request a string response from the provided URL.
-        GeneticReq<T , R> geneticReq = new GeneticReq<T , R>
-                (m , url , req ,  clazz , new Response.Listener<R>() {
+        GeneticReq<T , RR> geneticReq = new GeneticReq<T , RR>
+                (m , url , req ,  clazz , new Response.Listener<RR>() {
                     @Override
-                    public void onResponse(R response) {
+                    public void onResponse(RR response) {
                         try {
                             if (h != null) {
                                 Message m = Message.obtain();

@@ -3,9 +3,11 @@ package com.uniuni.SysMgrTool.Response;
 import android.os.Message;
 import android.util.Log;
 import android.widget.Toast;
-
+import com.uniuni.SysMgrTool.Event.Event;
+import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
+import com.uniuni.SysMgrTool.ServerInterface;
 import com.uniuni.SysMgrTool.Task.TaskBase;
 
 public class AppLoginRsp implements TaskBase {
@@ -36,8 +38,11 @@ public class AppLoginRsp implements TaskBase {
     @Override
     public void doIt(Message msg) {
         if (this.getBiz_code().equalsIgnoreCase("COMMON.QUERY.SUCCESS")) {
-            MySingleton.getInstance().getServerInterface().gToken = this.getBiz_data().getAccess_token();
-            Log.d("debug", "token:" + MySingleton.getInstance().getServerInterface().gToken);
+            ServerInterface.gToken = this.getBiz_data().getAccess_token();
+            Log.d("debug", "token:" + ServerInterface.gToken);
+
+            //notify other modules
+            MySingleton.getInstance().getPublisher().notify(EventConstant.EVENT_LOGIN , new Event<String>(ServerInterface.gToken));
 
             Toast.makeText(MySingleton.getInstance().getCtx(), R.string.str_login_success, Toast.LENGTH_SHORT).show();
         } else

@@ -35,6 +35,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.uniuni.SysMgrTool.Event.Event;
+import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.Request.TransferPackagesReq;
@@ -180,8 +181,8 @@ public class MainActivity extends AppCompatActivity {
 
         AppCompatButton btn_delivery = findViewById(R.id.btn_delivery);
         btn_delivery.setOnClickListener((view)->{
-            //Intent intent = new Intent(getApplication(), DeliveringActivity.class);
-            Intent intent = new Intent(getApplication(), CameraActivity.class);
+            Intent intent = new Intent(getApplication(), DeliveringActivity.class);
+            //Intent intent = new Intent(getApplication(), CameraActivity.class);
 
             startActivity(intent);
         });
@@ -349,7 +350,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
                 OderDetailView mOderDetailView = new OderDetailView(null);
-                MySingleton.getInstance().getPublisher().subscribe(Event.EVENT_ORDER_DETAIL, mOderDetailView);
+                MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_ORDER_DETAIL, mOderDetailView);
 
                 handleGetOrderDetailEvent();
             }

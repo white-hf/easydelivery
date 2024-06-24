@@ -49,7 +49,7 @@ import java.util.ArrayList;
 import com.google.maps.android.clustering.Cluster;
 import com.google.maps.android.clustering.ClusterManager;
 
-public class MapFragment extends Fragment implements OnMapReadyCallback,LocationListener {
+public class MapFragment extends Fragment implements OnMapReadyCallback, LocationListener {
 
     private MapView mapView;
     private GoogleMap googleMap;
@@ -125,14 +125,34 @@ public class MapFragment extends Fragment implements OnMapReadyCallback,Location
     @Override
     public void onMapReady(GoogleMap map) {
         googleMap = map;
+        if (ActivityCompat.checkSelfPermission(MySingleton.getInstance().getCtx(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(MySingleton.getInstance().getCtx(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            String permission = Manifest.permission.ACCESS_FINE_LOCATION;
+            String[] permission_list = new String[1];
+            permission_list[0] = permission;
+            ActivityCompat.requestPermissions(this.getActivity(), permission_list, 1);
+
+
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
         googleMap.setMyLocationEnabled(true);
 
         // Initialize ClusterManager
         clusterManager = new ClusterManager<>(this.getActivity(), googleMap);
 
-        MySingleton.getInstance().getmMydb().loadDeliveryInfoFromDb();
 
-        ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getListDeliveryInfo();
+        ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo();
+        if (lst.isEmpty())
+        {
+            //try to load data from db
+            MySingleton.getInstance().getdDeliveryinfoMgr().loadDeliveryInfo(null);
+        }
 
         LatLng firstMarker = null;
         for (DeliveryInfo info :lst)

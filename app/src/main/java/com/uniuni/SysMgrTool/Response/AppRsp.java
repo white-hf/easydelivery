@@ -42,7 +42,7 @@ public class AppRsp implements TaskBase {
 
         while (listIterator.hasNext()) {
             DeliveringListData d = (DeliveringListData) listIterator.next();
-            MySingleton.getInstance().getmMydb().sendSaveDeliveryInfoMsg(d);
+            MySingleton.getInstance().getdDeliveryinfoMgr().saveDeliveringListData(d);
         }
     }
 }

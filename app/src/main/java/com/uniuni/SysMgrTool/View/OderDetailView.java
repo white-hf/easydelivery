@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 
 import com.uniuni.SysMgrTool.Event.Event;
+import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.Event.Subscriber;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
@@ -206,7 +207,7 @@ public class OderDetailView extends DialogFragment implements Subscriber {
             this.setmMsg(orderText);
             this.show(mFm, ORDER_DIALOG);
 
-            MySingleton.getInstance().getPublisher().unsubscribe(Event.EVENT_ORDER_DETAIL, this);
+            MySingleton.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_ORDER_DETAIL, this);
         }
     }
 }

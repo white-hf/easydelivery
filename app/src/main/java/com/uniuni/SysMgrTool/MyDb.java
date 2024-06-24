@@ -7,6 +7,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 
+import androidx.annotation.NonNull;
 import androidx.room.Room;
 
 import com.uniuni.SysMgrTool.Response.DeliveringListData;
@@ -21,8 +22,10 @@ import com.uniuni.SysMgrTool.dao.ScannedRecord;
 import com.uniuni.SysMgrTool.dao.ScannedRecordDao;
 
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 
 public class MyDb {
 
@@ -47,63 +50,23 @@ public class MyDb {
 
     private Handler mHandler;
 
-    private Thread LooperThread = new Thread ()
+    private final Thread LooperThread = new Thread ()
     {
-        private Looper mLooper = Looper.myLooper();
+        private final Looper mLooper = Looper.myLooper();
         public void run() {
             Looper.prepare();
 
-            mHandler = new Handler(Looper.myLooper()) {
-                private String batchId;
-                private int driverId;
-                public void handleMessage(Message msg) {
+            mHandler = new Handler(Objects.requireNonNull(mLooper)) {
+                public void handleMessage(@NonNull Message msg) {
                     try {
-                        driverId   = MySingleton.getInstance().getIntProperty(MySingleton.ITEM_DRIVER_ID);
-                        batchId = MySingleton.getInstance().getProperty(MySingleton.ITEM_CURRENT_BATCH_ID);
+                        int driverId = MySingleton.getInstance().getIntProperty(MySingleton.ITEM_DRIVER_ID);
+                        String batchId = MySingleton.getInstance().getProperty(MySingleton.ITEM_CURRENT_BATCH_ID);
                         // process incoming messages here
-                        if (msg.arg1 == MSG_SAVE_SCAN) {
-                            ScanOrder order = (ScanOrder) msg.obj;
-                            ScannedRecord r = new ScannedRecord();
-                            r.copyFrom(order);
-                            scannedRecordDao.addRecord(r);
-                        } else if (msg.arg1 == MSG_UPDATE_SCAN) {
-                            ScannedRecord r = (ScannedRecord) msg.obj;
-                            scannedRecordDao.updateRecord(r);
-                        } else if (MSG_LOAD_DATA == msg.arg1) {
-                            FileLog.getInstance().writeLog(String.format("Before loadUnCommittedRecords,batchId:%s,driverId:%d",batchId,driverId));
-                            List<ScannedRecord> lst = (List<ScannedRecord>) msg.obj;
-
-                            ScannedRecord[] records;
-                            if (driverId == 9999)
-                                records = scannedRecordDao.loadAll();
-                            else
-                                records = scannedRecordDao.loadUnCommittedRecords(batchId, driverId);
-
-                            if (records == null || records.length == 0)
-                                return;
-
-                            for (ScannedRecord r : records) {
-                                lst.add(r);
-                            }
-
-                            notifyScannedDataLoaded(lst.size());
-
-                        } else if (MSG_SAVE_IDS == msg.arg1) {
-                            ScanOrder order = (ScanOrder) msg.obj;
-                            OrderIdRecord r = new OrderIdRecord();
-                            r.tid = order.getId();
-                            r.createDate = new Date();
-                            if (r.tid.equals("JY2332100002008212"))
-                                System.out.println("ok");
-
-                            orderIdRecordDao.addRecord(r);
-                        }else if (MSG_SAVE_DELIVERY_INFO == msg.arg1) {
+                        if (MSG_SAVE_DELIVERY_INFO == msg.arg1) {
                             DeliveringListData d = (DeliveringListData) msg.obj;
                             saveDeliveringListData(d);
                         }
-                        else if (ServerInterface.RESPONSE_GET_ORDER_LIST == msg.arg1) {
-                            MySingleton.getInstance().saveOrderIds();
-                        }
+
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
@@ -142,14 +105,20 @@ public class MyDb {
         mHandler.sendMessage(m);
     }
 
+    /**
+     * Save the delivery info to the database, and app always load the delivery info from the database,
+     * therefore, app can use without the network. But we need another interface to sync the delivery info
+     * with server.
+     * @param d
+     */
     public void saveDeliveringListData(DeliveringListData d)
     {
         String batchId = MySingleton.getInstance().getProperty(MySingleton.ITEM_CURRENT_BATCH_ID);
 
         DeliveryInfo info = new DeliveryInfo();
         info.setRouteNumber(String.valueOf(d.getRoute_no()));
-        info.setLatitude(Double.valueOf(d.getLat()));
-        info.setLongitude(Double.valueOf(d.getLng()));
+        info.setLatitude(Double.parseDouble(d.getLat()));
+        info.setLongitude(Double.parseDouble(d.getLng()));
         info.setAddress(d.getAddress());
         info.setName(d.getName());
         info.setPhone(d.getMobile());
@@ -220,35 +189,4 @@ public class MyDb {
         LooperThread.start();
     }
 
-    public boolean loadDeliveryInfoFromDb()
-    {
-        if (!MySingleton.getInstance().isLoadDeliveryInfo())
-        {
-            return true;
-        }
-
-        String batchId = MySingleton.getInstance().getProperty(MySingleton.ITEM_CURRENT_BATCH_ID);
-        Integer driverId = MySingleton.getInstance().getIntProperty(MySingleton.ITEM_DRIVER_ID);
-
-        if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
-            return false;
-        }
-
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                List<DeliveryInfo>  records = deliveryInfoDao.findByBatchNumber(batchId);
-
-                if (records == null || records.isEmpty())
-                    return;
-
-                for (DeliveryInfo r : records) {
-                    MySingleton.getInstance().addDeliveryInfo(r);
-                }
-
-            }
-        }).start();
-
-        return true;
-    }
 }
