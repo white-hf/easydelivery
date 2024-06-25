@@ -27,10 +27,7 @@ public class DeliveryinfoMgr implements Subscriber {
 
     private static final String URL_DELIVERING_LIST = DOMAIN_API + "delivery/parcels/delivering?driver_id=%d";
 
-    Integer driverId;
     String batchId;
-
-    private DeliveryInfoDao deliveryInfoDao;
 
     public ArrayList<DeliveryInfo> getListDeliveryInfo() {
         return listDeliveryInfo;
@@ -40,7 +37,6 @@ public class DeliveryinfoMgr implements Subscriber {
 
     public DeliveryinfoMgr() {
         batchId = MySingleton.getInstance().getProperty(MySingleton.ITEM_CURRENT_BATCH_ID);
-        driverId = MySingleton.getInstance().getIntProperty(MySingleton.ITEM_DRIVER_ID);
 
         MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_LOGIN , this);
         listDeliveryInfo = new ArrayList<>();
@@ -49,7 +45,7 @@ public class DeliveryinfoMgr implements Subscriber {
     /**
      * Get the delivery info from the server, it should be called after user login.
      */
-    public void getDeliveryInfo(){
+    public void getDeliveryInfo(Short driverId){
         @SuppressLint("DefaultLocale") String realUrl = String.format(URL_DELIVERING_LIST, MySingleton.getInstance().getLoginInfo().loginId);
         MySingleton.getInstance().getServerInterface().getRequestWithRsp(driverId , realUrl , null , AppRsp.class, MySingleton.getInstance().getmDbHandler());
     }
@@ -62,9 +58,12 @@ public class DeliveryinfoMgr implements Subscriber {
      */
     public void saveDeliveringListData(DeliveringListData d)
     {
+        Short driverId = MySingleton.getInstance().getLoginInfo().loginId;
         if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
             return;
         }
+
+       DeliveryInfoDao deliveryInfoDao = MySingleton.getInstance().getmMydb().getDeliveryInfoDao();
 
         MySingleton.getInstance().getmDbHandler().post(() -> {
             try {
@@ -78,6 +77,7 @@ public class DeliveryinfoMgr implements Subscriber {
                 info.setPhone(d.getMobile());
                 info.setUnitNumber(d.getUnit_number());
                 info.setBatchNumber(batchId);
+                info.setDriverId(driverId);
 
                 deliveryInfoDao.insert(info);
 
@@ -93,16 +93,17 @@ public class DeliveryinfoMgr implements Subscriber {
      * It should be called every time the app is started.
      */
     public void loadDeliveryInfo(ResponseCallBack<List<DeliveryInfo>> callBack){
+        Short driverId = MySingleton.getInstance().getLoginInfo().loginId;
+
         if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
             return;
         }
 
+        DeliveryInfoDao deliveryInfoDao = MySingleton.getInstance().getmMydb().getDeliveryInfoDao();
+
         MySingleton.getInstance().getmDbHandler().post(()->{
             try {
-                List<DeliveryInfo> records = deliveryInfoDao.findByBatchNumber(batchId);
-
-                if (records == null || records.isEmpty())
-                    return;
+                List<DeliveryInfo> records = deliveryInfoDao.findByBatchNumber(batchId , driverId);
 
                 for (DeliveryInfo r : records) {
                     addDeliveryInfo(r);
@@ -129,6 +130,6 @@ public class DeliveryinfoMgr implements Subscriber {
      */
     @Override
     public void receive(Event event) {
-        getDeliveryInfo();
+        getDeliveryInfo((Short)event.getMessage());
     }
 }

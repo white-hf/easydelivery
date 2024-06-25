@@ -42,7 +42,7 @@ public class AppLoginRsp implements TaskBase {
             Log.d("debug", "token:" + ServerInterface.gToken);
 
             //notify other modules
-            MySingleton.getInstance().getPublisher().notify(EventConstant.EVENT_LOGIN , new Event<String>(ServerInterface.gToken));
+            MySingleton.getInstance().getPublisher().notify(EventConstant.EVENT_LOGIN , new Event<Short>(MySingleton.getInstance().getLoginInfo().loginId));
 
             Toast.makeText(MySingleton.getInstance().getCtx(), R.string.str_login_success, Toast.LENGTH_SHORT).show();
         } else

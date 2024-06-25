@@ -42,9 +42,12 @@ import com.google.android.gms.maps.model.MarkerOptions;
 
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
+import com.uniuni.SysMgrTool.common.ResponseCallBack;
+import com.uniuni.SysMgrTool.common.Result;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import com.google.maps.android.clustering.Cluster;
 import com.google.maps.android.clustering.ClusterManager;
@@ -95,6 +98,35 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
         }
     }
 
+    private ArrayList<DeliveryInfo> loadData()
+    {
+        //Get package list from cache, if empty, try to load from db, if still empty, try to load from server
+        ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo();
+        if (lst.isEmpty())
+        {
+            //try to load data from db
+            MySingleton.getInstance().getdDeliveryinfoMgr().loadDeliveryInfo(new ResponseCallBack<List<DeliveryInfo>>(){
+                @Override
+                public void onComplete(Result<List<DeliveryInfo>> result) {
+                    Result.Success success = (Result.Success) result;
+                    if (success.data != null) {
+                        List<DeliveryInfo> lst = (List<DeliveryInfo>) success.data;
+                        if (lst.isEmpty())
+                        {
+                            //try to load data from server
+                            MySingleton.getInstance().getdDeliveryinfoMgr().getDeliveryInfo(MySingleton.getInstance().getLoginInfo().loginId);
+                        }
+                    }
+                }
+
+                @Override
+                public void onFail(Result<List<DeliveryInfo>> result) {}
+            });
+        }
+
+        return lst;
+    }
+
     @Override
     public void onLocationChanged(Location location) {
         // 当位置改变时，这里可以获取到最新的位置
@@ -126,7 +158,6 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
     public void onMapReady(GoogleMap map) {
         googleMap = map;
         if (ActivityCompat.checkSelfPermission(MySingleton.getInstance().getCtx(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(MySingleton.getInstance().getCtx(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
             String permission = Manifest.permission.ACCESS_FINE_LOCATION;
             String[] permission_list = new String[1];
             permission_list[0] = permission;
@@ -147,12 +178,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
         clusterManager = new ClusterManager<>(this.getActivity(), googleMap);
 
 
-        ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo();
-        if (lst.isEmpty())
-        {
-            //try to load data from db
-            MySingleton.getInstance().getdDeliveryinfoMgr().loadDeliveryInfo(null);
-        }
+        ArrayList<DeliveryInfo> lst = loadData();
 
         LatLng firstMarker = null;
         for (DeliveryInfo info :lst)

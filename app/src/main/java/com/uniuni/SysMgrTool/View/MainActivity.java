@@ -289,32 +289,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void cacheOrderId()
     {
-        MySingleton.getInstance().getServerInterface().getDeliveringList(Integer.valueOf(MySingleton.getInstance().getLoginInfo().loginId));
-
-        String ids = MySingleton.getInstance().getProperty(ITEM_SYN_ORDERS_ID);
-        if (ids == null || ids.isEmpty())
-            return;
-
-        String[] orderLoaderIds = ids.split(",");
-        if (orderLoaderIds.length == 0)
-            return;
-
-        String currentBatchId = MySingleton.getInstance().getProperty(MySingleton.ITEM_CURRENT_BATCH_ID);
-        if (currentBatchId == null || currentBatchId.isEmpty())
-            return;
-
-        for (String id : orderLoaderIds) {
-            String trueId;
-            if (id.length() == 1)
-                trueId = String.format("16000%s", id);
-            else if (id.length() == 2)
-                trueId = String.format("1600%s", id);
-            else
-                trueId = id;
-
-            MySingleton.getInstance().getServerInterface().loadOrdersByDriver(currentBatchId, Integer.valueOf(trueId),
-                    MySingleton.getInstance().getmMydb().getHandler());
-        }
     }
 
     private void handleGetOrderDetailEvent()

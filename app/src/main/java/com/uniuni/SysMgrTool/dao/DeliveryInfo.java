@@ -37,6 +37,9 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @ColumnInfo(name = "phone")
     private String phone;
 
+    @ColumnInfo(name = "driver_id")
+    private Short driverId;
+
     // Getters and setters for each field
     // ...
 
@@ -128,5 +131,13 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @Override
     public String getSnippet() {
         return null;
+    }
+
+    public Short getDriverId() {
+        return driverId;
+    }
+
+    public void setDriverId(Short driverId) {
+        this.driverId = driverId;
     }
 }

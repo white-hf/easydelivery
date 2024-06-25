@@ -11,6 +11,6 @@ public interface DeliveryInfoDao {
     @Insert
     void insert(DeliveryInfo deliveryInfo);
 
-    @Query("SELECT * FROM delivery_info WHERE batch_number = :batchNumber")
-    List<DeliveryInfo> findByBatchNumber(String batchNumber);
+    @Query("SELECT * FROM delivery_info WHERE batch_number = :batchNumber and driver_id = :driverId")
+    List<DeliveryInfo> findByBatchNumber(String batchNumber , Short driverId);
 }

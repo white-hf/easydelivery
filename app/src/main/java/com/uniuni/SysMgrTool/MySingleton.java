@@ -107,10 +107,9 @@ public class MySingleton extends Application {
     }
 
     private final Thread dbLooperThread = new Thread() {
-        private final Looper mLooper = Looper.myLooper();
-
         public void run() {
             Looper.prepare();
+            final Looper mLooper = Looper.myLooper();
 
             mDbHandler = new Handler(Objects.requireNonNull(mLooper)) {
                 public void handleMessage(@NonNull Message msg) {
@@ -185,12 +184,13 @@ public class MySingleton extends Application {
         mServerInterface = new ServerInterface(myHandler);
 
         publisher = new Publisher();
-        dbLooperThread.start();
 
         mMydb.initDb(ctx);
 
         dDeliveryinfoMgr = new DeliveryinfoMgr();
         FileLog.getInstance().init();
+
+        dbLooperThread.start();
     }
 
     public Publisher getPublisher()
