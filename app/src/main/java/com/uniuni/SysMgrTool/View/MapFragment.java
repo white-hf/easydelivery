@@ -5,6 +5,7 @@ package com.uniuni.SysMgrTool.View;
 import static android.content.Context.LOCATION_SERVICE;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -154,6 +155,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
     }
 
 
+    @SuppressLint("PotentialBehaviorOverride")
     @Override
     public void onMapReady(GoogleMap map) {
         googleMap = map;
@@ -175,7 +177,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
         googleMap.setMyLocationEnabled(true);
 
         // Initialize ClusterManager
-        clusterManager = new ClusterManager<>(this.getActivity(), googleMap);
+        //clusterManager = new ClusterManager<>(this.getActivity(), googleMap);
 
 
         ArrayList<DeliveryInfo> lst = loadData();
@@ -184,7 +186,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
         for (DeliveryInfo info :lst)
         {
             addCustomMarker(info);
-            clusterManager.addItem(info);
+            //clusterManager.addItem(info);
 
             if (firstMarker == null) {
                 firstMarker = new LatLng(info.getLatitude(), info.getLongitude());
@@ -197,22 +199,31 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstMarker, 12));
         }
 
-        clusterManager.setOnClusterClickListener(cluster->{
-            Toast.makeText(this.getActivity(), "Cluster clicked with " + cluster.getSize() + " items", Toast.LENGTH_SHORT).show();
-            return false;
-        });
+        //clusterManager.setOnClusterClickListener(cluster->{
+        //    Toast.makeText(this.getActivity(), "Cluster clicked with " + cluster.getSize() + " items", Toast.LENGTH_SHORT).show();
+        //    return false;
+        //});
 
-        clusterManager.setOnClusterItemClickListener(item->{
-            Toast.makeText(this.getActivity(), "Package number: " + item.getRouteNumber(), Toast.LENGTH_SHORT).show();
-            return false;
-        });
+        //clusterManager.setOnClusterItemClickListener(item->{
+        //    Toast.makeText(this.getActivity(), "Package number: " + item.getRouteNumber(), Toast.LENGTH_SHORT).show();
+        //    return false;
+        //});
 
         // Set marker click listener
-        googleMap.setOnMarkerClickListener(marker->{
+        // 设置 marker 点击事件
+        googleMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+            @Override
+            public boolean onMarkerClick(com.google.android.gms.maps.model.Marker marker) {
                 // Show toast with package number
-                Toast.makeText(this.getActivity(), "Package number: " + marker.getTitle(), Toast.LENGTH_SHORT).show();
-                return false;
-            });
+                System.out.println("Marker clicked: " + marker.getTitle());
+                return true; // 返回 false，以确保默认的信息窗口也会弹出
+            }
+        });
+
+        googleMap.setOnInfoWindowClickListener(marker->{
+            Toast.makeText(this.getActivity(), "Package number: " + marker.getTitle(), Toast.LENGTH_SHORT).show();
+        });
+
         // For zooming automatically to the location of the marker
         //CameraPosition cameraPosition = new CameraPosition.Builder().target(sydney).zoom(15).build();
         //googleMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
@@ -227,9 +238,14 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
                 getMarkerBitmapFromView(pkg.getRouteNumber()));
 
         // Add the marker to the map
-        googleMap.addMarker(new MarkerOptions()
+        Marker m = googleMap.addMarker(new MarkerOptions()
                 .position(new LatLng(pkg.getLatitude(), pkg.getLongitude()))
                 .icon(icon).title(pkg.getRouteNumber()));
+
+        googleMap.setOnMapLoadedCallback(()->{
+            if (m != null)
+                m.showInfoWindow();
+        });
     }
     private Bitmap getMarkerBitmapFromView(String number) {
         // Load the bitmap from drawable resource
@@ -244,7 +260,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
         // Initialize the paint object
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.BLACK);
-        paint.setTextSize(24); // Adjust text size as needed
+        paint.setTextSize(64); // Adjust text size as needed
         paint.setTextAlign(Paint.Align.CENTER);
 
         // Calculate text position

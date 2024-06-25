@@ -87,7 +87,7 @@ public class MySingleton extends Application {
 
 
     public  class LoginInfo{
-        public String loginName = "m_laotang";
+        public String loginName = "5010";
         public Short loginId = 5010;
         public String loginLocation = "Halifax Warehouse";
         public Integer warehouseId = 17;

@@ -10,15 +10,16 @@ import android.widget.TextView;
 
 import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.bean.ParcelPlace;
+import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 
 import java.util.List;
 
     public class PlaceAdapter extends BaseAdapter {
 
         private Context context;
-        private List<ParcelPlace> placeList;
+        private List<DeliveryInfo> placeList;
 
-        public PlaceAdapter(Context context, List<ParcelPlace> placeList) {
+        public PlaceAdapter(Context context, List<DeliveryInfo> placeList) {
             this.context = context;
             this.placeList = placeList;
         }
@@ -53,9 +54,9 @@ import java.util.List;
                 holder = (ViewHolder) convertView.getTag();
             }
 
-            ParcelPlace place = placeList.get(position);
-            holder.codeTextView.setText(String.valueOf(place.getCode()));
-            holder.streetOrApartmentTextView.setText(place.getStreetOrApartment());
+            DeliveryInfo place = placeList.get(position);
+            holder.codeTextView.setText(context.getString(R.string.route_id) + place.getRouteNumber());
+            holder.streetOrApartmentTextView.setText(context.getString(R.string.unit_id) + place.getUnitNumber() != null ? place.getUnitNumber() : "");
             holder.addressTextView.setText(place.getAddress());
 
             return convertView;

@@ -15,7 +15,7 @@
     <integer name="status_parcel_scanned">200</integer>
     <string name="str_self_pick">SELF_PICK_UP</string>
     <string name="str_parcel_scanned">PARCEL_SCAN</string>
-    <string name="default_operator">m_laotang</string>
+    <string name="default_operator">5010</string>
     <integer name="default_operation_type">0</integer>
     <string name="str_login_success">登录成功</string>
     <string name="str_login_failure">登录失败</string>
@@ -119,4 +119,6 @@
     <string name="cancel">Cancel</string>
     <string name="ok">OK</string>
     <string name="takephoto">拍照</string>
+    <string name="route_id">包裹号：</string>
+    <string name="unit_id">单元号：</string>
 </resources>

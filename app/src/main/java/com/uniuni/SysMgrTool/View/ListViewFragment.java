@@ -9,10 +9,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ListView;
 
+import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.bean.ParcelPlace;
+import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -69,14 +73,12 @@ public class ListViewFragment extends Fragment {
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         View v =  inflater.inflate(R.layout.fragment_list_view, container, false);
-        // Sample data
-        List<ParcelPlace> placeList = new ArrayList<>();
-        placeList.add(new ParcelPlace(1, "Street or Apartment 1", "Address 1"));
-        placeList.add(new ParcelPlace(2, "Street or Apartment 2", "Address 2"));
-        placeList.add(new ParcelPlace(3, "Street or Apartment 3", "Address 3"));
 
         // Create and set the adapter
-        PlaceAdapter placeAdapter = new PlaceAdapter(this.getContext(), placeList);
+        ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo();
+
+
+        PlaceAdapter placeAdapter = new PlaceAdapter(this.getContext(), lst);
         ListView listView = v.findViewById(R.id.listView); // Replace with your ListView's ID
         listView.setAdapter(placeAdapter);
 
