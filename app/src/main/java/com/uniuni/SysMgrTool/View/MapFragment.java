@@ -6,6 +6,7 @@ import static android.content.Context.LOCATION_SERVICE;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -33,6 +34,7 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.MapsInitializer;
 import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
@@ -43,6 +45,7 @@ import com.google.android.gms.maps.model.MarkerOptions;
 
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
+import com.uniuni.SysMgrTool.common.MyClusterRenderer;
 import com.uniuni.SysMgrTool.common.ResponseCallBack;
 import com.uniuni.SysMgrTool.common.Result;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
@@ -55,7 +58,7 @@ import com.google.maps.android.clustering.ClusterManager;
 
 public class MapFragment extends Fragment implements OnMapReadyCallback, LocationListener {
 
-    private MapView mapView;
+    private  MapView mapView;
     private GoogleMap googleMap;
 
     private LocationManager locationManager;
@@ -70,6 +73,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
         mapView = view.findViewById(R.id.mapView);
         mapView.onCreate(savedInstanceState);
         mapView.getMapAsync(this);
+
         try {
             MapsInitializer.initialize(requireActivity().getApplicationContext());
         } catch (Exception e) {
@@ -154,6 +158,28 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
         // 定位提供者状态改变时，会调用这个方法
     }
 
+    void test()
+    {
+        LatLng centerLocation = new LatLng(37.7749, -122.4194); // 旧金山的经纬度
+        googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(centerLocation, 10));
+        // Set some lat/lng coordinates to start with.
+
+        // Add ten cluster items in close proximity, for purposes of this example.
+            for (int i = 0; i < 10; i++) {
+                double lat = 37.7749 + i * 0.01;
+                double lng = -122.4194 + i * 0.01;
+            DeliveryInfo offsetItem = new DeliveryInfo();
+            offsetItem.setLatitude(lat);
+            offsetItem.setLongitude(lng);
+            offsetItem.setRouteNumber("Title " + i);
+            offsetItem.setName("Snippet " + i);
+
+            clusterManager.addItem(offsetItem);
+        }
+
+        clusterManager.cluster();
+    }
+
 
     @SuppressLint("PotentialBehaviorOverride")
     @Override
@@ -177,16 +203,21 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
         googleMap.setMyLocationEnabled(true);
 
         // Initialize ClusterManager
-        //clusterManager = new ClusterManager<>(this.getActivity(), googleMap);
+        clusterManager = new ClusterManager<DeliveryInfo>(this.getContext(), googleMap);
+        // 设置自定义的 ClusterRenderer
+        clusterManager.setRenderer(new MyClusterRenderer<>(getContext(), googleMap, clusterManager));
 
+        // 设置地图拖动和缩放事件监听器，以便更新 ClusterManager
+        googleMap.setOnCameraIdleListener(clusterManager);
+        googleMap.setOnCameraMoveListener(()->{clusterManager.cluster();});
 
         ArrayList<DeliveryInfo> lst = loadData();
 
         LatLng firstMarker = null;
         for (DeliveryInfo info :lst)
         {
-            addCustomMarker(info);
-            //clusterManager.addItem(info);
+            //addCustomMarker(info);
+            clusterManager.addItem(info);
 
             if (firstMarker == null) {
                 firstMarker = new LatLng(info.getLatitude(), info.getLongitude());
@@ -194,20 +225,25 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
 
         }
 
+        clusterManager.cluster();
+
+        test();
+
+
         // 添加标记点，这里是示例，你需要根据你的数据添加标记
         if (firstMarker != null) {
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstMarker, 12));
         }
 
-        //clusterManager.setOnClusterClickListener(cluster->{
-        //    Toast.makeText(this.getActivity(), "Cluster clicked with " + cluster.getSize() + " items", Toast.LENGTH_SHORT).show();
-        //    return false;
-        //});
+        clusterManager.setOnClusterClickListener(cluster->{
+            Toast.makeText(this.getActivity(), "Cluster clicked with " + cluster.getSize() + " items", Toast.LENGTH_SHORT).show();
+            return false;
+        });
 
-        //clusterManager.setOnClusterItemClickListener(item->{
-        //    Toast.makeText(this.getActivity(), "Package number: " + item.getRouteNumber(), Toast.LENGTH_SHORT).show();
-        //    return false;
-        //});
+        clusterManager.setOnClusterItemClickListener(item->{
+            Toast.makeText(this.getActivity(), "Package number: " + item.getRouteNumber(), Toast.LENGTH_SHORT).show();
+            return false;
+        });
 
         // Set marker click listener
         // 设置 marker 点击事件

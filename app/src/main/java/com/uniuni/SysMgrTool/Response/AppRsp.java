@@ -38,7 +38,7 @@ public class AppRsp implements TaskBase {
     public void doIt(Message msg) {
         List<DeliveringListData> lst = this.getBiz_data();
         ListIterator<DeliveringListData> listIterator = lst.listIterator();
-        System.out.println("Get delivering  list:" + this.getBiz_data().get(0).getAddress());
+        System.out.println("Get delivering  list:" + this.getBiz_data().size());
 
         while (listIterator.hasNext()) {
             DeliveringListData d = (DeliveringListData) listIterator.next();

@@ -130,7 +130,7 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @Nullable
     @Override
     public String getSnippet() {
-        return null;
+        return name;
     }
 
     public Short getDriverId() {
