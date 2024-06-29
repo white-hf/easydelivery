@@ -121,4 +121,5 @@
     <string name="takephoto">拍照</string>
     <string name="route_id">包裹号：</string>
     <string name="unit_id">单元号：</string>
+    <string name="invalid_order_id">Invalid order id</string>
 </resources>

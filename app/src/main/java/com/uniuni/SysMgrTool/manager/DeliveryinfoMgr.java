@@ -42,6 +42,13 @@ public class DeliveryinfoMgr implements Subscriber {
         listDeliveryInfo = new ArrayList<>();
     }
 
+    public final DeliveryInfo get(Long orderId) {
+        if (orderId == null)
+            return null;
+
+        return listDeliveryInfo.stream().filter(pkg->pkg.getOrderId().equals(orderId)).findFirst().orElse(null);
+    }
+
     public void clearAll() {
         Short driverId = MySingleton.getInstance().getLoginInfo().loginId;
         if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {

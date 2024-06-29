@@ -149,7 +149,7 @@ public class DeliveredPackagesMgr implements Subscriber {
 
         Map<String, String> formFields = new HashMap<>();
         formFields.put("delivered_location", "1");
-        formFields.put("order_id", deliveryInfo.orderId);
+        formFields.put("order_id", String.valueOf(deliveryInfo.orderId));
         formFields.put("longitude", String.valueOf(deliveryInfo.longitude));
         formFields.put("latitude",String.valueOf(deliveryInfo.latitude));
         formFields.put("delivery_result", "0");

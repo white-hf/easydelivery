@@ -17,8 +17,11 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.common.BitmapUtils;
+import com.uniuni.SysMgrTool.dao.DeliveryInfo;
+import com.uniuni.SysMgrTool.dao.PackageEntity;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -100,6 +103,9 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     private boolean isPortrait = false; // 默认是横屏
 
     private Long mOrderId;
+
+    private double mLatitude;
+    private double mLongitude;
 
     @Override
     protected void onStart() {
@@ -223,6 +229,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         setContentView(R.layout.activity_camera);
 
         mOrderId = getIntent().getLongExtra("order_id", -1);
+        mLatitude = getIntent().getDoubleExtra("latitude", -1);
+        mLongitude = getIntent().getDoubleExtra("longitude", -1);
 
         initCamera();
 
@@ -238,6 +246,30 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 finish();
             }
         });
+
+        Button okButton = findViewById(R.id.ok_button);
+        cancelButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                //save the data of the package delivered to local db and the queue for uploading to the server
+                final DeliveryInfo deliveryInfo = MySingleton.getInstance().getdDeliveryinfoMgr().get(mOrderId);
+                if (deliveryInfo == null) {
+                    Toast.makeText(MySingleton.getInstance().getCtx(), getString(R.string.invalid_order_id), Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                PackageEntity packageEntity = deliveryInfo.transferToPackageEntity();
+                packageEntity.createTime = System.currentTimeMillis();
+                packageEntity.imagePath = Arrays.toString(mImageFiles.stream().map(File::getAbsolutePath).toArray(String[]::new));
+                packageEntity.latitude = mLatitude;
+                packageEntity.longitude = mLongitude;
+
+                MySingleton.getInstance().getmDeliveredPackagesMgr().save(packageEntity);
+
+                finish();
+            }
+        });
+
 
         Button captureButton = findViewById(R.id.capture_button);
         captureButton.setOnClickListener(new View.OnClickListener() {

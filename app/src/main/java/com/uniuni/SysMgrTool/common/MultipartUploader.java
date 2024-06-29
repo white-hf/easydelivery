@@ -42,6 +42,7 @@ public class MultipartUploader {
                 .header("Accept-Encoding", "gzip, deflate, br")
                 .build();
 
-        client.newCall(request).enqueue(callback);
+        System.out.println(request);
+        //client.newCall(request).enqueue(callback);
     }
 }

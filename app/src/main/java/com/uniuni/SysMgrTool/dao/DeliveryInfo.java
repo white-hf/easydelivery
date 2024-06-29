@@ -50,6 +50,18 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
         return orderSn;
     }
 
+    public PackageEntity transferToPackageEntity() {
+        PackageEntity packageEntity = new PackageEntity();
+        packageEntity.driverId = driverId;
+        packageEntity.batchNumber = batchNumber;
+        packageEntity.trackingId = orderSn;
+        packageEntity.orderId = orderId;
+        packageEntity.longitude = longitude;
+        packageEntity.latitude = latitude;
+
+        return packageEntity;
+    }
+
     public void setOrderSn(String orderSn) {
         this.orderSn = orderSn;
     }

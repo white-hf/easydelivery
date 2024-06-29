@@ -66,6 +66,9 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
 
     private ClusterManager<DeliveryInfo> clusterManager;
 
+    private double mLatitude;
+    private double mLongitude;
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -135,12 +138,12 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
 
     @Override
     public void onLocationChanged(Location location) {
-        // 当位置改变时，这里可以获取到最新的位置
-        double latitude = location.getLatitude();
-        double longitude = location.getLongitude();
+
+        mLatitude  = location.getLatitude();
+        mLongitude = location.getLongitude();
 
         // 使用经纬度数据
-        LatLng markerLatLng = new LatLng(latitude, longitude);
+        LatLng markerLatLng = new LatLng(mLatitude, mLongitude);
         //googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(markerLatLng, 12));
     }
 
@@ -250,6 +253,8 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
             //show the package delivery ui
             Intent intent = new Intent(getActivity(), CameraActivity.class);
             intent.putExtra("order_id", item.getOrderId());
+            intent.putExtra("lantitude", mLatitude);
+            intent.putExtra("longtitude", mLongitude);
             startActivity(intent);
 
             return false;
