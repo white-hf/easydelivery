@@ -1,9 +1,13 @@
 package com.uniuni.SysMgrTool.common;
 
+import android.annotation.SuppressLint;
+
 import com.uniuni.SysMgrTool.Request.DeliveredUploadParams;
 
 import okhttp3.*;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class MultipartUploader {
@@ -11,6 +15,7 @@ public class MultipartUploader {
     private static final MediaType MEDIA_TYPE_JPEG = MediaType.parse("image/jpeg");
     private static final String BOUNDARY = "Boundary-0EDAE93A-4CA4-40CE-87BC-CFB10948E044";
 
+    @SuppressLint("DefaultLocale")
     public static void upload(DeliveredUploadParams params, Callback callback) {
         OkHttpClient client = new OkHttpClient();
 
@@ -22,9 +27,13 @@ public class MultipartUploader {
             builder.addFormDataPart(entry.getKey(), entry.getValue());
         }
 
+        // List of image files
+        final List<File> imageFiles = parseImagePath(params.getImageFiles());
+
         // Add image files
-        for (File file : params.getImageFiles()) {
-            builder.addFormDataPart("pod_images[]", file.getName(),
+        int i = 0;
+        for (File file : imageFiles) {
+            builder.addFormDataPart("pod_images[]", String.format("image%d.jpg", i++),
                     RequestBody.create(file, MEDIA_TYPE_JPEG));
         }
 
@@ -45,4 +54,29 @@ public class MultipartUploader {
         System.out.println(request);
         //client.newCall(request).enqueue(callback);
     }
+
+
+    // Convert string containing file paths to List<File>
+    static private List<File> parseImagePath(String imagePath) {
+        List<File> fileList = new ArrayList<>();
+
+        // Check if the string is empty or doesn't have the expected format
+        if (imagePath == null || imagePath.isEmpty()) {
+            return fileList; // Return an empty list or handle error
+        }
+
+        // Remove leading and trailing square brackets and split the string
+        String[] paths = imagePath.substring(1, imagePath.length() - 1).split(", ");
+
+        // Iterate over paths, create File objects, and add them to the list
+        for (String path : paths) {
+            String trimmedPath = path.trim(); // Trim leading/trailing spaces
+            fileList.add(new File(trimmedPath)); // Create File object and add to list
+        }
+
+        return fileList;
+    }
+
+
+
 }

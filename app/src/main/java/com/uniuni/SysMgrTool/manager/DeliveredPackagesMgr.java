@@ -18,6 +18,7 @@ import com.uniuni.SysMgrTool.dao.PackageEntity;
 import java.io.File;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -155,13 +156,7 @@ public class DeliveredPackagesMgr implements Subscriber {
         formFields.put("delivery_result", "0");
         params.setFormFields(formFields);
 
-        // List of image files
-        List<File> imageFiles = Arrays.asList(
-                new File(getFilesDir(), "image0.jpeg"),
-                new File(getFilesDir(), "image1.jpeg")
-        );
-
-        params.setImageFiles(imageFiles);
+        params.setImageFiles(deliveryInfo.imagePath);
 
         MultipartUploader.upload(params, new Callback() {
             @Override
@@ -203,10 +198,6 @@ public class DeliveredPackagesMgr implements Subscriber {
                 }
             }
         });
-    }
-
-    private String getFilesDir() {
-        return null;
     }
 
     private void consumePackages() {

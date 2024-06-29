@@ -11,7 +11,7 @@ public class DeliveredUploadParams {
        private String url;
         private String authorization;
         private Map<String, String> formFields;
-        private List<File> imageFiles;
+        private String imageFiles;
 
         // Getters and Setters
         public String getUrl() {
@@ -38,11 +38,11 @@ public class DeliveredUploadParams {
             this.formFields = formFields;
         }
 
-        public List<File> getImageFiles() {
+        public String getImageFiles() {
             return imageFiles;
         }
 
-        public void setImageFiles(List<File> imageFiles) {
+        public void setImageFiles(String imageFiles) {
             this.imageFiles = imageFiles;
         }
     }
