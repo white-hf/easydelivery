@@ -39,6 +39,7 @@ public class AppLoginRsp implements TaskBase {
     public void doIt(Message msg) {
         if (this.getBiz_code().equalsIgnoreCase("COMMON.QUERY.SUCCESS")) {
             ServerInterface.gToken = this.getBiz_data().getAccess_token();
+            MySingleton.getInstance().getLoginInfo().userToken = this.getBiz_data().getAccess_token();
             Log.d("debug", "token:" + ServerInterface.gToken);
 
             //notify other modules

@@ -6,6 +6,7 @@ import static android.content.Context.LOCATION_SERVICE;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -173,6 +174,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
             offsetItem.setLongitude(lng);
             offsetItem.setRouteNumber("Title " + i);
             offsetItem.setName("Snippet " + i);
+            offsetItem.setOrderId((long) (100 + i));
 
             clusterManager.addItem(offsetItem);
         }
@@ -216,6 +218,9 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
         LatLng firstMarker = null;
         for (DeliveryInfo info :lst)
         {
+            if (MySingleton.getInstance().getmDeliveredPackagesMgr().exit(info.getOrderSn()))
+                continue; //only display packages that are not delivered
+
             //addCustomMarker(info);
             clusterManager.addItem(info);
 
@@ -242,29 +247,14 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
 
         clusterManager.setOnClusterItemClickListener(item->{
             Toast.makeText(this.getActivity(), "Package number: " + item.getRouteNumber(), Toast.LENGTH_SHORT).show();
+            //show the package delivery ui
+            Intent intent = new Intent(getActivity(), CameraActivity.class);
+            intent.putExtra("order_id", item.getOrderId());
+            startActivity(intent);
+
             return false;
         });
 
-        // Set marker click listener
-        // 设置 marker 点击事件
-        googleMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
-            @Override
-            public boolean onMarkerClick(com.google.android.gms.maps.model.Marker marker) {
-                // Show toast with package number
-                System.out.println("Marker clicked: " + marker.getTitle());
-                return true; // 返回 false，以确保默认的信息窗口也会弹出
-            }
-        });
-
-        googleMap.setOnInfoWindowClickListener(marker->{
-            Toast.makeText(this.getActivity(), "Package number: " + marker.getTitle(), Toast.LENGTH_SHORT).show();
-        });
-
-        // For zooming automatically to the location of the marker
-        //CameraPosition cameraPosition = new CameraPosition.Builder().target(sydney).zoom(15).build();
-        //googleMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
-
-        // 将地图移动到标记点位置
     }
 
 

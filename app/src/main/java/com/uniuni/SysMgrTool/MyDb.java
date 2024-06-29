@@ -14,6 +14,7 @@ import com.uniuni.SysMgrTool.Response.DeliveringListData;
 import com.uniuni.SysMgrTool.bean.ScanOrder;
 import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.dao.AppDatabase;
+import com.uniuni.SysMgrTool.dao.DeliveredPackagesDao;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.DeliveryInfoDao;
 import com.uniuni.SysMgrTool.dao.OrderIdRecord;
@@ -39,6 +40,7 @@ public class MyDb {
 
     private OrderIdRecordDao orderIdRecordDao;
     private DeliveryInfoDao deliveryInfoDao;
+    private DeliveredPackagesDao deliveredPackagesDao;
 
     private Handler mHandler;
 
@@ -102,9 +104,14 @@ public class MyDb {
         scannedRecordDao = db.getScannedRecordDao();
         orderIdRecordDao = db.getOrderIdRecordDao();
         deliveryInfoDao  = db.deliveryInfoDao();
+        deliveredPackagesDao = db.deliveredPackagesDao();
     }
 
     public DeliveryInfoDao getDeliveryInfoDao() {
         return deliveryInfoDao;
+    }
+
+    public DeliveredPackagesDao getDeliveredPackagesDao() {
+        return deliveredPackagesDao;
     }
 }

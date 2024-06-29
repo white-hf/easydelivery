@@ -1,5 +1,6 @@
 package com.uniuni.SysMgrTool.View;
 
+import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -9,6 +10,7 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
 
@@ -33,6 +35,7 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 
 import java.util.Arrays;
 
@@ -95,6 +98,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     private float[] magnetometerReading = new float[3];
 
     private boolean isPortrait = false; // 默认是横屏
+
+    private Long mOrderId;
 
     @Override
     protected void onStart() {
@@ -187,30 +192,53 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 Log.e(TAG, "Error accessing camera", e);
             }
         }
+        else
+            requestCameraPermission();
     }
+
+    private void requestCameraPermission() {
+        ActivityCompat.requestPermissions(this,
+                new String[]{Manifest.permission.CAMERA},
+                CAMERA_PERMISSION_REQUEST_CODE);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission granted, initialize the camera
+                initCamera();
+            } else {
+                // Permission denied, show a message to the user
+                Toast.makeText(this, "Camera permission is required to use this feature", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera);
 
+        mOrderId = getIntent().getLongExtra("order_id", -1);
+
         initCamera();
 
-        // 初始化缩略图列表
+        // initialize the thumbnail container
         mThumbnailContainer = findViewById(R.id.thumbnail_container);
         mImageFiles = new ArrayList<>();
 
-        // 取消按钮点击事件
+        //
         Button cancelButton = findViewById(R.id.cancel_button);
         cancelButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // 处理取消按钮点击事件
-
+                finish();
             }
         });
 
-        // 拍照按钮点击事件
         Button captureButton = findViewById(R.id.capture_button);
         captureButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -219,7 +247,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             }
         });
 
-        // 获取相机预览视图
+
         FrameLayout previewLayout = findViewById(R.id.camera_preview);
         mCameraPreview = new CameraPreview(this);
         previewLayout.addView(mCameraPreview);
@@ -235,7 +263,6 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     }
 
-    // 检查相机权限
     private boolean checkCameraPermission() {
         return checkSelfPermission(android.Manifest.permission.CAMERA) ==
                 PackageManager.PERMISSION_GRANTED;
@@ -249,7 +276,6 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         }
     }
 
-    // 相机状态回调
     private final CameraDevice.StateCallback mCameraStateCallback =
             new CameraDevice.StateCallback() {
                 @Override
@@ -271,7 +297,6 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 }
             };
 
-    // 开始预览
     public void startPreview() {
         if (mCameraDevice == null)
             return;

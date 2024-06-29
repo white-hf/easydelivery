@@ -8,5 +8,6 @@
     <!-- values/dimens.xml -->
     <dimen name="thumbnail_width">120dp</dimen>
     <dimen name="thumbnail_height">120dp</dimen>
+    <dimen name="thumbnail_margin">8</dimen>
 
 </resources>

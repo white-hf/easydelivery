@@ -40,6 +40,20 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @ColumnInfo(name = "driver_id")
     private Short driverId;
 
+    @ColumnInfo(name = "order_sn")
+    private String orderSn;
+
+    @ColumnInfo(name = "order_id")
+    private Long orderId;
+
+    public String getOrderSn() {
+        return orderSn;
+    }
+
+    public void setOrderSn(String orderSn) {
+        this.orderSn = orderSn;
+    }
+
     // Getters and setters for each field
     // ...
 
@@ -139,5 +153,13 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
 
     public void setDriverId(Short driverId) {
         this.driverId = driverId;
+    }
+
+    public Long getOrderId() {
+        return orderId;
+    }
+
+    public void setOrderId(Long orderId) {
+        this.orderId = orderId;
     }
 }

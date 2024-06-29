@@ -42,6 +42,18 @@ public class DeliveryinfoMgr implements Subscriber {
         listDeliveryInfo = new ArrayList<>();
     }
 
+    public void clearAll() {
+        Short driverId = MySingleton.getInstance().getLoginInfo().loginId;
+        if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
+            return;
+        }
+
+        DeliveryInfoDao deliveryInfoDao = MySingleton.getInstance().getmMydb().getDeliveryInfoDao();
+
+        listDeliveryInfo.clear();
+        deliveryInfoDao.delete(batchId,driverId);
+    }
+
     /**
      * Get the delivery info from the server, it should be called after user login.
      */
@@ -78,6 +90,8 @@ public class DeliveryinfoMgr implements Subscriber {
                 info.setUnitNumber(d.getUnit_number());
                 info.setBatchNumber(batchId);
                 info.setDriverId(driverId);
+                info.setOrderSn(d.getOrder_sn());
+                info.setOrderId(d.getOrder_id());
 
                 deliveryInfoDao.insert(info);
 

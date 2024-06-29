@@ -40,6 +40,9 @@ public class AppRsp implements TaskBase {
         ListIterator<DeliveringListData> listIterator = lst.listIterator();
         System.out.println("Get delivering  list:" + this.getBiz_data().size());
 
+        //remove the old data from cache firstly.
+        MySingleton.getInstance().getdDeliveryinfoMgr().clearAll();
+
         while (listIterator.hasNext()) {
             DeliveringListData d = (DeliveringListData) listIterator.next();
             MySingleton.getInstance().getdDeliveryinfoMgr().saveDeliveringListData(d);

@@ -32,6 +32,7 @@ import com.uniuni.SysMgrTool.bean.ScanOrder;
 import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.ScannedRecord;
+import com.uniuni.SysMgrTool.manager.DeliveredPackagesMgr;
 import com.uniuni.SysMgrTool.manager.DeliveryinfoMgr;
 
 import java.io.FileOutputStream;
@@ -45,6 +46,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TimeZone;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -65,6 +68,7 @@ public class MySingleton extends Application {
     private static MySingleton instance;
     private RequestQueue requestQueue;
     private com.uniuni.SysMgrTool.Event.Publisher publisher;
+    private DeliveredPackagesMgr mDeliveredPackagesMgr;
 
 
     public  Context getCtx() {
@@ -85,10 +89,15 @@ public class MySingleton extends Application {
         return dDeliveryinfoMgr;
     }
 
+    public DeliveredPackagesMgr getmDeliveredPackagesMgr() {
+        return mDeliveredPackagesMgr;
+    }
+
 
     public  class LoginInfo{
         public String loginName = "5010";
         public Short loginId = 5010;
+        public String userToken = "";
         public String loginLocation = "Halifax Warehouse";
         public Integer warehouseId = 17;
     }
@@ -128,17 +137,6 @@ public class MySingleton extends Application {
             return mHashOrders;
         }
 
-    public void saveOrders()
-    {
-        try
-        {
-            ObjectOutputStream os = new ObjectOutputStream(new FileOutputStream("/data/data/com.example.user.SysMgrTool/map.txt"));
-            os.writeObject(mHashOrders);
-        }catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
 
     public MyDb getmMydb() {
         return mMydb;
@@ -158,28 +156,6 @@ public class MySingleton extends Application {
         instance = this;
         iScannedCount = 0;
 
-        mHashArea.put("B3B" , "达茂");
-        mHashArea.put("B3A" , "达茂");
-        mHashArea.put("B2X" , "达茂");
-        mHashArea.put("B2W" , "达茂");
-        mHashArea.put("B2Y" , "达茂");
-        mHashArea.put("B2V" , "达茂");
-        mHashArea.put("B3G" , "达茂");
-
-        mHashArea.put("B4C" , "Lower Sackville");
-        mHashArea.put("B4E" , "Middle Sackville");
-        mHashArea.put("B4A" , "Bedford");
-        mHashArea.put("B3M" , "clayton park东+Larry Utack部分");
-        mHashArea.put("B3S" , "clayton park西");
-
-        mHashArea.put("B3H" , "哈法DT中至Dal");
-        mHashArea.put("B3K" , "哈法DT北");
-        mHashArea.put("B3J" , "哈法DT中心");
-        mHashArea.put("B3L" , "哈法DT西北");
-        mHashArea.put("B3N" , "Dutch Village + Herring Cove");
-        mHashArea.put("B3R" , "Herring Cove南");
-        mHashArea.put("B3P" , "Herring Cove");
-
         myHandler = new  MyHandler(Looper.getMainLooper());
         mServerInterface = new ServerInterface(myHandler);
 
@@ -188,9 +164,34 @@ public class MySingleton extends Application {
         mMydb.initDb(ctx);
 
         dDeliveryinfoMgr = new DeliveryinfoMgr();
+        mDeliveredPackagesMgr = new DeliveredPackagesMgr();
         FileLog.getInstance().init();
 
         dbLooperThread.start();
+    }
+
+    @Override
+    public void onTerminate() {
+        super.onTerminate();
+        shutdownExecutorService();
+    }
+
+    private void shutdownExecutorService() {
+        final ExecutorService executorService = mDeliveredPackagesMgr.getExecutorService();
+        if (executorService != null) {
+            executorService.shutdown();
+            try {
+                if (!executorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                    executorService.shutdownNow();
+                    if (!executorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                        System.err.println("ExecutorService did not terminate");
+                    }
+                }
+            } catch (InterruptedException ie) {
+                executorService.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     public Publisher getPublisher()
