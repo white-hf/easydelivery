@@ -28,19 +28,6 @@ public class PlaceManager {
             e.printStackTrace();
         }
 
-        final HashMap<String, ScanOrder> orderHashMap = MySingleton.getInstance().getmHashOrders();
-        for (Map.Entry<String, ScanOrder> entry : orderHashMap.entrySet()) {
-            ScanOrder o = entry.getValue();
-
-            Place p = new Place();
-            p.setPickId(o.getPackId());
-            p.setTid(o.getId());
-            p.setLon((Double.valueOf(o.getLng())));
-            p.setAlon(Double.valueOf(o.getLat()));
-            p.setAddress(o.getAddress());
-
-            mLstPlace.add(p);
-        }
 
         for(Place p : mLstPlace)
         {

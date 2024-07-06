@@ -1,5 +1,6 @@
 package com.uniuni.SysMgrTool.View;
 
+import android.graphics.Color;
 import android.os.Bundle;
 
 import androidx.fragment.app.Fragment;
@@ -81,6 +82,8 @@ public class ListViewFragment extends Fragment {
         PlaceAdapter placeAdapter = new PlaceAdapter(this.getContext(), lst);
         ListView listView = v.findViewById(R.id.listView); // Replace with your ListView's ID
         listView.setAdapter(placeAdapter);
+
+        //v.setBackgroundColor(Color.WHITE);
 
         return v;
     }

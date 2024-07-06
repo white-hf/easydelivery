@@ -9,59 +9,42 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
 
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.common.BitmapUtils;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.PackageEntity;
+import com.uniuni.SysMgrTool.manager.DeliveredPackagesMgr;
 
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.Surface;
-import android.view.View;
-import android.widget.Button;
-import android.widget.FrameLayout;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.fragment.app.Fragment;
 
 import java.util.Arrays;
 
-import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCaptureSession;
-import android.hardware.camera2.CameraDevice;
-import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.media.Image;
 import android.media.ImageReader;
-import android.os.Bundle;
 import android.os.Environment;
-import android.util.Log;
-import android.view.Surface;
-import android.view.View;
-import android.widget.Button;
-import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 
@@ -71,15 +54,15 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-public class CameraActivity extends AppCompatActivity implements SensorEventListener {
+public class CameraFragment extends Fragment implements SensorEventListener {
 
     private static final String TAG = "CameraActivity";
     private static final int CAMERA_PERMISSION_REQUEST_CODE = 1001;
+    public static final int IMAGE_COUNT = 2;
 
     private CameraManager mCameraManager;
     private CameraDevice mCameraDevice = null;
@@ -89,7 +72,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     private ImageReader imageReader;
 
     private LinearLayout mThumbnailContainer;
-    private List<File> mImageFiles;
+    private List<File> mImageFiles = new ArrayList<>();
 
     private CaptureRequest mPreviewRequest;
 
@@ -108,10 +91,10 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     private double mLongitude;
 
     @Override
-    protected void onStart() {
-
+    public void onStart() {
         super.onStart();
 
+        mImageFiles.clear();
         startPreview();
     }
 
@@ -131,7 +114,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     @Override
-    protected void onPause() {
+    public void onPause() {
         closeCamera();
         super.onPause();
         sensorManager.unregisterListener(this);
@@ -188,8 +171,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     private void initCamera()
     {
-        // 初始化相机
-        mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        mCameraManager = null;
+        mCameraManager = (CameraManager) getActivity().getSystemService(Context.CAMERA_SERVICE);
         if (checkCameraPermission() && mCameraManager != null) {
             try {
                 String cameraId = mCameraManager.getCameraIdList()[0];
@@ -203,7 +186,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private void requestCameraPermission() {
-        ActivityCompat.requestPermissions(this,
+        ActivityCompat.requestPermissions(getActivity(),
                 new String[]{Manifest.permission.CAMERA},
                 CAMERA_PERMISSION_REQUEST_CODE);
     }
@@ -217,44 +200,47 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 initCamera();
             } else {
                 // Permission denied, show a message to the user
-                Toast.makeText(this, "Camera permission is required to use this feature", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "Camera permission is required to use this feature", Toast.LENGTH_SHORT).show();
             }
         }
     }
 
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_camera);
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        View view = inflater.inflate(R.layout.fragment_camera, container, false);
 
-        mOrderId = getIntent().getLongExtra("order_id", -1);
-        mLatitude = getIntent().getDoubleExtra("latitude", -1);
-        mLongitude = getIntent().getDoubleExtra("longitude", -1);
+        Bundle args = getArguments();
+        if (args != null) {
+            mOrderId = args.getLong("order_id", -1);
+            mLatitude = args.getDouble("latitude", -1);
+            mLongitude = args.getDouble("longitude", -1);
+        }
+
+        TextView orderInfoTextView = view.findViewById(R.id.orderInfo_textview);
+        final DeliveryInfo deliveryInfo = MySingleton.getInstance().getdDeliveryinfoMgr().get(mOrderId);
+        if (deliveryInfo != null) {
+            orderInfoTextView.setText(String.valueOf(deliveryInfo.getTitle() + "|" + deliveryInfo.getAddress()));
+        }
 
         initCamera();
 
         // initialize the thumbnail container
-        mThumbnailContainer = findViewById(R.id.thumbnail_container);
-        mImageFiles = new ArrayList<>();
+        mThumbnailContainer = view.findViewById(R.id.thumbnail_container);
 
         //
-        Button cancelButton = findViewById(R.id.cancel_button);
-        cancelButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                finish();
-            }
+        Button cancelButton = view.findViewById(R.id.cancel_button);
+        cancelButton.setOnClickListener(v->{
+            requireActivity().getSupportFragmentManager().popBackStack();
         });
 
-        Button okButton = findViewById(R.id.ok_button);
-        cancelButton.setOnClickListener(new View.OnClickListener() {
+        Button okButton = view.findViewById(R.id.ok_button);
+        okButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 //save the data of the package delivered to local db and the queue for uploading to the server
-                final DeliveryInfo deliveryInfo = MySingleton.getInstance().getdDeliveryinfoMgr().get(mOrderId);
-                if (deliveryInfo == null) {
-                    Toast.makeText(MySingleton.getInstance().getCtx(), getString(R.string.invalid_order_id), Toast.LENGTH_SHORT).show();
+                if (mImageFiles.size() < IMAGE_COUNT) {
+                    Toast.makeText(MySingleton.getInstance().getCtx(), getString(R.string.take_picture), Toast.LENGTH_SHORT).show();
                     return;
                 }
 
@@ -263,15 +249,16 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 packageEntity.imagePath = Arrays.toString(mImageFiles.stream().map(File::getAbsolutePath).toArray(String[]::new));
                 packageEntity.latitude = mLatitude;
                 packageEntity.longitude = mLongitude;
+                packageEntity.status = DeliveredPackagesMgr.PackageStatus.WAITING_UPLOADED.getStatus();
 
                 MySingleton.getInstance().getmDeliveredPackagesMgr().save(packageEntity);
 
-                finish();
+                requireActivity().getSupportFragmentManager().popBackStack();
             }
         });
 
 
-        Button captureButton = findViewById(R.id.capture_button);
+        Button captureButton = view.findViewById(R.id.capture_button);
         captureButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -280,23 +267,27 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         });
 
 
-        FrameLayout previewLayout = findViewById(R.id.camera_preview);
-        mCameraPreview = new CameraPreview(this);
+        FrameLayout previewLayout = view.findViewById(R.id.camera_preview);
+        mCameraPreview = null;
+        mCameraPreview = new CameraPreview(getContext());
+        mCameraPreview.setCameraActivity(this);
         previewLayout.addView(mCameraPreview);
 
-        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        sensorManager = (SensorManager) requireActivity().getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
             accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
             magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
         } else {
-            Toast.makeText(this, "Sensor not available", Toast.LENGTH_SHORT).show();
-            finish();
+            Toast.makeText(getContext(), "Sensor not available", Toast.LENGTH_SHORT).show();
+            requireActivity().getSupportFragmentManager().popBackStack();
         }
 
+        return view;
     }
 
+
     private boolean checkCameraPermission() {
-        return checkSelfPermission(android.Manifest.permission.CAMERA) ==
+        return getActivity().checkSelfPermission(android.Manifest.permission.CAMERA) ==
                 PackageManager.PERMISSION_GRANTED;
     }
 
@@ -337,9 +328,9 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
         Surface previewSurface = mCameraPreview.getSurface();
         try {
-            // 创建预览需要的CaptureRequest.Builder
+
             final CaptureRequest.Builder previewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            // 将SurfaceView的surface作为CaptureRequest.Builder的目标
+
             previewRequestBuilder.addTarget(previewSurface);
 
             if (imageReader == null)
@@ -447,7 +438,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     private File createImageFile() throws IOException {
         String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
         String imageFileName = "JPEG_" + timeStamp + "_";
-        File storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        File storageDir = getActivity().getExternalFilesDir(Environment.DIRECTORY_PICTURES);
         File imageFile = File.createTempFile(
                 imageFileName,
                 ".jpg",
@@ -495,7 +486,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     // 添加缩略图到列表
     private void addThumbnail(final File imageFile) {
-        ImageView imageView = new ImageView(this);
+        ImageView imageView = new ImageView(getActivity());
         imageView.setLayoutParams(new LinearLayout.LayoutParams(
                 getResources().getDimensionPixelSize(R.dimen.thumbnail_width),
                 getResources().getDimensionPixelSize(R.dimen.thumbnail_height)
@@ -515,16 +506,16 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         mThumbnailContainer.addView(imageView);
     }
 
-    // 显示大图
+    // Display the full image
     private void showFullImage(File imageFile) {
-        // 创建 FullImageFragment 实例并传递图片文件路径
+
         FullImageFragment fullImageFragment = new FullImageFragment();
         Bundle bundle = new Bundle();
         bundle.putString("imageFile", imageFile.getAbsolutePath());
         fullImageFragment.setArguments(bundle);
 
-        // 使用 FragmentTransaction 启动 FullImageFragment
-        getSupportFragmentManager().beginTransaction()
+
+        requireActivity().getSupportFragmentManager().beginTransaction()
                 .add(android.R.id.content, fullImageFragment)
                 .addToBackStack(null)
                 .commit();

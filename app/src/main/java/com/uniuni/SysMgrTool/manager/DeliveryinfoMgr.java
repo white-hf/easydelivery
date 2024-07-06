@@ -15,6 +15,7 @@ import com.uniuni.SysMgrTool.common.ResponseCallBack;
 import com.uniuni.SysMgrTool.common.Result;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.DeliveryInfoDao;
+import com.uniuni.SysMgrTool.dao.PackageEntity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +52,8 @@ public class DeliveryinfoMgr implements Subscriber {
 
     public void clearAll() {
         Short driverId = MySingleton.getInstance().getLoginInfo().loginId;
+        batchId = MySingleton.getInstance().getProperty(MySingleton.ITEM_CURRENT_BATCH_ID);
+
         if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
             return;
         }
@@ -66,7 +69,7 @@ public class DeliveryinfoMgr implements Subscriber {
      */
     public void getDeliveryInfo(Short driverId){
         @SuppressLint("DefaultLocale") String realUrl = String.format(URL_DELIVERING_LIST, MySingleton.getInstance().getLoginInfo().loginId);
-        MySingleton.getInstance().getServerInterface().getRequestWithRsp(driverId , realUrl , null , AppRsp.class, MySingleton.getInstance().getmDbHandler());
+        MySingleton.getInstance().getServerInterface().getRequestWithRsp(driverId , realUrl , null , AppRsp.class, MySingleton.getInstance().getDbHandler());
     }
 
     /**
@@ -84,7 +87,7 @@ public class DeliveryinfoMgr implements Subscriber {
 
        DeliveryInfoDao deliveryInfoDao = MySingleton.getInstance().getmMydb().getDeliveryInfoDao();
 
-        MySingleton.getInstance().getmDbHandler().post(() -> {
+        MySingleton.getInstance().getDbHandler().post(() -> {
             try {
 
                 DeliveryInfo info = new DeliveryInfo();
@@ -122,7 +125,7 @@ public class DeliveryinfoMgr implements Subscriber {
 
         DeliveryInfoDao deliveryInfoDao = MySingleton.getInstance().getmMydb().getDeliveryInfoDao();
 
-        MySingleton.getInstance().getmDbHandler().post(()->{
+        MySingleton.getInstance().getDbHandler().post(()->{
             try {
                 List<DeliveryInfo> records = deliveryInfoDao.findByBatchNumber(batchId , driverId);
 
@@ -151,6 +154,6 @@ public class DeliveryinfoMgr implements Subscriber {
      */
     @Override
     public void receive(Event event) {
-        getDeliveryInfo((Short)event.getMessage());
+              getDeliveryInfo((Short)event.getMessage());
     }
 }

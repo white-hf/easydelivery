@@ -2,48 +2,46 @@ package com.uniuni.SysMgrTool.View;
 
 // MapFragment.java
 
-import static android.content.Context.LOCATION_SERVICE;
-
 import android.Manifest;
 import android.annotation.SuppressLint;
-import android.content.Intent;
-import android.content.pm.PackageInfo;
+import android.app.AlertDialog;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
-import android.view.LayoutInflater;
+import android.util.Log;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.MapsInitializer;
 import com.google.android.gms.maps.OnMapReadyCallback;
-import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
-import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.uniuni.SysMgrTool.Event.Event;
+import com.uniuni.SysMgrTool.Event.EventConstant;
+import com.uniuni.SysMgrTool.Event.Subscriber;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.common.MyClusterRenderer;
@@ -51,13 +49,15 @@ import com.uniuni.SysMgrTool.common.ResponseCallBack;
 import com.uniuni.SysMgrTool.common.Result;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 
+import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.google.maps.android.clustering.Cluster;
 import com.google.maps.android.clustering.ClusterManager;
+import com.uniuni.SysMgrTool.dao.PackageEntity;
+import com.uniuni.SysMgrTool.manager.DeliveryinfoMgr;
 
-public class MapFragment extends Fragment implements OnMapReadyCallback, LocationListener {
+public class MapActivity extends AppCompatActivity implements Subscriber, OnMapReadyCallback, LocationListener {
 
     private  MapView mapView;
     private GoogleMap googleMap;
@@ -69,38 +69,55 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
     private double mLatitude;
     private double mLongitude;
 
+    private MyClusterRenderer<DeliveryInfo> myClusterRenderer;
+    private LatLng savedPosition;
+
+    private CameraFragment mCameraFragment;
+    private ListViewFragment mListFragment = new ListViewFragment();
+    private final Bundle args = new Bundle();
+    private final String TAG = "MapFragment";
+
     @Nullable
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.fragment_map, container, false);
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_map);
 
-        mapView = view.findViewById(R.id.mapView);
+        View content = findViewById(android.R.id.content);
+        content.setBackgroundColor(Color.WHITE);
+
+        mapView = findViewById(R.id.mapView);
         mapView.onCreate(savedInstanceState);
         mapView.getMapAsync(this);
+        FloatingActionButton floatButton = findViewById(R.id.floatingActionButton);
+        floatButton.setOnClickListener(v ->{
+            getSupportFragmentManager().beginTransaction()
+                    .add(android.R.id.content, mListFragment)
+                    .addToBackStack(null)
+                    .commit();
+        });
 
         try {
-            MapsInitializer.initialize(requireActivity().getApplicationContext());
+            MapsInitializer.initialize(this.getApplicationContext());
         } catch (Exception e) {
             e.printStackTrace();
         }
 
         mapView.onResume();
         // 检查位置权限
-        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(getActivity(), new String[]{
+            ActivityCompat.requestPermissions(this, new String[]{
                     Manifest.permission.ACCESS_FINE_LOCATION
             }, 1);
         } else {
             getLocation();
         }
-
-        return view;
     }
 
     private void getLocation() {
         try {
-            locationManager = (LocationManager) getActivity().getSystemService(LOCATION_SERVICE);
+            locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 5, this);
         } catch (SecurityException e) {
             e.printStackTrace();
@@ -164,6 +181,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
 
     void test()
     {
+        MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo().clear();
         LatLng centerLocation = new LatLng(37.7749, -122.4194); // 旧金山的经纬度
         googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(centerLocation, 10));
         // Set some lat/lng coordinates to start with.
@@ -178,49 +196,35 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
             offsetItem.setRouteNumber("Title " + i);
             offsetItem.setName("Snippet " + i);
             offsetItem.setOrderId((long) (100 + i));
+            offsetItem.setOrderSn("Tracking " + i);
 
             clusterManager.addItem(offsetItem);
+
+            MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo().add(offsetItem);
         }
 
         clusterManager.cluster();
     }
 
+    private void initClusterManager() {
+        clusterManager = null;
+        myClusterRenderer = null;
 
-    @SuppressLint("PotentialBehaviorOverride")
-    @Override
-    public void onMapReady(GoogleMap map) {
-        googleMap = map;
-        if (ActivityCompat.checkSelfPermission(MySingleton.getInstance().getCtx(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(MySingleton.getInstance().getCtx(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            String permission = Manifest.permission.ACCESS_FINE_LOCATION;
-            String[] permission_list = new String[1];
-            permission_list[0] = permission;
-            ActivityCompat.requestPermissions(this.getActivity(), permission_list, 1);
-
-
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
-            return;
-        }
-        googleMap.setMyLocationEnabled(true);
-
-        // Initialize ClusterManager
-        clusterManager = new ClusterManager<DeliveryInfo>(this.getContext(), googleMap);
-        // 设置自定义的 ClusterRenderer
-        clusterManager.setRenderer(new MyClusterRenderer<>(getContext(), googleMap, clusterManager));
+        clusterManager   = new ClusterManager<DeliveryInfo>(getApplicationContext(), googleMap);
+        myClusterRenderer = new MyClusterRenderer<>(getApplicationContext(), googleMap, clusterManager);
+        clusterManager.setRenderer(myClusterRenderer);
 
         // 设置地图拖动和缩放事件监听器，以便更新 ClusterManager
         googleMap.setOnCameraIdleListener(clusterManager);
-        googleMap.setOnCameraMoveListener(()->{clusterManager.cluster();});
+        googleMap.setOnCameraMoveListener(() -> {
+            clusterManager.cluster();
+        });
+
 
         ArrayList<DeliveryInfo> lst = loadData();
 
         LatLng firstMarker = null;
-        for (DeliveryInfo info :lst)
-        {
+        for (DeliveryInfo info : lst) {
             if (MySingleton.getInstance().getmDeliveredPackagesMgr().exit(info.getOrderSn()))
                 continue; //only display packages that are not delivered
 
@@ -235,33 +239,71 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
 
         clusterManager.cluster();
 
-        test();
+        if (lst.isEmpty())
+            test();
 
-
-        // 添加标记点，这里是示例，你需要根据你的数据添加标记
         if (firstMarker != null) {
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstMarker, 12));
         }
 
-        clusterManager.setOnClusterClickListener(cluster->{
-            Toast.makeText(this.getActivity(), "Cluster clicked with " + cluster.getSize() + " items", Toast.LENGTH_SHORT).show();
+        clusterManager.setOnClusterClickListener(cluster -> {
+            Toast.makeText(this, "Cluster clicked with " + cluster.getSize() + " items", Toast.LENGTH_SHORT).show();
             return false;
         });
 
-        clusterManager.setOnClusterItemClickListener(item->{
-            Toast.makeText(this.getActivity(), "Package number: " + item.getRouteNumber(), Toast.LENGTH_SHORT).show();
+        clusterManager.setOnClusterItemClickListener(item -> {
             //show the package delivery ui
-            Intent intent = new Intent(getActivity(), CameraActivity.class);
-            intent.putExtra("order_id", item.getOrderId());
-            intent.putExtra("lantitude", mLatitude);
-            intent.putExtra("longtitude", mLongitude);
-            startActivity(intent);
+            args.clear();
+            args.putLong("order_id", item.getOrderId());
+            args.putDouble("latitude", mLatitude);
+            args.putDouble("longitude", mLongitude);
+            mCameraFragment = new CameraFragment();
+
+            mCameraFragment.setArguments(args);
+
+            getSupportFragmentManager().beginTransaction()
+                    .add(android.R.id.content, mCameraFragment)
+                    .addToBackStack(null)
+                    .commit();
 
             return false;
         });
+    }
+
+    @SuppressLint("PotentialBehaviorOverride")
+    @Override
+    public void onMapReady(GoogleMap map) {
+        googleMap = map;
+        if (ActivityCompat.checkSelfPermission(MySingleton.getInstance().getCtx(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(MySingleton.getInstance().getCtx(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            String permission = Manifest.permission.ACCESS_FINE_LOCATION;
+            String[] permission_list = new String[1];
+            permission_list[0] = permission;
+            ActivityCompat.requestPermissions(this, permission_list, 1);
+
+
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
+        googleMap.setMyLocationEnabled(true);
+
+        initClusterManager();
+
+        Log.d(TAG, "clusterManager is not null, item count: " + clusterManager.getAlgorithm().getItems().size());
+        if (googleMap != null && savedPosition != null)
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, 12));
 
     }
 
+    public void removeCustomMarker(DeliveryInfo pkg) {
+        if (clusterManager != null) {
+            clusterManager.removeItem(pkg);
+        }
+    }
 
     private void addCustomMarker(DeliveryInfo pkg) {
         // Create a custom marker bitmap with the package number
@@ -308,17 +350,42 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
     public void onResume() {
         super.onResume();
         mapView.onResume();
+        if (googleMap != null && savedPosition != null) {
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, 10));
+        }
     }
 
     @Override
     public void onPause() {
         super.onPause();
         mapView.onPause();
+
+        if (googleMap != null) {
+            savedPosition = googleMap.getCameraPosition().target; // 保存当前地图中心点
+        }
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+        // Clean up ClusterManager
+
+        if (myClusterRenderer != null) {
+            myClusterRenderer.onRemove(); // Clean up custom renderer
+            myClusterRenderer = null; // Release reference
+        }
+
+        if (clusterManager != null) {
+            ArrayList<DeliveryInfo> deliveryinfoLst = MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo();
+            for (DeliveryInfo info : deliveryinfoLst) {
+                boolean b = clusterManager.removeItem(info);
+                Log.d(TAG,"remove item:" + info.getTitle() + " " + b);
+            }
+
+            clusterManager.clearItems(); // Clear added items
+            clusterManager = null; // Release reference
+        }
+
         mapView.onDestroy();
     }
 
@@ -326,5 +393,35 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, Locatio
     public void onLowMemory() {
         super.onLowMemory();
         mapView.onLowMemory();
+    }
+
+    @Override
+    public void receive(Event event) {
+        if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_FAILURE)) {
+            Event<Integer> uploadEvent = (Event<Integer>) event;
+            Integer rspCode = uploadEvent.getMessage();
+
+            if (rspCode == HttpURLConnection.HTTP_UNAUTHORIZED) //need to login again
+            {
+                //We have to couple the ui code here
+                AlertDialog alertDialog = LoginDialog.init(this);
+                alertDialog.show();
+            } else {
+                Toast.makeText(this, "Upload the data of delivered packages failed", Toast.LENGTH_SHORT).show();
+            }
+        }
+        else if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_SUCCESS))
+        {
+            PackageEntity packageEntity = (PackageEntity)event.getMessage();
+
+            //We has to remove the package from local cache, because the package is delivered.
+            //the data in the local cache is not updated.
+            DeliveryinfoMgr deliveryinfoMgr = MySingleton.getInstance().getdDeliveryinfoMgr();
+            DeliveryInfo info = deliveryinfoMgr.get(packageEntity.orderId);
+            if (info != null) {
+                deliveryinfoMgr.getListDeliveryInfo().remove(info);
+                this.removeCustomMarker(info);
+                }
+        }
     }
 }

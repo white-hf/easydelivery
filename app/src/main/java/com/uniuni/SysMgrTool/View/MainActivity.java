@@ -181,7 +181,7 @@ public class MainActivity extends AppCompatActivity {
 
         AppCompatButton btn_delivery = findViewById(R.id.btn_delivery);
         btn_delivery.setOnClickListener((view)->{
-            Intent intent = new Intent(getApplication(), DeliveringActivity.class);
+            Intent intent = new Intent(getApplication(), MapActivity.class);
             //Intent intent = new Intent(getApplication(), CameraActivity.class);
 
             startActivity(intent);
@@ -440,66 +440,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initLoginDialog() {
-        AlertDialog.Builder  dialog = new AlertDialog.Builder(this);
-        dialog.setTitle(R.string.str_login);
-
-        // 取得自定义View
-        LayoutInflater layoutInflater = LayoutInflater.from(this);
-        final View myLoginView = layoutInflater.inflate(
-                R.layout.my_login_layout, null);
-        dialog.setView(myLoginView);
-
-        EditText loginAccountEt = (EditText) myLoginView
-                .findViewById(R.id.my_login_account_et);
-        EditText loginPasswordEt = (EditText) myLoginView
-                .findViewById(R.id.my_login_password_et);
-
-        loginAccountEt.setText(MySingleton.getInstance().getLoginInfo().loginName);
-        loginPasswordEt.setText("37505");
-
-        dialog.setPositiveButton(R.string.str_confirm,
-                new DialogInterface.OnClickListener() {
-
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-
-                        Spinner spinnerLocation = (Spinner)myLoginView.findViewById(R.id.spinner_location);
-                        Log.d("MyLogin Dialog", "输入的用户名是："
-                                + loginAccountEt.getText().toString());
-                        Log.d("MyLogin Dialog", "输入的密码是："
-                                + loginPasswordEt.getText().toString());
-
-                        String name = loginAccountEt.getText().toString();
-                        String pwd  = loginPasswordEt.getText().toString();
-
-                        if (name.isEmpty() || pwd.isEmpty())
-                        {
-                            Toast.makeText(MainActivity.this , R.string.str_login_tips,Toast.LENGTH_SHORT).show();
-                        }
-                        else
-                        {
-                            if (MySingleton.getInstance().isNumeric(name)) //login from app
-                            {
-                                MySingleton.getInstance().getServerInterface().appLogin(name,pwd);
-                            }else {
-                                MySingleton.getInstance().getLoginInfo().loginName = name;
-                                MySingleton.getInstance().getLoginInfo().loginLocation = spinnerLocation.getSelectedItem().toString();
-                                MySingleton.getInstance().getServerInterface().login(name, pwd);
-                            }
-                        }
-                    }
-                });
-
-        dialog.setNegativeButton(R.string.str_cancel,
-                new DialogInterface.OnClickListener() {
-
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        mLoginDialog.dismiss();
-                    }
-                });
-
-        mLoginDialog = dialog.create();
+        mLoginDialog = LoginDialog.init(this);
     }
 
 

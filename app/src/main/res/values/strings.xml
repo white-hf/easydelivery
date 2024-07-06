@@ -122,4 +122,6 @@
     <string name="route_id">包裹号：</string>
     <string name="unit_id">单元号：</string>
     <string name="invalid_order_id">Invalid order id</string>
+    <string name="no_response_body">No response body</string>
+    <string name="take_picture">Take two pictures, please.</string>
 </resources>

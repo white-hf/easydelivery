@@ -3,9 +3,16 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="16dp"
+    android:background="@android:color/white">
 
     <!-- 拍照镜头界面 -->
+    <TextView
+        android:id="@+id/orderInfo_textview"
+        android:layout_width="match_parent"
+        android:layout_height="32dp"
+        />
+
     <FrameLayout
         android:id="@+id/camera_preview"
         android:layout_width="wrap_content"

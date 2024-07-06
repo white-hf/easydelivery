@@ -1,22 +1,25 @@
 package com.uniuni.SysMgrTool.common;
 
 import android.annotation.SuppressLint;
+import android.util.Log;
 
 import com.uniuni.SysMgrTool.Request.DeliveredUploadParams;
 
 import okhttp3.*;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class MultipartUploader {
 
+    private static final String TAG = "MultipartUploader";
     private static final MediaType MEDIA_TYPE_JPEG = MediaType.parse("image/jpeg");
     private static final String BOUNDARY = "Boundary-0EDAE93A-4CA4-40CE-87BC-CFB10948E044";
 
     @SuppressLint("DefaultLocale")
-    public static void upload(DeliveredUploadParams params, Callback callback) {
+    public static boolean upload(DeliveredUploadParams params, Callback callback) {
         OkHttpClient client = new OkHttpClient();
 
         MultipartBody.Builder builder = new MultipartBody.Builder(BOUNDARY)
@@ -51,10 +54,18 @@ public class MultipartUploader {
                 .header("Accept-Encoding", "gzip, deflate, br")
                 .build();
 
-        System.out.println(request);
-        //client.newCall(request).enqueue(callback);
-    }
+        Log.d(TAG, "Request : " + request.toString());
+        try {
+            Response response = client.newCall(request).execute();
+            callback.onResponse(null, response);
 
+            return true;
+
+        } catch (IOException e) {
+            callback.onFailure(null, e);
+            return false;
+        }
+    }
 
     // Convert string containing file paths to List<File>
     static private List<File> parseImagePath(String imagePath) {

@@ -1,25 +1,33 @@
 package com.uniuni.SysMgrTool.manager;
 
-import android.content.Context;
+import static android.provider.Settings.System.getString;
+
+import android.app.AlertDialog;
 import android.os.Handler;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.room.Room;
 
 import com.uniuni.SysMgrTool.Event.Event;
 import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.Event.Subscriber;
 import com.uniuni.SysMgrTool.MySingleton;
+import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.Request.DeliveredUploadParams;
+import com.uniuni.SysMgrTool.View.LoginDialog;
+import com.uniuni.SysMgrTool.common.ErrResponse;
+import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.common.MultipartUploader;
 import com.uniuni.SysMgrTool.dao.DeliveredPackagesDao;
+import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.PackageEntity;
 
-import java.io.File;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -36,10 +44,14 @@ import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.Response;
 
+/**
+ * This class manages the delivered packages, including saving the delivered packages to the database,uploading the delivered packages to the server, and loading the delivered packages from the database.
+ * It use the queue and thread pool for uploading the delivered packages to the server.
+ */
 public class DeliveredPackagesMgr implements Subscriber {
 
-    public enum PackageStatus {
-        NOT_UPLOADED("unloaded"),
+    static public enum PackageStatus {
+        WAITING_UPLOADED("waiting_upload"),
         UPLOADED("uploaded"),
         FAILED("failed");
         private final String status;
@@ -53,9 +65,15 @@ public class DeliveredPackagesMgr implements Subscriber {
         }
     }
 
-    private static final String DELIVERED_API = "https://delivery-service-api.uniuni.ca/delivery";
 
-    private LinkedList<PackageEntity> packageList;
+    private long backoffTime = 1000; // Initial backoff time in milliseconds
+    private final long maxBackoffTime = 32000; // Maximum backoff time in milliseconds
+
+    //private static final String DELIVERED_API = "https://delivery-service-api.uniuni.ca/delivery";
+
+    private static final String DELIVERED_API = "http://192.168.2.23:8964/delivery";
+
+    private LinkedList<PackageEntity> waitingUploadPackageList;
     private final BlockingQueue<PackageEntity> packageQueue = new LinkedBlockingQueue<>();
     private final ExecutorService executorService = Executors.newFixedThreadPool(2); // 1 producer, 1 consumer
 
@@ -63,7 +81,7 @@ public class DeliveredPackagesMgr implements Subscriber {
 
     public DeliveredPackagesMgr() {
         MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_LOGIN , this);
-        packageList = new LinkedList<>();
+        waitingUploadPackageList = new LinkedList<>();
 
         // Start the consumer thread
         executorService.execute(this::consumePackages);
@@ -78,7 +96,7 @@ public class DeliveredPackagesMgr implements Subscriber {
             return Boolean.FALSE;
         }
 
-        PackageEntity packageEntity = packageList.stream().filter(pkg->pkg.trackingId.equals(trackingId)).findFirst().orElse(null);
+        PackageEntity packageEntity = waitingUploadPackageList.stream().filter(pkg->pkg.trackingId.equals(trackingId)).findFirst().orElse(null);
         if (packageEntity != null)
             return Boolean.TRUE;
 
@@ -90,11 +108,11 @@ public class DeliveredPackagesMgr implements Subscriber {
     //there might be a risk losing data when the storage is damaged or the device is reset.
     //So we must assess the importance of the data before uploading.
     public void save(PackageEntity packageEntity) {
-        final Handler dbHandler = MySingleton.getInstance().getmDbHandler();
+        final Handler dbHandler = MySingleton.getInstance().getDbHandler();
 
         dbHandler.post(()->{
             deliveredPackagesDao.insert(packageEntity);
-            packageList.add(packageEntity);
+            waitingUploadPackageList.add(packageEntity);
             packageQueue.add(packageEntity); //upload to server
         });
     }
@@ -105,11 +123,11 @@ public class DeliveredPackagesMgr implements Subscriber {
      * @param status
      */
     public void load(Short driverId, String status) {
-        final Handler dbHandler = MySingleton.getInstance().getmDbHandler();
+        final Handler dbHandler = MySingleton.getInstance().getDbHandler();
         dbHandler.post(()->{
             List<PackageEntity> packages = deliveredPackagesDao.loadByDriverAndStatus(driverId, status);
-            packageList.clear();
-            packageList.addAll(packages);
+            waitingUploadPackageList.clear();
+            waitingUploadPackageList.addAll(packages);
 
             packageQueue.addAll(packages);//the leftover data from last login needs to be uploaded
         });
@@ -120,10 +138,10 @@ public class DeliveredPackagesMgr implements Subscriber {
      * @param trackingId
      * @param newStatus
      */
-    public void update(String trackingId, String newStatus) {
-        final Handler dbHandler = MySingleton.getInstance().getmDbHandler();
+    public void  update(String trackingId, String newStatus) {
+        final Handler dbHandler = MySingleton.getInstance().getDbHandler();
         dbHandler.post(()->{
-            ListIterator<PackageEntity> iterator = packageList.listIterator();
+            ListIterator<PackageEntity> iterator = waitingUploadPackageList.listIterator();
             while (iterator.hasNext()) {
                 PackageEntity packageEntity = iterator.next();
                 if (packageEntity.trackingId.equals(trackingId)) {
@@ -157,52 +175,98 @@ public class DeliveredPackagesMgr implements Subscriber {
         params.setFormFields(formFields);
 
         params.setImageFiles(deliveryInfo.imagePath);
+        boolean bSuccess  = MultipartUploader.upload(params, new Callback() {
 
-        MultipartUploader.upload(params, new Callback() {
             @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
+            public void onFailure(Call call, @NonNull IOException e) {
                 //if the upload failed, we need to requeue the package data to be uploaded again.
                 packageQueue.add(deliveryInfo);
-
-                if (e instanceof SocketTimeoutException) {
-                    // Handle timeout
-                    System.out.println("Upload failed: Timeout");
-                } else {
-                    // Other I/O error
-                    System.out.println("Upload failed: " + e.getMessage());
-                }
+                FileLog.getInstance().writeLog("Upload failed:" + deliveryInfo.trackingId + " " + e.getMessage());
             }
 
             @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+            public void onResponse(Call call, @NonNull Response response) throws IOException {
                 if (!response.isSuccessful()) {
-                    // Handle unsuccessful HTTP response
-                    System.out.println("Upload failed: HTTP status code " + response.code());
-                    if (response.code() == HttpsURLConnection.HTTP_UNAUTHORIZED) {
-                        //it is possible that the token has expired, so we need to login again.
-                        MySingleton.getInstance().getPublisher().notify(EventConstant.EVENT_LOGIN_REQUEST,null);
-                    }else
-                    {
-                        // Other HTTP error
-                        System.out.println("Upload failed: " + response.message());
-                        //notify ui to show error message
-                        MySingleton.getInstance().getPublisher().notify(EventConstant.EVENT_UPLOAD_FAILURE,new Event<Integer>(response.code()));
-                    }
-
-                    packageQueue.add(deliveryInfo);
+                    notifyUiUploadResult(false , response.code(), deliveryInfo);
                 }
                 else {
                     // Handle successful HTTP response
-                    System.out.println("Upload successful:" + deliveryInfo.trackingId);
-                    update(deliveryInfo.trackingId, PackageStatus.UPLOADED.getStatus());
+                    if (response.body() != null) {
+                        String responseBody = response.body().string();
+                        JSONObject jsonResponse = null;
+                        try {
+                            jsonResponse = new JSONObject(responseBody);
+                            String bizCode = jsonResponse.getString("biz_code");
+                            if (bizCode.equals("DELIVERY.SUBMIT.SUCCESS")) {
+                                FileLog.getInstance().writeLog("Upload successful:" + deliveryInfo.trackingId);
+
+                                update(deliveryInfo.trackingId, PackageStatus.UPLOADED.getStatus());
+                                notifyUiUploadResult(true , 0 , deliveryInfo);
+                            }
+                            else {
+                                //It depends on the specific business logic.
+                                FileLog.getInstance().writeLog("Upload exception:" + deliveryInfo.trackingId + " " + responseBody);
+
+                                //this situation is unusual, it should not be checked.
+                                update(deliveryInfo.trackingId, PackageStatus.FAILED.getStatus());
+                                notifyUiUploadResult(false , 0 , null);
+                            }
+                        } catch (JSONException e) {
+                            //this situation is unusual, it should not be checked.
+                            update(deliveryInfo.trackingId, PackageStatus.FAILED.getStatus());
+                            notifyUiUploadResult(false , 0 , null);
+                        }
+
+                    }else
+                    {
+                        //this situation is unusual, it should not be checked.
+                        update(deliveryInfo.trackingId, PackageStatus.FAILED.getStatus());
+                        notifyUiUploadResult(false , 0 , null);
+                    }
                 }
             }
         });
+
+        if (bSuccess) {
+            // Reset backoff time on successful upload
+            backoffTime = 1000;
+        }
+        else {
+            // Exponential backoff with a maximum wait time
+            backoffTime = Math.min(backoffTime * 2, maxBackoffTime);
+            try {
+                Thread.sleep(backoffTime);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private void notifyUiUploadResult(boolean bSuccess,int code , PackageEntity deliveryInfo)
+    {
+        if (!bSuccess) {
+            MySingleton.getInstance().getMainHandler().post(() -> {
+                MySingleton.getInstance().getPublisher().notify(EventConstant.EVENT_UPLOAD_FAILURE, new Event<Integer>(code));
+            });
+
+            if (deliveryInfo != null)
+                packageQueue.add(deliveryInfo);
+        }else
+        {
+            MySingleton.getInstance().getMainHandler().post(() -> {
+                MySingleton.getInstance().getPublisher().notify(EventConstant.EVENT_UPLOAD_SUCCESS, new Event<PackageEntity>(deliveryInfo));
+            });
+        }
     }
 
     private void consumePackages() {
         try {
             while (true) {
+                if (packageQueue.size() > 5){
+                    //to avoid too many requests, like when there is a network issue, accumulating too many requests.
+                    Thread.sleep(1000);
+                }
+
                 PackageEntity deliveryInfo = packageQueue.take();
                 upload(deliveryInfo);
             }
@@ -217,7 +281,22 @@ public class DeliveredPackagesMgr implements Subscriber {
 
     @Override
     public void receive(Event event) {
-        load((Short)event.getMessage() , PackageStatus.NOT_UPLOADED.getStatus());
+        if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_FAILURE)) {
+            Event<Integer> uploadEvent = (Event<Integer>) event;
+            Integer rspCode = uploadEvent.getMessage();
+
+            if (rspCode == HttpURLConnection.HTTP_UNAUTHORIZED) //need to login again
+            {
+                //We have to couple the ui code here
+                AlertDialog alertDialog = LoginDialog.init(MySingleton.getInstance().getCtx());
+                alertDialog.show();
+            } else {
+                Toast.makeText(MySingleton.getInstance().getCtx(), "Upload the data of delivered packages failed", Toast.LENGTH_SHORT).show();
+            }
+        }else
+        {
+            load((Short)event.getMessage() , PackageStatus.WAITING_UPLOADED.getStatus());
+        }
     }
 }
 

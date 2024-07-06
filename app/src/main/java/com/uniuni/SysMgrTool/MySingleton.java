@@ -55,8 +55,6 @@ public class MySingleton extends Application {
     public static String ScanText ;
     public static int iScannedCount;
 
-    public static String strAuthString = "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbWFwLmNsdXN0ZXIudW5pZXhwcmVzcy5vcmcvbWFwL2xvZ2luIiwiaWF0IjoxNjY5MTM1MTMxLCJleHAiOjE2NjkyMjE1MzEsIm5iZiI6MTY2OTEzNTEzMSwianRpIjoiUTRNUlpDcnFucmxFcXFKYyIsInN1YiI6MzkxLCJwcnYiOiJlOGNmNTQ2ZTZiNTNmMmIxOWY3ZTQ1OWJkMzEyZjcxMTQwODkxMzllIiwiaWQiOjM5MSwibW9kZWwiOiJlY3NfY3NfYWNjb3VudCIsInJvbGVzIjpbIkRyaXZlciBBZG1pbmlzdHJhdG9yIl0sInVpX2FiaWxpdGllcyI6WzEsMiwzLDQsNSw2LDcsOCw5LDEwLDExLDEyLDEzLDE1LDE2LDE3LDE4LDE5LDIyLDIzLDMwMSwzMDMsMzAyLDMwNCwzMiwyN10sIndhcmVob3VzZSI6WyIxNyJdLCJ1c19mbGFnIjpmYWxzZX0.gQXFyCa6lMiixkHGKNDat93pk7WgzCtBvt--clK3gnU";
-
     public static final String ITEM_CURRENT_BATCH_ID = "current_batch_id";
     public static final String ITEM_AUTO_SAVE_SCAN   = "auto_save_scan";
     public static final String ITEM_AUTO_COMMIT      = "auto_commit";
@@ -81,6 +79,11 @@ public class MySingleton extends Application {
 
     private HashMap<String, ScanOrder> mHashOrders;
     private HashMap<String , String> mHashArea = new HashMap<>();
+
+    public Handler getMainHandler() {
+        return myHandler;
+    }
+
     private MyHandler myHandler;
     private MyDb mMydb = new MyDb();
     private LoginInfo mLoginInfo = new LoginInfo();
@@ -88,7 +91,6 @@ public class MySingleton extends Application {
     public DeliveryinfoMgr getdDeliveryinfoMgr() {
         return dDeliveryinfoMgr;
     }
-
     public DeliveredPackagesMgr getmDeliveredPackagesMgr() {
         return mDeliveredPackagesMgr;
     }
@@ -102,43 +104,17 @@ public class MySingleton extends Application {
         public Integer warehouseId = 17;
     }
 
-
-    private final Handler mainThreadHandler = HandlerCompat.createAsync(Looper.getMainLooper());
-    private Handler mDbHandler;
     private DeliveryinfoMgr dDeliveryinfoMgr;
 
     public MySingleton() {
 
     }
 
-    public Handler getmDbHandler() {
-        return mDbHandler;
+    public Handler getDbHandler() {
+        return mMydb.getHandler();
     }
 
-    private final Thread dbLooperThread = new Thread() {
-        public void run() {
-            Looper.prepare();
-            final Looper mLooper = Looper.myLooper();
-
-            mDbHandler = new Handler(Objects.requireNonNull(mLooper)) {
-                public void handleMessage(@NonNull Message msg) {
-                    super.handleMessage(msg);
-
-                    TaskBase task = (TaskBase)msg.obj;
-                    task.doIt(msg);
-                }
-            };
-            Looper.loop();
-        }
-    };
-
-
-    public HashMap<String, ScanOrder> getmHashOrders() {
-            return mHashOrders;
-        }
-
-
-    public MyDb getmMydb() {
+     public MyDb getmMydb() {
         return mMydb;
     }
 
@@ -166,8 +142,6 @@ public class MySingleton extends Application {
         dDeliveryinfoMgr = new DeliveryinfoMgr();
         mDeliveredPackagesMgr = new DeliveredPackagesMgr();
         FileLog.getInstance().init();
-
-        dbLooperThread.start();
     }
 
     @Override

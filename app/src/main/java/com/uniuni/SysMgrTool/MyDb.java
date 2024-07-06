@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.room.Room;
 
 import com.uniuni.SysMgrTool.Response.DeliveringListData;
+import com.uniuni.SysMgrTool.Task.TaskBase;
 import com.uniuni.SysMgrTool.bean.ScanOrder;
 import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.dao.AppDatabase;
@@ -41,8 +42,29 @@ public class MyDb {
     private OrderIdRecordDao orderIdRecordDao;
     private DeliveryInfoDao deliveryInfoDao;
     private DeliveredPackagesDao deliveredPackagesDao;
-
     private Handler mHandler;
+
+    public Handler getHandler() {
+        return mHandler;
+    }
+
+    private final Thread dbLooperThread = new Thread() {
+        public void run() {
+            Looper.prepare();
+            final Looper mLooper = Looper.myLooper();
+
+            mHandler = new Handler(Objects.requireNonNull(mLooper)) {
+                public void handleMessage(@NonNull Message msg) {
+                    super.handleMessage(msg);
+
+                    TaskBase task = (TaskBase)msg.obj;
+                    task.doIt(msg);
+                }
+            };
+            Looper.loop();
+        }
+    };
+
 
     public void saveScannedData(ScanOrder order)
     {
@@ -105,6 +127,8 @@ public class MyDb {
         orderIdRecordDao = db.getOrderIdRecordDao();
         deliveryInfoDao  = db.deliveryInfoDao();
         deliveredPackagesDao = db.deliveredPackagesDao();
+
+        dbLooperThread.start();
     }
 
     public DeliveryInfoDao getDeliveryInfoDao() {

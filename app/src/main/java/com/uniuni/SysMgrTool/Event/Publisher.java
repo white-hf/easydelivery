@@ -22,6 +22,7 @@ public class Publisher {
 
     public void notify(String eventType, Event event) {
         List<Subscriber> subscriberList = subscribers.get(eventType);
+        event.setEventType(eventType);
         if (subscriberList != null) {
             for (Subscriber subscriber : subscriberList) {
                 subscriber.receive(event);

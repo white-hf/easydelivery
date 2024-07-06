@@ -7,17 +7,18 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
-import java.io.IOException;
-
 public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback {
 
     private CameraManager mCameraManager;
-    private CameraActivity mCameraActivity;
 
-    public CameraPreview(Context context) {
+    public void setCameraActivity(CameraFragment mCameraFragment) {
+        this.mCameraFragment = mCameraFragment;
+    }
+
+    private CameraFragment mCameraFragment;
+
+    public CameraPreview(Context context ) {
         this(context, null);
-        mCameraActivity = (CameraActivity)context;
-
     }
 
     public CameraPreview(Context context, AttributeSet attrs) {
@@ -29,13 +30,15 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         getHolder().addCallback(this);
     }
 
+
+
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         // Surface 已创建，通知 CameraManager
         System.out.println("ok");
 
         if (mCameraManager != null)
-            mCameraActivity.startPreview();
+            mCameraFragment.startPreview();
     }
 
     @Override
