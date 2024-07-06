@@ -31,7 +31,6 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
 
     @Override
     protected void onBeforeClusterItemRendered(T item, MarkerOptions markerOptions) {
-        // 自定义单个 marker 的渲染
         markerOptions.icon(createCustomMarker(item.getTitle()));
     }
 
@@ -45,7 +44,7 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
 
         Paint textPaint = new Paint();
         textPaint.setColor(ContextCompat.getColor(mContext, android.R.color.white));
-        textPaint.setTextSize(40);
+        textPaint.setTextSize(32);
         textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         textPaint.setAntiAlias(true);
         textPaint.setTextAlign(Paint.Align.CENTER);
@@ -62,7 +61,6 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
 
     @Override
     protected boolean shouldRenderAsCluster(Cluster<T> cluster) {
-        // 当聚合数量大于1时显示聚合
-        return cluster.getSize() > 1;
+        return cluster.getSize() > 2;
     }
 }

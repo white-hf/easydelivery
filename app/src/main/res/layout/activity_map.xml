@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:padding="16dp"
         android:text="Top Text"
-        android:textSize="18sp"
+        android:textSize="20sp"
         android:textColor="@android:color/black" />
 
     <!-- 搜索框 -->

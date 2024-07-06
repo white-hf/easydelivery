@@ -68,6 +68,7 @@ public class MySingleton extends Application {
     private com.uniuni.SysMgrTool.Event.Publisher publisher;
     private DeliveredPackagesMgr mDeliveredPackagesMgr;
 
+    public static final String TAG = "MySingleton";
 
     public  Context getCtx() {
         return ctx;

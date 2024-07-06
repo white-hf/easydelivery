@@ -1,13 +1,16 @@
 package com.uniuni.SysMgrTool.manager;
 
+import static com.uniuni.SysMgrTool.MySingleton.TAG;
 import static com.uniuni.SysMgrTool.ServerInterface.DOMAIN_API;
 
 import android.annotation.SuppressLint;
+import android.util.Log;
 
 import com.uniuni.SysMgrTool.Event.Event;
 import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.Event.Subscriber;
 import com.uniuni.SysMgrTool.MySingleton;
+import com.uniuni.SysMgrTool.Request.GetDeliveryTaskApi;
 import com.uniuni.SysMgrTool.Response.AppRsp;
 import com.uniuni.SysMgrTool.Response.DeliveringListData;
 import com.uniuni.SysMgrTool.ServerInterface;
@@ -32,6 +35,10 @@ public class DeliveryinfoMgr implements Subscriber {
 
     public ArrayList<DeliveryInfo> getListDeliveryInfo() {
         return listDeliveryInfo;
+    }
+
+    public int size() {
+        return listDeliveryInfo.size();
     }
 
     private ArrayList<DeliveryInfo> listDeliveryInfo;
@@ -61,15 +68,36 @@ public class DeliveryinfoMgr implements Subscriber {
         DeliveryInfoDao deliveryInfoDao = MySingleton.getInstance().getmMydb().getDeliveryInfoDao();
 
         listDeliveryInfo.clear();
-        deliveryInfoDao.delete(batchId,driverId);
+        try {
+                MySingleton.getInstance().getDbHandler().post(() -> {
+                    deliveryInfoDao.delete(batchId, driverId);
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "clear delivery info failed " + e.getMessage());
+        }
     }
 
     /**
      * Get the delivery info from the server, it should be called after user login.
      */
     public void getDeliveryInfo(Short driverId){
-        @SuppressLint("DefaultLocale") String realUrl = String.format(URL_DELIVERING_LIST, MySingleton.getInstance().getLoginInfo().loginId);
-        MySingleton.getInstance().getServerInterface().getRequestWithRsp(driverId , realUrl , null , AppRsp.class, MySingleton.getInstance().getDbHandler());
+        boolean mbAutoSave   =  MySingleton.getInstance().getBooleanProperty(MySingleton.ITEM_AUTO_SAVE_SCAN);
+        if (!mbAutoSave)
+            getDeliveryTask(driverId);
+        else {
+            @SuppressLint("DefaultLocale") String realUrl = String.format(URL_DELIVERING_LIST, MySingleton.getInstance().getLoginInfo().loginId);
+            MySingleton.getInstance().getServerInterface().getRequestWithRsp(driverId, realUrl, null, AppRsp.class, MySingleton.getInstance().getDbHandler());
+        }
+    }
+
+    /**
+     * Get the delivery packages unscanned from the server, it should be called after user login.
+     * @param driverId
+     */
+    private void getDeliveryTask(Short driverId)
+    {
+        GetDeliveryTaskApi<String,AppRsp> api = new GetDeliveryTaskApi<>(null,AppRsp.class);
+        api.doApi();
     }
 
     /**
@@ -107,7 +135,7 @@ public class DeliveryinfoMgr implements Subscriber {
 
                 listDeliveryInfo.add(info);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    Log.e(TAG, "save delivery info failed " + e.getMessage());
                 }
         });
     }
@@ -154,6 +182,6 @@ public class DeliveryinfoMgr implements Subscriber {
      */
     @Override
     public void receive(Event event) {
-              getDeliveryInfo((Short)event.getMessage());
+        getDeliveryInfo((Short)event.getMessage());
     }
 }

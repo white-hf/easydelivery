@@ -124,4 +124,5 @@
     <string name="invalid_order_id">Invalid order id</string>
     <string name="no_response_body">No response body</string>
     <string name="take_picture">Take two pictures, please.</string>
+    <string name="delivering_d_pending_d">Delivering:%d,Pending:%d</string>
 </resources>

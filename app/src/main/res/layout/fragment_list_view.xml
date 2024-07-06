@@ -5,7 +5,7 @@
 
     <!-- 固定搜索框 -->
     <EditText
-        android:id="@+id/searchEditText"
+        android:id="@+id/searchMapByRoute"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:padding="8dp"

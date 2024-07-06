@@ -5,6 +5,7 @@ package com.uniuni.SysMgrTool.View;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -16,7 +17,11 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
+import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
@@ -34,11 +39,14 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.maps.android.clustering.Cluster;
+import com.google.maps.android.clustering.ClusterItem;
 import com.uniuni.SysMgrTool.Event.Event;
 import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.Event.Subscriber;
@@ -52,6 +60,8 @@ import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.google.maps.android.clustering.ClusterManager;
 import com.uniuni.SysMgrTool.dao.PackageEntity;
@@ -60,6 +70,7 @@ import com.uniuni.SysMgrTool.manager.DeliveryinfoMgr;
 public class MapActivity extends AppCompatActivity implements Subscriber, OnMapReadyCallback, LocationListener {
 
     private  MapView mapView;
+    private  TextView txtViewDeliverySummary;
     private GoogleMap googleMap;
 
     private LocationManager locationManager;
@@ -68,6 +79,8 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
     private double mLatitude;
     private double mLongitude;
+
+    private Location mLastLocation = new Location("");
 
     private MyClusterRenderer<DeliveryInfo> myClusterRenderer;
     private LatLng savedPosition;
@@ -97,6 +110,20 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
                     .commit();
         });
 
+        txtViewDeliverySummary = findViewById(R.id.topTextView);
+        txtViewDeliverySummary.setText(String.format(getResources().getString(R.string.delivering_d_pending_d) ,
+                MySingleton.getInstance().getdDeliveryinfoMgr().size() ,
+                MySingleton.getInstance().getmDeliveredPackagesMgr().size()));
+
+        EditText seachEditText = findViewById(R.id.searchEditText);
+        seachEditText.setOnEditorActionListener((textView, actionId, keyEvent) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH || keyEvent.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
+                performSearch(textView.getText().toString().trim());
+                return true;
+            }
+            return false;
+        });
+
         try {
             MapsInitializer.initialize(this.getApplicationContext());
         } catch (Exception e) {
@@ -112,6 +139,16 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
             }, 1);
         } else {
             getLocation();
+        }
+    }
+
+    private void performSearch(String routeNumber) {
+        DeliveryInfo info = clusterManager.getAlgorithm().getItems().stream().filter(item->item.getRouteNumber().equals(routeNumber)).findFirst().orElse(null);
+        if (info != null) {
+            savedPosition = null;
+            savedPosition = new LatLng(info.getLatitude(), info.getLongitude());
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, 12));
+            showCameraFragment(info);
         }
     }
 
@@ -159,9 +196,16 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         mLatitude  = location.getLatitude();
         mLongitude = location.getLongitude();
 
-        // 使用经纬度数据
+        if (mLastLocation == null)
+            mLastLocation = location;
+
         LatLng markerLatLng = new LatLng(mLatitude, mLongitude);
-        //googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(markerLatLng, 12));
+        float distance = location.distanceTo(mLastLocation);
+
+        if (distance > 10) {
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(markerLatLng, 12));
+            mLastLocation = location;
+        }
     }
 
     @Override
@@ -197,6 +241,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
             offsetItem.setName("Snippet " + i);
             offsetItem.setOrderId((long) (100 + i));
             offsetItem.setOrderSn("Tracking " + i);
+            offsetItem.setAddress("Address " + i);
 
             clusterManager.addItem(offsetItem);
 
@@ -204,6 +249,79 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         }
 
         clusterManager.cluster();
+    }
+
+    private String extractApartmentNumber(String address) {
+        Pattern pattern = Pattern.compile("\\b(?:Unit|Apt|Suite|Ste|\\#|-)\\s*([\\w\\d-]+)\\b", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(address);
+
+        if (matcher.find()) {
+            return matcher.group(1); //
+        }
+
+        return "";
+    }
+
+    private String extractApartmentNumber2(String address) {
+
+        Pattern pattern = Pattern.compile("\\b([Aa]pt|[Dd]rive|[Ll]ane|[Uu]nit|[Ss]te)?\\s*([\\w-]+)\\b");
+        Matcher matcher = pattern.matcher(address);
+
+        String apartmentNumber = "";
+        while (matcher.find()) {
+            String potentialApartment = matcher.group(2);
+            if (potentialApartment == null || potentialApartment.isEmpty())
+                break;
+
+            if (!address.contains(potentialApartment)) {
+                apartmentNumber = potentialApartment;
+            }
+        }
+
+        return apartmentNumber.trim();
+    }
+
+    private void showClusterItemListDialog(Cluster<DeliveryInfo> cluster) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Cluster Items");
+
+        List<String> itemTitles = new ArrayList<>();
+        final List<DeliveryInfo> clusterItems = new ArrayList<>(cluster.getItems());
+        for (DeliveryInfo item : clusterItems) {
+            String unitNumber = extractApartmentNumber(item.getAddress());
+            if (unitNumber == null || unitNumber.isEmpty())
+                unitNumber = extractApartmentNumber2(item.getAddress());
+
+            itemTitles.add(item.getTitle() + " (" + unitNumber + ")");
+        }
+
+        builder.setItems(itemTitles.toArray(new String[0]), new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                DeliveryInfo selectedItem = clusterItems.get(which);
+                showCameraFragment(selectedItem);
+            }
+        });
+
+        builder.show();
+    }
+
+    private void showCameraFragment(DeliveryInfo item)
+    {
+        //show the package delivery ui
+        args.clear();
+        args.putLong("order_id", item.getOrderId());
+        args.putDouble("latitude", mLatitude);
+        args.putDouble("longitude", mLongitude);
+        mCameraFragment = new CameraFragment();
+
+        mCameraFragment.setArguments(args);
+
+        getSupportFragmentManager().beginTransaction()
+                .add(android.R.id.content, mCameraFragment)
+                .addToBackStack(null)
+                .commit();
+
     }
 
     private void initClusterManager() {
@@ -214,7 +332,6 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         myClusterRenderer = new MyClusterRenderer<>(getApplicationContext(), googleMap, clusterManager);
         clusterManager.setRenderer(myClusterRenderer);
 
-        // 设置地图拖动和缩放事件监听器，以便更新 ClusterManager
         googleMap.setOnCameraIdleListener(clusterManager);
         googleMap.setOnCameraMoveListener(() -> {
             clusterManager.cluster();
@@ -243,29 +360,30 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
             test();
 
         if (firstMarker != null) {
+            mLastLocation.setLongitude(firstMarker.longitude);
+            mLastLocation.setLatitude(firstMarker.latitude);
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstMarker, 12));
         }
 
         clusterManager.setOnClusterClickListener(cluster -> {
-            Toast.makeText(this, "Cluster clicked with " + cluster.getSize() + " items", Toast.LENGTH_SHORT).show();
-            return false;
+            if (cluster.getSize() < 6)
+            {
+                showClusterItemListDialog(cluster);
+                return true;
+            }
+
+            LatLngBounds.Builder builder = LatLngBounds.builder();
+            for (ClusterItem item : cluster.getItems()) {
+                builder.include(item.getPosition());
+            }
+            LatLngBounds bounds = builder.build();
+            googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 100));
+            return true;
         });
 
         clusterManager.setOnClusterItemClickListener(item -> {
             //show the package delivery ui
-            args.clear();
-            args.putLong("order_id", item.getOrderId());
-            args.putDouble("latitude", mLatitude);
-            args.putDouble("longitude", mLongitude);
-            mCameraFragment = new CameraFragment();
-
-            mCameraFragment.setArguments(args);
-
-            getSupportFragmentManager().beginTransaction()
-                    .add(android.R.id.content, mCameraFragment)
-                    .addToBackStack(null)
-                    .commit();
-
+            showCameraFragment(item);
             return false;
         });
     }
@@ -422,6 +540,10 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
                 deliveryinfoMgr.getListDeliveryInfo().remove(info);
                 this.removeCustomMarker(info);
                 }
+
+            txtViewDeliverySummary.setText(String.format(getResources().getString(R.string.delivering_d_pending_d) ,
+                    MySingleton.getInstance().getdDeliveryinfoMgr().size() ,
+                    MySingleton.getInstance().getmDeliveredPackagesMgr().size()));
         }
     }
 }

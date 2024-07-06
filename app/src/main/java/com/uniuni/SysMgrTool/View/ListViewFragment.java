@@ -77,7 +77,18 @@ public class ListViewFragment extends Fragment {
 
         // Create and set the adapter
         ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo();
+        lst.sort((o1, o2) -> {
+            try {
+                if (o1.getRouteNumber() == null || o2.getRouteNumber() == null)
+                    return 0;
 
+                int r1 = Integer.parseInt(o1.getRouteNumber());
+                int r2 = Integer.parseInt(o2.getRouteNumber());
+                return Integer.compare(r1, r2);
+            } catch (Exception e) {
+                return 0;
+            }
+        });
 
         PlaceAdapter placeAdapter = new PlaceAdapter(this.getContext(), lst);
         ListView listView = v.findViewById(R.id.listView); // Replace with your ListView's ID

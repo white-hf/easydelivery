@@ -69,9 +69,9 @@ public class DeliveredPackagesMgr implements Subscriber {
     private long backoffTime = 1000; // Initial backoff time in milliseconds
     private final long maxBackoffTime = 32000; // Maximum backoff time in milliseconds
 
-    //private static final String DELIVERED_API = "https://delivery-service-api.uniuni.ca/delivery";
+    private static final String DELIVERED_API = "https://delivery-service-api.uniuni.ca/delivery";
 
-    private static final String DELIVERED_API = "http://192.168.2.23:8964/delivery";
+    //private static final String DELIVERED_API = "http://192.168.2.23:8964/delivery";
 
     private LinkedList<PackageEntity> waitingUploadPackageList;
     private final BlockingQueue<PackageEntity> packageQueue = new LinkedBlockingQueue<>();
@@ -85,6 +85,10 @@ public class DeliveredPackagesMgr implements Subscriber {
 
         // Start the consumer thread
         executorService.execute(this::consumePackages);
+    }
+
+    public int size() {
+        return waitingUploadPackageList.size();
     }
 
     public final ExecutorService getExecutorService() {

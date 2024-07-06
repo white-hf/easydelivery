@@ -8,6 +8,9 @@ import androidx.room.PrimaryKey;
 
 import com.google.android.gms.maps.model.LatLng;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 @Entity(tableName = "delivery_info")
 public class DeliveryInfo implements com.google.maps.android.clustering.ClusterItem {
     @PrimaryKey(autoGenerate = true)
@@ -141,6 +144,26 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
         this.phone = phone;
     }
 
+    private String extractFirstNumber(String address) {
+        if (address == null || address.isEmpty())
+            return "";
+
+        Pattern pattern = Pattern.compile("\\b(\\d+)\\b");
+        Matcher matcher = pattern.matcher(address);
+
+        String apartmentNumber = "";
+        if (matcher.find()) {
+            apartmentNumber = matcher.group(1);
+        }
+
+        if (apartmentNumber ==
+                null || apartmentNumber.isEmpty())
+            return "";
+
+        return apartmentNumber.trim();
+    }
+
+
     @NonNull
     @Override
     public LatLng getPosition() {
@@ -150,7 +173,7 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @Nullable
     @Override
     public String getTitle() {
-        return routeNumber;
+        return routeNumber + " (" + extractFirstNumber(address) + ")";
     }
 
     @Nullable
