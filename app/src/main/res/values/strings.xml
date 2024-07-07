@@ -15,7 +15,7 @@
     <integer name="status_parcel_scanned">200</integer>
     <string name="str_self_pick">SELF_PICK_UP</string>
     <string name="str_parcel_scanned">PARCEL_SCAN</string>
-    <string name="default_operator">5010</string>
+    <string name="default_operator">010</string>
     <integer name="default_operation_type">0</integer>
     <string name="str_login_success">登录成功</string>
     <string name="str_login_failure">登录失败</string>

@@ -144,24 +144,21 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
         this.phone = phone;
     }
 
+    private static final Pattern NUMBER_PATTERN = Pattern.compile("(\\d+)");
     private String extractFirstNumber(String address) {
-        if (address == null || address.isEmpty())
+        if (address == null || address.isEmpty()) {
             return "";
-
-        Pattern pattern = Pattern.compile("\\b(\\d+)\\b");
-        Matcher matcher = pattern.matcher(address);
-
-        String apartmentNumber = "";
-        if (matcher.find()) {
-            apartmentNumber = matcher.group(1);
         }
 
-        if (apartmentNumber ==
-                null || apartmentNumber.isEmpty())
-            return "";
+        Matcher matcher = NUMBER_PATTERN.matcher(address);
 
-        return apartmentNumber.trim();
+        if (matcher.find()) {
+            return matcher.group(1).trim();
+        }
+
+        return "";
     }
+
 
 
     @NonNull

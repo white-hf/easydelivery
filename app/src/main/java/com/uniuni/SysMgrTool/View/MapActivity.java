@@ -1,7 +1,6 @@
 package com.uniuni.SysMgrTool.View;
 
 // MapFragment.java
-
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
@@ -251,37 +250,31 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         clusterManager.cluster();
     }
 
+    private static final Pattern NUMBER_PATTERN = Pattern.compile("(\\d+)");
+
     private String extractApartmentNumber(String address) {
-        Pattern pattern = Pattern.compile("\\b(?:Unit|Apt|Suite|Ste|\\#|-)\\s*([\\w\\d-]+)\\b", Pattern.CASE_INSENSITIVE);
-        Matcher matcher = pattern.matcher(address);
 
-        if (matcher.find()) {
-            return matcher.group(1); //
+        if (address == null || address.isEmpty()) {
+            return "";
         }
 
-        return "";
-    }
+        Matcher matcher = NUMBER_PATTERN.matcher(address);
+        String[] numbers = new String[2];
+        int count = 0;
 
-    private String extractApartmentNumber2(String address) {
-
-        Pattern pattern = Pattern.compile("\\b([Aa]pt|[Dd]rive|[Ll]ane|[Uu]nit|[Ss]te)?\\s*([\\w-]+)\\b");
-        Matcher matcher = pattern.matcher(address);
-
-        String apartmentNumber = "";
-        while (matcher.find()) {
-            String potentialApartment = matcher.group(2);
-            if (potentialApartment == null || potentialApartment.isEmpty())
-                break;
-
-            if (!address.contains(potentialApartment)) {
-                apartmentNumber = potentialApartment;
-            }
+        while (matcher.find() && count < 2) {
+            numbers[count] = matcher.group(1).trim();
+            count++;
         }
 
-        return apartmentNumber.trim();
+        if (count < 2) {
+            numbers[count] = "";
+        }
+
+        return numbers[1];
     }
 
-    private void showClusterItemListDialog(Cluster<DeliveryInfo> cluster) {
+      private void showClusterItemListDialog(Cluster<DeliveryInfo> cluster) {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Cluster Items");
 
@@ -289,9 +282,6 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         final List<DeliveryInfo> clusterItems = new ArrayList<>(cluster.getItems());
         for (DeliveryInfo item : clusterItems) {
             String unitNumber = extractApartmentNumber(item.getAddress());
-            if (unitNumber == null || unitNumber.isEmpty())
-                unitNumber = extractApartmentNumber2(item.getAddress());
-
             itemTitles.add(item.getTitle() + " (" + unitNumber + ")");
         }
 
@@ -366,7 +356,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         }
 
         clusterManager.setOnClusterClickListener(cluster -> {
-            if (cluster.getSize() < 6)
+            if (cluster.getSize() < 10)
             {
                 showClusterItemListDialog(cluster);
                 return true;

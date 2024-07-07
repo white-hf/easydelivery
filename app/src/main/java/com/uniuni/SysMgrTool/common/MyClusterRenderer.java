@@ -44,7 +44,7 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
 
         Paint textPaint = new Paint();
         textPaint.setColor(ContextCompat.getColor(mContext, android.R.color.white));
-        textPaint.setTextSize(32);
+        textPaint.setTextSize(36);
         textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         textPaint.setAntiAlias(true);
         textPaint.setTextAlign(Paint.Align.CENTER);
