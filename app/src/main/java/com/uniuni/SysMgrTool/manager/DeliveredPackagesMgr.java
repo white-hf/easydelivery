@@ -192,6 +192,7 @@ public class DeliveredPackagesMgr implements Subscriber {
             public void onResponse(Call call, @NonNull Response response) throws IOException {
                 if (!response.isSuccessful()) {
                     notifyUiUploadResult(false , response.code(), deliveryInfo);
+                    FileLog.getInstance().writeLog("Upload unsuccessfully:" + deliveryInfo.trackingId);
                 }
                 else {
                     // Handle successful HTTP response
@@ -209,7 +210,7 @@ public class DeliveredPackagesMgr implements Subscriber {
                             }
                             else {
                                 //It depends on the specific business logic.
-                                FileLog.getInstance().writeLog("Upload exception:" + deliveryInfo.trackingId + " " + responseBody);
+                                FileLog.getInstance().writeLog("Upload unsuccessfully:" + deliveryInfo.trackingId + " " + responseBody);
 
                                 //this situation is unusual, it should not be checked.
                                 update(deliveryInfo.trackingId, PackageStatus.FAILED.getStatus());
@@ -219,6 +220,7 @@ public class DeliveredPackagesMgr implements Subscriber {
                             //this situation is unusual, it should not be checked.
                             update(deliveryInfo.trackingId, PackageStatus.FAILED.getStatus());
                             notifyUiUploadResult(false , 0 , null);
+                            FileLog.getInstance().writeLog("Upload unsuccessfully due to json exception:" + deliveryInfo.trackingId + " " + responseBody);
                         }
 
                     }else
@@ -226,6 +228,7 @@ public class DeliveredPackagesMgr implements Subscriber {
                         //this situation is unusual, it should not be checked.
                         update(deliveryInfo.trackingId, PackageStatus.FAILED.getStatus());
                         notifyUiUploadResult(false , 0 , null);
+                        FileLog.getInstance().writeLog("Upload unsuccessfully due to empty body:" + deliveryInfo.trackingId);
                     }
                 }
             }

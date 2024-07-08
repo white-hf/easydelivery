@@ -4,6 +4,8 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+import android.content.Context;
+
 import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.Response.OrderDetailData;
@@ -60,10 +62,11 @@ public class ExampleUnitTest {
     public void testLog()
     {
         FileLog.getInstance();
-        FileLog.getInstance().init();
+        FileLog.getInstance().init(getApplicationContext());
         FileLog.getInstance().writeLog("This is a log");
     }
 
-
-
+    private Context getApplicationContext() {
+        return null;
+    }
 }

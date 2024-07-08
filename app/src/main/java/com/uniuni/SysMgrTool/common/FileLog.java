@@ -1,5 +1,6 @@
 package com.uniuni.SysMgrTool.common;
 
+import android.content.Context;
 import android.util.Log;
 
 import com.uniuni.SysMgrTool.MySingleton;
@@ -10,8 +11,8 @@ import java.io.RandomAccessFile;
 import java.util.Date;
 
 public class FileLog {
-    public final static String FILE_PATH = "/data/data/com.example.user.SysMgrTool";//\Environment.getExternalStorageDirectory() + "/PhoneData/";
-    private final static String FILE_NAME = "scantool.log";
+    public final static String LOG_DIR_NAME = "logs";//\Environment.getExternalStorageDirectory() + "/PhoneData/";
+    private final static String LOG_FILE_NAME = "sysmgrtool.log";
 
     File mFile;
     RandomAccessFile mRaf;
@@ -28,34 +29,36 @@ public class FileLog {
             return instance;
     }
 
-    public boolean init()
-    {
+    public boolean init(Context context) {
         try {
             boolean b = false;
-            File fileDir = new File(FILE_PATH);
-            if (!fileDir.exists()) {
-                b = fileDir.mkdirs();
-                if (!b)
-                    Log.d("debug","init log failed");
-
-                if (!fileDir.exists()) {
-                    //return false;
-                }
+            File logDir = new File(context.getFilesDir(), LOG_DIR_NAME);
+            if (!logDir.exists()) {
+                b = logDir.mkdirs();
             }
 
-            String p = null;
-            if (b)
-                mFile = new File(FILE_PATH, FILE_NAME);
-            else {
-                File fDir = MySingleton.getInstance().getCtx().getExternalCacheDir();
-                mFile = new File(fDir , FILE_NAME);
+            mFile = new File(logDir, LOG_FILE_NAME);
+            try {
+                if (!mFile.exists()) {
+                    b = mFile.createNewFile();
+                }
+            } catch (IOException e) {
+                Log.e("FileLog", "Failed to create log file", e);
+            }
+
+
+            if (!b)
+            {
+                File fDir = context.getExternalCacheDir();
+                mFile = new File(fDir , LOG_FILE_NAME);
             }
 
             mRaf  = new RandomAccessFile(mFile, "rw");
             mRaf.seek(mFile.length());
 
             return true;
-        } catch (Exception e) {e.printStackTrace();
+        } catch (Exception e) {
+            Log.e("FileLog", "Failed to init log file", e);
         }
 
         return false;

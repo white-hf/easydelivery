@@ -57,6 +57,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 public class CameraFragment extends Fragment implements SensorEventListener {
 
@@ -71,8 +72,10 @@ public class CameraFragment extends Fragment implements SensorEventListener {
 
     private ImageReader imageReader;
 
+    private static final int MAX_PHOTOS = 3;
     private LinearLayout mThumbnailContainer;
     private List<File> mImageFiles = new ArrayList<>();
+    private List<ImageView> mImageViews = new ArrayList<>();
 
     private CaptureRequest mPreviewRequest;
 
@@ -94,7 +97,7 @@ public class CameraFragment extends Fragment implements SensorEventListener {
     public void onStart() {
         super.onStart();
 
-        mImageFiles.clear();
+        mImageFiles.forEach(img->{img = null;});
         startPreview();
     }
 
@@ -227,6 +230,13 @@ public class CameraFragment extends Fragment implements SensorEventListener {
 
         // initialize the thumbnail container
         mThumbnailContainer = view.findViewById(R.id.thumbnail_container);
+        // Initialize photoPaths with empty strings and create empty ImageViews
+        for (int i = 0; i < MAX_PHOTOS; i++) {
+            ImageView imageView = createEmptyImageView(i);
+            mImageViews.add(imageView);
+            mThumbnailContainer.addView(imageView);
+            mImageFiles.add(null);
+        }
 
         //
         Button cancelButton = view.findViewById(R.id.cancel_button);
@@ -239,14 +249,19 @@ public class CameraFragment extends Fragment implements SensorEventListener {
             @Override
             public void onClick(View v) {
                 //save the data of the package delivered to local db and the queue for uploading to the server
-                if (mImageFiles.size() < IMAGE_COUNT) {
+                int i = 0;
+                for (File imageFile : mImageFiles)
+                    if (imageFile != null)
+                        i++;
+
+                if (i < IMAGE_COUNT) {
                     Toast.makeText(MySingleton.getInstance().getCtx(), getString(R.string.take_picture), Toast.LENGTH_SHORT).show();
                     return;
                 }
 
                 PackageEntity packageEntity = deliveryInfo.transferToPackageEntity();
                 packageEntity.createTime = System.currentTimeMillis();
-                packageEntity.imagePath = Arrays.toString(mImageFiles.stream().map(File::getAbsolutePath).toArray(String[]::new));
+                packageEntity.imagePath = Arrays.toString(mImageFiles.stream().filter(Objects::nonNull).map(File::getAbsolutePath).toArray(String[]::new));
                 packageEntity.latitude = mLatitude;
                 packageEntity.longitude = mLongitude;
                 packageEntity.status = DeliveredPackagesMgr.PackageStatus.WAITING_UPLOADED.getStatus();
@@ -285,6 +300,16 @@ public class CameraFragment extends Fragment implements SensorEventListener {
         return view;
     }
 
+    private ImageView createEmptyImageView(int index) {
+        ImageView imageView = new ImageView(requireContext());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(400, 400);
+        params.setMargins(8, 0, 8, 0);
+        imageView.setLayoutParams(params);
+        imageView.setTag(index);
+        imageView.setOnClickListener(v -> showFullImage((int) v.getTag()));
+        imageView.setImageResource(R.drawable.ic_marker_background); // Set a placeholder image
+        return imageView;
+    }
 
     private boolean checkCameraPermission() {
         return getActivity().checkSelfPermission(android.Manifest.permission.CAMERA) ==
@@ -384,6 +409,19 @@ public class CameraFragment extends Fragment implements SensorEventListener {
             return;
         }
 
+        boolean bFull = true;
+        for (File imageFile : mImageFiles)
+            if (imageFile == null) {
+                bFull = false;
+                break;
+            }
+
+        if (bFull)
+        {
+            Toast.makeText(MySingleton.getInstance().getCtx(), getString(R.string.take_picture_full), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         try {
             // 获取图片文件路径
             File imageFile = createImageFile();
@@ -444,7 +482,6 @@ public class CameraFragment extends Fragment implements SensorEventListener {
                 ".jpg",
                 storageDir
         );
-        mImageFiles.add(imageFile);
         return imageFile;
     }
 
@@ -486,32 +523,34 @@ public class CameraFragment extends Fragment implements SensorEventListener {
 
     // 添加缩略图到列表
     private void addThumbnail(final File imageFile) {
-        ImageView imageView = new ImageView(getActivity());
-        imageView.setLayoutParams(new LinearLayout.LayoutParams(
-                getResources().getDimensionPixelSize(R.dimen.thumbnail_width),
-                getResources().getDimensionPixelSize(R.dimen.thumbnail_height)
-        ));
-        imageView.setImageBitmap(BitmapUtils.decodeSampledBitmapFromFile(
-                imageFile.getAbsolutePath(),
-                getResources().getDimensionPixelSize(R.dimen.thumbnail_width),
-                getResources().getDimensionPixelSize(R.dimen.thumbnail_height)
-        ));
-        imageView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // 点击缩略图查看大图
-                showFullImage(imageFile);
+        // Find first empty spot
+        for (int i = 0; i < MAX_PHOTOS; i++) {
+            if (mImageFiles.get(i) == null) {
+                mImageFiles.set(i, imageFile);
+                mImageViews.get(i).setImageBitmap(BitmapUtils.decodeSampledBitmapFromFile(
+                        imageFile.getAbsolutePath(),
+                        getResources().getDimensionPixelSize(R.dimen.thumbnail_width),
+                        getResources().getDimensionPixelSize(R.dimen.thumbnail_height)
+                ));
+
+                break;
             }
-        });
-        mThumbnailContainer.addView(imageView);
+        }
     }
 
     // Display the full image
-    private void showFullImage(File imageFile) {
+    private void showFullImage(int index) {
+
+        File imageFile = mImageFiles.get(index);
+        if (imageFile == null) {
+            Log.e(TAG, "Image file is null");
+            return;
+        }
 
         FullImageFragment fullImageFragment = new FullImageFragment();
         Bundle bundle = new Bundle();
         bundle.putString("imageFile", imageFile.getAbsolutePath());
+        bundle.putInt("imageIndex", index);
         fullImageFragment.setArguments(bundle);
 
 
@@ -520,5 +559,10 @@ public class CameraFragment extends Fragment implements SensorEventListener {
                 .addToBackStack(null)
                 .commit();
 
+    }
+
+    public void removeThumbnail(int index) {
+        mImageFiles.set(index, null);
+        mImageViews.get(index).setImageResource(R.drawable.ic_marker_background); // Set a placeholder image
     }
 }

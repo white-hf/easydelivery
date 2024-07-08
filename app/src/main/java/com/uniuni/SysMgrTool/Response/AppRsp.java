@@ -4,6 +4,7 @@ import android.os.Message;
 
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.Task.TaskBase;
+import com.uniuni.SysMgrTool.common.FileLog;
 
 import java.util.List;
 import java.util.ListIterator;
@@ -38,7 +39,7 @@ public class AppRsp implements TaskBase {
     public void doIt(Message msg) {
         List<DeliveringListData> lst = this.getBiz_data();
         ListIterator<DeliveringListData> listIterator = lst.listIterator();
-        System.out.println("Get delivering  list:" + this.getBiz_data().size());
+        FileLog.getInstance().writeLog("Get delivering  list:" + this.getBiz_data().size());
 
         //remove the old data from cache firstly.
         MySingleton.getInstance().getdDeliveryinfoMgr().clearAll();

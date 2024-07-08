@@ -142,7 +142,7 @@ public class MySingleton extends Application {
 
         dDeliveryinfoMgr = new DeliveryinfoMgr();
         mDeliveredPackagesMgr = new DeliveredPackagesMgr();
-        FileLog.getInstance().init();
+        FileLog.getInstance().init(ctx);
     }
 
     @Override

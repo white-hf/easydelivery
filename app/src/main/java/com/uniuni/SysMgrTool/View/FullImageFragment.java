@@ -6,12 +6,16 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentManager;
 
 import com.uniuni.SysMgrTool.R;
 
@@ -19,24 +23,40 @@ import java.io.File;
 
 public class FullImageFragment extends Fragment {
 
-    private ImageView imageView;
+    private String imageFilePath;
+    private int imageIndex;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_full_image, container, false);
 
-        RelativeLayout rootLayout = rootView.findViewById(R.id.root_layout);
-        // 设置点击事件监听
-        rootLayout.setOnClickListener(v->getParentFragmentManager().popBackStack());
+        ImageView imageView = rootView.findViewById(R.id.full_image_view);
+        imageView.setOnClickListener(v->getParentFragmentManager().popBackStack());
+        imageView.setOnLongClickListener(v->deleteImage());
 
+        imageFilePath = getArguments().getString("imageFile");
+        imageIndex = getArguments().getInt("imageIndex");
 
-        imageView = rootView.findViewById(R.id.full_image_view);
-        // 获取传递过来的图片文件路径
-        String imagePath = getArguments().getString("imageFile");
-        // 加载图片并显示在 ImageView 中
-        Bitmap bitmap = BitmapFactory.decodeFile(imagePath);
+        Bitmap bitmap = BitmapFactory.decodeFile(imageFilePath);
         imageView.setImageBitmap(bitmap);
+        
         return rootView;
+    }
+
+    private boolean deleteImage() {
+        if (imageFilePath != null) {
+            FragmentActivity activity = getActivity();
+
+            if (activity instanceof MapActivity) {
+                ((MapActivity) activity).removeThumbnail(imageIndex);
+            }
+            // Close the fragment
+            Toast.makeText(getContext(), "Image deleted", Toast.LENGTH_SHORT).show();
+            getParentFragmentManager().popBackStack();
+            return true;
+        }
+        else
+            return false;
     }
 }
 

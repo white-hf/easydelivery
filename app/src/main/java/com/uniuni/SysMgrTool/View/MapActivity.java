@@ -87,7 +87,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
     private CameraFragment mCameraFragment;
     private ListViewFragment mListFragment = new ListViewFragment();
     private final Bundle args = new Bundle();
-    private final String TAG = "MapFragment";
+    public static final String TAG = "MapFragment";
 
     @Nullable
     @Override
@@ -309,7 +309,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
         getSupportFragmentManager().beginTransaction()
                 .add(android.R.id.content, mCameraFragment)
-                .addToBackStack(null)
+                .addToBackStack(TAG)
                 .commit();
 
     }
@@ -346,8 +346,8 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
         clusterManager.cluster();
 
-        if (lst.isEmpty())
-            test();
+        //if (lst.isEmpty())
+        //   test();
 
         if (firstMarker != null) {
             mLastLocation.setLongitude(firstMarker.longitude);
@@ -535,5 +535,9 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
                     MySingleton.getInstance().getdDeliveryinfoMgr().size() ,
                     MySingleton.getInstance().getmDeliveredPackagesMgr().size()));
         }
+    }
+
+    public void removeThumbnail(int index) {
+        mCameraFragment.removeThumbnail(index);
     }
 }
