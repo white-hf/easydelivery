@@ -192,7 +192,7 @@ public class DeliveredPackagesMgr implements Subscriber {
             public void onResponse(Call call, @NonNull Response response) throws IOException {
                 if (!response.isSuccessful()) {
                     notifyUiUploadResult(false , response.code(), deliveryInfo);
-                    FileLog.getInstance().writeLog("Upload unsuccessfully:" + deliveryInfo.trackingId);
+                    FileLog.getInstance().writeLog("Upload response is not successful:" + deliveryInfo.trackingId + " " + response.code());
                 }
                 else {
                     // Handle successful HTTP response
@@ -288,22 +288,7 @@ public class DeliveredPackagesMgr implements Subscriber {
 
     @Override
     public void receive(Event event) {
-        if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_FAILURE)) {
-            Event<Integer> uploadEvent = (Event<Integer>) event;
-            Integer rspCode = uploadEvent.getMessage();
-
-            if (rspCode == HttpURLConnection.HTTP_UNAUTHORIZED) //need to login again
-            {
-                //We have to couple the ui code here
-                AlertDialog alertDialog = LoginDialog.init(MySingleton.getInstance().getCtx());
-                alertDialog.show();
-            } else {
-                Toast.makeText(MySingleton.getInstance().getCtx(), "Upload the data of delivered packages failed", Toast.LENGTH_SHORT).show();
-            }
-        }else
-        {
-            load((Short)event.getMessage() , PackageStatus.WAITING_UPLOADED.getStatus());
-        }
+        load((Short)event.getMessage() , PackageStatus.WAITING_UPLOADED.getStatus());
     }
 }
 

@@ -125,4 +125,7 @@
     <string name="no_response_body">No response body</string>
     <string name="take_picture">Take two pictures, please.</string>
     <string name="delivering_d_pending_d">Delivering:%d,Pending:%d</string>
+    <string name="delete">Delete</string>
+    <string name="full_image">Full Image</string>
+    <string name="take_picture_full">You have taken enough pictures.</string>
 </resources>

@@ -139,6 +139,9 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         } else {
             getLocation();
         }
+
+        MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_UPLOAD_FAILURE , this);
+        MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_UPLOAD_SUCCESS , this);
     }
 
     private void performSearch(String routeNumber) {
@@ -505,36 +508,34 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
     @Override
     public void receive(Event event) {
-        if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_FAILURE)) {
-            Event<Integer> uploadEvent = (Event<Integer>) event;
-            Integer rspCode = uploadEvent.getMessage();
+            if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_FAILURE)) {
+                Event<Integer> uploadEvent = (Event<Integer>) event;
+                Integer rspCode = uploadEvent.getMessage();
+                if (rspCode == HttpURLConnection.HTTP_UNAUTHORIZED) //need to login again
+                {
+                    //We have to couple the ui code here
+                    AlertDialog alertDialog = LoginDialog.init(this);
+                    alertDialog.show();
 
-            if (rspCode == HttpURLConnection.HTTP_UNAUTHORIZED) //need to login again
-            {
-                //We have to couple the ui code here
-                AlertDialog alertDialog = LoginDialog.init(this);
-                alertDialog.show();
-            } else {
-                Toast.makeText(this, "Upload the data of delivered packages failed", Toast.LENGTH_SHORT).show();
-            }
-        }
-        else if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_SUCCESS))
-        {
-            PackageEntity packageEntity = (PackageEntity)event.getMessage();
+                } else {
+                    Toast.makeText(this, "Upload the data of delivered packages failed", Toast.LENGTH_SHORT).show();
+                }
+            } else if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_SUCCESS)) {
+                PackageEntity packageEntity = (PackageEntity) event.getMessage();
 
-            //We has to remove the package from local cache, because the package is delivered.
-            //the data in the local cache is not updated.
-            DeliveryinfoMgr deliveryinfoMgr = MySingleton.getInstance().getdDeliveryinfoMgr();
-            DeliveryInfo info = deliveryinfoMgr.get(packageEntity.orderId);
-            if (info != null) {
-                deliveryinfoMgr.getListDeliveryInfo().remove(info);
-                this.removeCustomMarker(info);
+                //We has to remove the package from local cache, because the package is delivered.
+                //the data in the local cache is not updated.
+                DeliveryinfoMgr deliveryinfoMgr = MySingleton.getInstance().getdDeliveryinfoMgr();
+                DeliveryInfo info = deliveryinfoMgr.get(packageEntity.orderId);
+                if (info != null) {
+                    deliveryinfoMgr.getListDeliveryInfo().remove(info);
+                    this.removeCustomMarker(info);
                 }
 
-            txtViewDeliverySummary.setText(String.format(getResources().getString(R.string.delivering_d_pending_d) ,
-                    MySingleton.getInstance().getdDeliveryinfoMgr().size() ,
-                    MySingleton.getInstance().getmDeliveredPackagesMgr().size()));
-        }
+                txtViewDeliverySummary.setText(String.format(getResources().getString(R.string.delivering_d_pending_d),
+                        MySingleton.getInstance().getdDeliveryinfoMgr().size(),
+                        MySingleton.getInstance().getmDeliveredPackagesMgr().size()));
+            }
     }
 
     public void removeThumbnail(int index) {
