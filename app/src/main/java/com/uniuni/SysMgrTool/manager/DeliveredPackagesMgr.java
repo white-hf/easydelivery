@@ -168,7 +168,7 @@ public class DeliveredPackagesMgr implements Subscriber {
     public void upload(PackageEntity deliveryInfo) {
         DeliveredUploadParams params = new DeliveredUploadParams();
         params.setUrl(DELIVERED_API);
-        params.setAuthorization(MySingleton.getInstance().getLoginInfo().userToken);
+        params.setAuthorization("Bearer" + " " + MySingleton.getInstance().getLoginInfo().userToken);
 
         Map<String, String> formFields = new HashMap<>();
         formFields.put("delivered_location", "1");
@@ -191,7 +191,8 @@ public class DeliveredPackagesMgr implements Subscriber {
             @Override
             public void onResponse(Call call, @NonNull Response response) throws IOException {
                 if (!response.isSuccessful()) {
-                    notifyUiUploadResult(false , response.code(), deliveryInfo);
+                    //This is a unusual situation or an error that server knows, it should not be checked.
+                    notifyUiUploadResult(false , response.code(), null);
                     FileLog.getInstance().writeLog("Upload response is not successful:" + deliveryInfo.trackingId + " " + response.code());
                 }
                 else {

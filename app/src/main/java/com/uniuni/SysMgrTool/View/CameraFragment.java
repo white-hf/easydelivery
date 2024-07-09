@@ -223,7 +223,7 @@ public class CameraFragment extends Fragment implements SensorEventListener {
         TextView orderInfoTextView = view.findViewById(R.id.orderInfo_textview);
         final DeliveryInfo deliveryInfo = MySingleton.getInstance().getdDeliveryinfoMgr().get(mOrderId);
         if (deliveryInfo != null) {
-            orderInfoTextView.setText(String.valueOf(deliveryInfo.getTitle() + "|" + deliveryInfo.getAddress()));
+            orderInfoTextView.setText(String.valueOf(deliveryInfo.getRouteNumber() + "|" + deliveryInfo.getAddress()));
         }
 
         initCamera();

@@ -128,7 +128,7 @@ public class DeliveryinfoMgr implements Subscriber {
                 info.setUnitNumber(d.getUnit_number());
                 info.setBatchNumber(batchId);
                 info.setDriverId(driverId);
-                info.setOrderSn(d.getOrder_sn());
+                info.setOrderSn(d.getTracking_no());
                 info.setOrderId(d.getOrder_id());
 
                 deliveryInfoDao.insert(info);

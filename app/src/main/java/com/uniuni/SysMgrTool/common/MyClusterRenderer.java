@@ -24,6 +24,13 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
 
     private final Context mContext;
 
+
+    private float mZoomLevel = 15;
+
+    public void setZoomLevel(float mZoomLevel) {
+        this.mZoomLevel = mZoomLevel;
+    }
+
     public MyClusterRenderer(Context context, GoogleMap map, ClusterManager<T> clusterManager) {
         super(context, map, clusterManager);
         mContext = context;
@@ -61,6 +68,6 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
 
     @Override
     protected boolean shouldRenderAsCluster(Cluster<T> cluster) {
-        return cluster.getSize() > 2;
+        return cluster.getSize() > 2 && mZoomLevel < 15;
     }
 }

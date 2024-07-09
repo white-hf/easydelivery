@@ -37,6 +37,7 @@ import com.google.android.gms.maps.MapsInitializer;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
@@ -149,7 +150,8 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         if (info != null) {
             savedPosition = null;
             savedPosition = new LatLng(info.getLatitude(), info.getLongitude());
-            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, 12));
+            CameraPosition cameraPosition = googleMap.getCameraPosition();
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, cameraPosition.zoom));
             showCameraFragment(info);
         }
     }
@@ -205,7 +207,9 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         float distance = location.distanceTo(mLastLocation);
 
         if (distance > 10) {
-            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(markerLatLng, 12));
+            CameraPosition cameraPosition = googleMap.getCameraPosition();
+            float zoomLevel = cameraPosition.zoom < 12 ? 12 : cameraPosition.zoom;
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(markerLatLng, zoomLevel));
             mLastLocation = location;
         }
     }
@@ -327,6 +331,9 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
         googleMap.setOnCameraIdleListener(clusterManager);
         googleMap.setOnCameraMoveListener(() -> {
+            CameraPosition cameraPosition = googleMap.getCameraPosition();
+            MyClusterRenderer<DeliveryInfo> myClusterRenderer = (MyClusterRenderer)clusterManager.getRenderer();
+            myClusterRenderer.setZoomLevel(cameraPosition.zoom);
             clusterManager.cluster();
         });
 
@@ -355,7 +362,8 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         if (firstMarker != null) {
             mLastLocation.setLongitude(firstMarker.longitude);
             mLastLocation.setLatitude(firstMarker.latitude);
-            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstMarker, 12));
+            CameraPosition cameraPosition = googleMap.getCameraPosition();
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstMarker, cameraPosition.zoom));
         }
 
         clusterManager.setOnClusterClickListener(cluster -> {
@@ -405,8 +413,10 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         initClusterManager();
 
         Log.d(TAG, "clusterManager is not null, item count: " + clusterManager.getAlgorithm().getItems().size());
-        if (googleMap != null && savedPosition != null)
-            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, 12));
+        if (googleMap != null && savedPosition != null) {
+            CameraPosition cameraPosition = googleMap.getCameraPosition();
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, cameraPosition.zoom));
+        }
 
     }
 
@@ -462,7 +472,8 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         super.onResume();
         mapView.onResume();
         if (googleMap != null && savedPosition != null) {
-            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, 10));
+            CameraPosition cameraPosition = googleMap.getCameraPosition();
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, cameraPosition.zoom));
         }
     }
 
@@ -511,14 +522,14 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
             if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_FAILURE)) {
                 Event<Integer> uploadEvent = (Event<Integer>) event;
                 Integer rspCode = uploadEvent.getMessage();
+                Toast.makeText(this, "Uploading the data of delivered packages failed", Toast.LENGTH_SHORT).show();
+
                 if (rspCode == HttpURLConnection.HTTP_UNAUTHORIZED) //need to login again
                 {
                     //We have to couple the ui code here
                     AlertDialog alertDialog = LoginDialog.init(this);
                     alertDialog.show();
 
-                } else {
-                    Toast.makeText(this, "Upload the data of delivered packages failed", Toast.LENGTH_SHORT).show();
                 }
             } else if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_SUCCESS)) {
                 PackageEntity packageEntity = (PackageEntity) event.getMessage();

@@ -37,6 +37,7 @@ import com.uniuni.SysMgrTool.manager.DeliveryinfoMgr;
 
 import java.io.FileOutputStream;
 import java.io.ObjectOutputStream;
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -143,6 +144,8 @@ public class MySingleton extends Application {
         dDeliveryinfoMgr = new DeliveryinfoMgr();
         mDeliveredPackagesMgr = new DeliveredPackagesMgr();
         FileLog.getInstance().init(ctx);
+
+        setBatchId();
     }
 
     @Override
@@ -198,6 +201,13 @@ public class MySingleton extends Application {
     {
         SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
         return settings.getString(item,"");
+    }
+
+    private void setBatchId()
+    {
+        SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
+        String batchId = String.format("HASUB-%s" , getCurrentDate());
+        settings.edit().putString(ITEM_CURRENT_BATCH_ID , batchId).apply();
     }
 
     public boolean getBooleanProperty(String item) {
@@ -409,7 +419,12 @@ public class MySingleton extends Application {
         return df.format(date);
     }
 
-    public String formatDate(Date d)
+    private String getCurrentDate() {
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd");
+        return df.format(new Date());
+    }
+
+        public String formatDate(Date d)
     {
         if (d == null)
             return "";
