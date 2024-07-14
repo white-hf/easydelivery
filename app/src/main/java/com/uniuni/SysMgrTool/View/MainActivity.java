@@ -395,7 +395,7 @@ public class MainActivity extends AppCompatActivity {
         mSystemOperationDialog = new AlertDialog.Builder(this);
 
         mSystemOperationDialog.setTitle(R.string.operation_choose);
-        final String[] opertionsArray = new String[] { "Cache Order Id", "Transfer Packages", "Check Route Plan", "Start Dispatch"};
+        final String[] opertionsArray = new String[] { "缓存运单号", "分配包裹", "路线检查", "开始派送"};
 
         final int selectedIndex[] = { 0 };
 

@@ -20,7 +20,7 @@
             android:layout_marginTop="0dp"
             android:drawableRight="@android:drawable/ic_menu_camera"
             android:ems="10"
-            android:hint="Please type last four letters"
+            android:hint="请输入订单最后四位"
             android:inputType="textPersonName" />
 
         <LinearLayout
@@ -72,7 +72,7 @@
             android:id="@+id/btn_queryOrderDetail"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Order Info" />
+            android:text="订单信息" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_Barcode_scan"
@@ -80,7 +80,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="10dp"
             android:background="@android:color/background_dark"
-            android:text="Barcode Scanner"
+            android:text="扫描"
             android:textColor="@android:color/white"
             android:visibility="gone" />
 
@@ -88,7 +88,7 @@
             android:id="@+id/btnLlogin"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Login" />
+            android:text="登录" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_setting"
@@ -96,7 +96,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="10dp"
             android:background="@android:color/background_dark"
-            android:text="Setting"
+            android:text="设置"
             android:textColor="@android:color/white"
             android:visibility="visible"
             tools:visibility="visible" />
@@ -105,18 +105,18 @@
             android:id="@+id/btn_scanneddata"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Scanned Data" />
+            android:text="已扫描" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_cacheOrders"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="System Operation" />
+            android:text="管理操作" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_delivery"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Delivery" />
+            android:text="配送" />
 
 </LinearLayout>

@@ -10,12 +10,21 @@ import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.Toast;
 
+import androidx.room.util.StringUtil;
+
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
 
 public class LoginDialog extends AlertDialog {
     protected LoginDialog(Context context) {
         super(context);
+    }
+
+    private static boolean isNumeric(String str) {
+        if (str == null || str.isEmpty()) {
+            return false;
+        }
+        return str.matches("-?\\d+(\\.\\d+)?");
     }
 
     public static AlertDialog init(Context mContext) {
@@ -50,7 +59,11 @@ public class LoginDialog extends AlertDialog {
                         else
                         {
                             MySingleton.getInstance().getLoginInfo().loginName = name;
-                           MySingleton.getInstance().getServerInterface().appLogin(name,pwd);
+
+                            if (isNumeric(name))
+                                MySingleton.getInstance().getServerInterface().appLogin(name,pwd);
+                            else
+                                MySingleton.getInstance().getServerInterface().login(name,pwd);
                         }
                     }
                 });

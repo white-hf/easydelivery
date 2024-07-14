@@ -11,9 +11,11 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.location.LocationRequest;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -65,6 +67,7 @@ import java.util.regex.Pattern;
 
 import com.google.maps.android.clustering.ClusterManager;
 import com.uniuni.SysMgrTool.dao.PackageEntity;
+import com.uniuni.SysMgrTool.manager.DeliveredPackagesMgr;
 import com.uniuni.SysMgrTool.manager.DeliveryinfoMgr;
 
 public class MapActivity extends AppCompatActivity implements Subscriber, OnMapReadyCallback, LocationListener {
@@ -89,6 +92,8 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
     private ListViewFragment mListFragment = new ListViewFragment();
     private final Bundle args = new Bundle();
     public static final String TAG = "MapFragment";
+    private static final int MAX_ITEMS_PER_CLUSTER = 20;
+    private static final int DEFAULT_ZOOM_LEVEL = 12;
 
     @Nullable
     @Override
@@ -159,9 +164,14 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
     private void getLocation() {
         try {
             locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 5, this);
+
+            Criteria criteria = new Criteria();
+            criteria.setAccuracy(Criteria.ACCURACY_FINE);
+            criteria.setPowerRequirement(Criteria.POWER_HIGH);
+            String provider = locationManager.getBestProvider(criteria, true);
+            locationManager.requestLocationUpdates((provider != null)? provider : LocationManager.GPS_PROVIDER, 1000, 5, this);
         } catch (SecurityException e) {
-            e.printStackTrace();
+            Log.e(TAG, "getLocation: " + e.getMessage());
         }
     }
 
@@ -206,9 +216,9 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         LatLng markerLatLng = new LatLng(mLatitude, mLongitude);
         float distance = location.distanceTo(mLastLocation);
 
-        if (distance > 10) {
+        if (distance > 2) {
             CameraPosition cameraPosition = googleMap.getCameraPosition();
-            float zoomLevel = cameraPosition.zoom < 12 ? 12 : cameraPosition.zoom;
+            float zoomLevel = cameraPosition.zoom;
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(markerLatLng, zoomLevel));
             mLastLocation = location;
         }
@@ -216,17 +226,17 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
     @Override
     public void onProviderDisabled(String provider) {
-        // 当GPS定位提供者被用户关闭时，会调用这个方法
+
     }
 
     @Override
     public void onProviderEnabled(String provider) {
-        // 当GPS定位提供者被用户开启时，会调用这个方法
+
     }
 
     @Override
     public void onStatusChanged(String provider, int status, Bundle extras) {
-        // 定位提供者状态改变时，会调用这个方法
+
     }
 
     void test()
@@ -287,9 +297,18 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
         List<String> itemTitles = new ArrayList<>();
         final List<DeliveryInfo> clusterItems = new ArrayList<>(cluster.getItems());
+        clusterItems.sort((item1, item2) -> {
+            Integer unitNumber1 = item1.getCivilNumber();
+            Integer unitNumber2 = item2.getCivilNumber();
+            return unitNumber1.compareTo(unitNumber2);
+        });
+
         for (DeliveryInfo item : clusterItems) {
             String unitNumber = extractApartmentNumber(item.getAddress());
-            itemTitles.add(item.getTitle() + " (" + unitNumber + ")");
+            if (!unitNumber.isEmpty())
+                itemTitles.add(item.getTitle() + " (" + unitNumber + ")");
+            else
+                itemTitles.add(item.getTitle());
         }
 
         builder.setItems(itemTitles.toArray(new String[0]), new DialogInterface.OnClickListener() {
@@ -362,12 +381,11 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         if (firstMarker != null) {
             mLastLocation.setLongitude(firstMarker.longitude);
             mLastLocation.setLatitude(firstMarker.latitude);
-            CameraPosition cameraPosition = googleMap.getCameraPosition();
-            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstMarker, cameraPosition.zoom));
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstMarker, DEFAULT_ZOOM_LEVEL));
         }
 
         clusterManager.setOnClusterClickListener(cluster -> {
-            if (cluster.getSize() < 10)
+            if (cluster.getSize() < MAX_ITEMS_PER_CLUSTER)
             {
                 showClusterItemListDialog(cluster);
                 return true;
@@ -421,8 +439,9 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
     }
 
     public void removeCustomMarker(DeliveryInfo pkg) {
-        if (clusterManager != null) {
+        if (clusterManager != null && pkg != null) {
             clusterManager.removeItem(pkg);
+            clusterManager.cluster();
         }
     }
 
@@ -519,7 +538,8 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
     @Override
     public void receive(Event event) {
-            if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_FAILURE)) {
+        DeliveryinfoMgr deliveryinfoMgr = MySingleton.getInstance().getdDeliveryinfoMgr();
+        if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_FAILURE)) {
                 Event<Integer> uploadEvent = (Event<Integer>) event;
                 Integer rspCode = uploadEvent.getMessage();
                 Toast.makeText(this, "Uploading the data of delivered packages failed", Toast.LENGTH_SHORT).show();
@@ -530,17 +550,20 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
                     AlertDialog alertDialog = LoginDialog.init(this);
                     alertDialog.show();
 
+                }else if (rspCode == HttpURLConnection.HTTP_FORBIDDEN) //already uploaded
+                {
+
                 }
             } else if (event.getEventType().equals(EventConstant.EVENT_UPLOAD_SUCCESS)) {
                 PackageEntity packageEntity = (PackageEntity) event.getMessage();
 
                 //We has to remove the package from local cache, because the package is delivered.
                 //the data in the local cache is not updated.
-                DeliveryinfoMgr deliveryinfoMgr = MySingleton.getInstance().getdDeliveryinfoMgr();
                 DeliveryInfo info = deliveryinfoMgr.get(packageEntity.orderId);
                 if (info != null) {
                     deliveryinfoMgr.getListDeliveryInfo().remove(info);
                     this.removeCustomMarker(info);
+
                 }
 
                 txtViewDeliverySummary.setText(String.format(getResources().getString(R.string.delivering_d_pending_d),

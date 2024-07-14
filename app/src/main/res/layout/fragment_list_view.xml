@@ -1,27 +1,25 @@
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:layout_marginTop="32dp"
     android:background="@android:color/white">
 
-    <!-- 固定搜索框 -->
-    <EditText
-        android:id="@+id/searchMapByRoute"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="8dp"
-        android:hint="Search"
-        android:background="@android:color/white"
-        android:imeOptions="actionSearch"
-        android:inputType="text"
-        android:singleLine="true" />
-
-    <!-- 列表区域 -->
     <ListView
         android:id="@+id/listView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/searchEditText"
         android:divider="@android:color/darker_gray"
         android:dividerHeight="1dp" />
 
-</RelativeLayout>
+    <EditText
+        android:id="@+id/searchMapByRoute"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@android:color/white"
+        android:hint="@string/search"
+        android:imeOptions="actionSearch"
+        android:inputType="text"
+        android:padding="8dp"
+        android:singleLine="true" />
+
+</LinearLayout>

@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.room.ColumnInfo;
 import androidx.room.Entity;
+import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
 import com.google.android.gms.maps.model.LatLng;
@@ -49,8 +50,14 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @ColumnInfo(name = "order_id")
     private Long orderId;
 
+    @Ignore
+    private Integer civilNumber;
     public String getOrderSn() {
         return orderSn;
+    }
+    public Integer getCivilNumber()
+    {
+        return civilNumber;
     }
 
     public PackageEntity transferToPackageEntity() {
@@ -118,6 +125,10 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
 
     public void setAddress(String address) {
         this.address = address;
+        String unitNumber = extractFirstNumber(address);
+
+        if (!unitNumber.isEmpty())
+            civilNumber = Integer.parseInt(unitNumber);
     }
 
     public String getUnitNumber() {
@@ -170,7 +181,7 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @Nullable
     @Override
     public String getTitle() {
-        return routeNumber + " (" + extractFirstNumber(address) + ")";
+        return routeNumber + " (" + String.valueOf(civilNumber) + ")";
     }
 
     @Nullable

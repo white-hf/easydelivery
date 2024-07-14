@@ -436,7 +436,7 @@ public class CameraFragment extends Fragment implements SensorEventListener {
                     buffer.get(bytes);
 
                     // 保存图片
-                    saveImage(bytes, imageFile);
+                    saveImage(bytes, imageFile,true);
 
                     // 将缩略图显示在列表中
                     addThumbnail(imageFile);
@@ -485,40 +485,55 @@ public class CameraFragment extends Fragment implements SensorEventListener {
         return imageFile;
     }
 
-    // 保存图片到文件
-    private void saveImage(byte[] bytes, File file) throws IOException {
-        // 创建用于压缩图片的 Options 对象
+    private void saveImage(byte[] bytes, File file, boolean isPortrait) throws IOException {
+        // 创建用于解码图片的 Options 对象
         BitmapFactory.Options options = new BitmapFactory.Options();
-        // 设置为 true 表示只解码图片的尺寸信息，而不加载图片内容到内存中
-        options.inJustDecodeBounds = true;
-        // 计算采样率，这里简单设置为原图尺寸的 1/4
-        options.inSampleSize = 4;
-        // 解码图片尺寸信息
-        BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+        options.inJustDecodeBounds = true; // 只解码尺寸信息
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+
+        // 计算采样率
+        int reqWidth = 1080;  // 目标宽度，可以根据需求调整
+        int reqHeight = 1920; // 目标高度，可以根据需求调整
+        options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight);
 
         // 关闭只解码尺寸信息的选项，以便加载完整图片到内存中
         options.inJustDecodeBounds = false;
-        // 设置压缩质量为 80%，可以根据需求进行调整
 
         // 使用压缩后的 Options 对象解码原图
-        Bitmap bitmap;
-        bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length , options);
+        Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
 
-        if (isPortrait)
-        {
-            Bitmap bp;
+        // 如果需要旋转图片
+        if (isPortrait) {
+            Bitmap rotatedBitmap;
             Matrix matrix = new Matrix();
             matrix.postRotate(90);
-            bp = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
-            bitmap = bp;
+            rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+            bitmap = rotatedBitmap;
         }
 
         if (bitmap != null) {
             // 将压缩后的图片写入文件
             try (FileOutputStream output = new FileOutputStream(file)) {
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 80, output);
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 80, output); // 设置压缩质量为 90%
             }
         }
+    }
+
+    private int calculateInSampleSize(BitmapFactory.Options options, int reqWidth, int reqHeight) {
+        final int height = options.outHeight;
+        final int width = options.outWidth;
+        int inSampleSize = 1;
+
+        if (height > reqHeight || width > reqWidth) {
+            final int halfHeight = height / 2;
+            final int halfWidth = width / 2;
+
+            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2;
+            }
+        }
+
+        return inSampleSize;
     }
 
     // 添加缩略图到列表

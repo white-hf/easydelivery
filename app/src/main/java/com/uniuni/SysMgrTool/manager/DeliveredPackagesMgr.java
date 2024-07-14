@@ -185,7 +185,7 @@ public class DeliveredPackagesMgr implements Subscriber {
             public void onFailure(Call call, @NonNull IOException e) {
                 //if the upload failed, we need to requeue the package data to be uploaded again.
                 packageQueue.add(deliveryInfo);
-                FileLog.getInstance().writeLog("Upload failed:" + deliveryInfo.trackingId + " " + e.getMessage());
+                FileLog.getInstance().writeLog("MultipartUploader Upload failed:" + deliveryInfo.trackingId + " " + e.getMessage());
             }
 
             @Override
@@ -193,6 +193,7 @@ public class DeliveredPackagesMgr implements Subscriber {
                 if (!response.isSuccessful()) {
                     //This is a unusual situation or an error that server knows, it should not be checked.
                     notifyUiUploadResult(false , response.code(), null);
+                    update(deliveryInfo.trackingId, PackageStatus.FAILED.getStatus());
                     FileLog.getInstance().writeLog("Upload response is not successful:" + deliveryInfo.trackingId + " " + response.code());
                 }
                 else {
@@ -276,7 +277,13 @@ public class DeliveredPackagesMgr implements Subscriber {
                 }
 
                 PackageEntity deliveryInfo = packageQueue.take();
-                upload(deliveryInfo);
+
+                //check if the package is delivered
+                if (!MySingleton.getInstance().getdDeliveryinfoMgr().exit(deliveryInfo.orderId)) {
+                    update(deliveryInfo.trackingId, PackageStatus.UPLOADED.getStatus());
+                    notifyUiUploadResult(true , 0 , deliveryInfo);
+                }else
+                    upload(deliveryInfo);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
