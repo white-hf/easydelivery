@@ -57,6 +57,13 @@ public class DeliveryinfoMgr implements Subscriber {
         return listDeliveryInfo.stream().filter(pkg->pkg.getOrderId().equals(orderId)).findFirst().orElse(null);
     }
 
+    public final DeliveryInfo getByRouteId(String routeId) {
+        if (routeId == null)
+            return null;
+
+        return listDeliveryInfo.stream().filter(pkg->pkg.getRouteNumber().equals(routeId)).findFirst().orElse(null);
+    }
+
     public Boolean exit(Long orderId) {
         if (orderId == null) {
             return Boolean.FALSE;

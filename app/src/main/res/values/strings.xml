@@ -129,4 +129,7 @@
     <string name="full_image">Full Image</string>
     <string name="take_picture_full">请已拍足够照片.</string>
     <string name="search">Search</string>
+    <string name="save_successfully">Save %s successfully</string>
+    <string name="picture_saved">Picture saved</string>
+    <string name="package_delivered_successfully">Package %s delivered successfully</string>
 </resources>

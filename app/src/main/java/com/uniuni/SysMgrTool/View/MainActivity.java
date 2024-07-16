@@ -1,19 +1,17 @@
 package com.uniuni.SysMgrTool.View;
 
-import static com.uniuni.SysMgrTool.MySingleton.ITEM_SYN_ORDERS_ID;
-
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.Camera;
+
 import android.os.Bundle;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
-import android.view.LayoutInflater;
+
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
@@ -34,7 +32,7 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.uniuni.SysMgrTool.Event.Event;
+
 import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
@@ -50,7 +48,6 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
-    private AppCompatButton btn_save;
     AppCompatButton  btn_order_detail;
     private EditText mEditText;
     private EditText mPickId;
@@ -58,7 +55,6 @@ public class MainActivity extends AppCompatActivity {
 
     private MyHandler myHandler;
 
-    private Bitmap bit;
 
     private final ArrayList<String> mSearchOrder = new ArrayList<>();
     private MyAdapter mSearchOrderAdapter;
@@ -68,7 +64,6 @@ public class MainActivity extends AppCompatActivity {
     private AlertDialog mLoginDialog;
     private AlertDialog.Builder  mSystemOperationDialog;
 
-    private final boolean mBright = false;
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -289,6 +284,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void cacheOrderId()
     {
+        MySingleton.getInstance().getmDeliveredPackagesMgr().fixtool();
     }
 
     private void handleGetOrderDetailEvent()

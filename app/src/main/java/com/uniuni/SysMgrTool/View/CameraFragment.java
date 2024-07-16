@@ -267,7 +267,6 @@ public class CameraFragment extends Fragment implements SensorEventListener {
                 packageEntity.status = DeliveredPackagesMgr.PackageStatus.WAITING_UPLOADED.getStatus();
 
                 MySingleton.getInstance().getmDeliveredPackagesMgr().save(packageEntity);
-
                 requireActivity().getSupportFragmentManager().popBackStack();
             }
         });
@@ -442,6 +441,7 @@ public class CameraFragment extends Fragment implements SensorEventListener {
                     addThumbnail(imageFile);
 
                     mCaptureSession.setRepeatingRequest(mPreviewRequest, null, null);
+                    Toast.makeText(getContext(), getActivity().getString(R.string.picture_saved), Toast.LENGTH_SHORT).show();
 
                 } catch (Exception e) {
                     Log.e(TAG, "Error saving image", e);

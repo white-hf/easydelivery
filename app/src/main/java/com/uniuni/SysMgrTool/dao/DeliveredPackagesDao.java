@@ -16,6 +16,9 @@ public interface DeliveredPackagesDao {
     @Query("SELECT * FROM delivered_packages WHERE driverId = :driverId AND status = :status ORDER BY saveTime")
     List<PackageEntity> loadByDriverAndStatus(Short driverId, String status);
 
+    @Query("SELECT * FROM delivered_packages WHERE orderId = :orderId")
+    PackageEntity getByOrderId(Long orderId);
+
     @Update
     void update(PackageEntity packageEntity);
 }
