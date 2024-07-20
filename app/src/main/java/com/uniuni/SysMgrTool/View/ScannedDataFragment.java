@@ -21,12 +21,10 @@ import com.uniuni.SysMgrTool.MyDb;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.ServerInterface;
-import com.uniuni.SysMgrTool.common.FileLog;
-import com.uniuni.SysMgrTool.dao.OrderIdRecord;
+import com.uniuni.SysMgrTool.View.Adapter.ScannedDataAdapter;
 import com.uniuni.SysMgrTool.dao.ScannedRecord;
 import com.uniuni.SysMgrTool.dao.ScannedRecordDao;
 
-import java.util.Calendar;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;

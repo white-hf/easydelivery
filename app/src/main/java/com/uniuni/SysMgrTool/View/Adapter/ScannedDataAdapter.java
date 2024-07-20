@@ -1,4 +1,4 @@
-package com.uniuni.SysMgrTool.View;
+package com.uniuni.SysMgrTool.View.Adapter;
 
 import android.content.Context;
 import android.view.LayoutInflater;

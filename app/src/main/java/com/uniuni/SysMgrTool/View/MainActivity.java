@@ -4,7 +4,6 @@ import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.graphics.Bitmap;
 
 import android.os.Bundle;
 import android.os.Looper;
@@ -38,6 +37,7 @@ import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.Request.TransferPackagesReq;
 import com.uniuni.SysMgrTool.Task.MyHandler;
+import com.uniuni.SysMgrTool.View.Adapter.MyAdapter;
 import com.uniuni.SysMgrTool.dao.OrderIdRecord;
 import com.uniuni.SysMgrTool.routeplanning.PlaceManager;
 import com.google.zxing.BarcodeFormat;
@@ -177,7 +177,7 @@ public class MainActivity extends AppCompatActivity {
         AppCompatButton btn_delivery = findViewById(R.id.btn_delivery);
         btn_delivery.setOnClickListener((view)->{
             Intent intent = new Intent(getApplication(), MapActivity.class);
-            //Intent intent = new Intent(getApplication(), CameraActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
 
             startActivity(intent);
         });
@@ -188,7 +188,6 @@ public class MainActivity extends AppCompatActivity {
 
         AppCompatButton btn_viewScannedData = (AppCompatButton)findViewById(R.id.btn_scanneddata);
         btn_viewScannedData.setOnClickListener((v)->{
-                MySingleton.getInstance().getServerInterface().getDeliveringList(5010);
                 ScannedDataFragment dialog = ScannedDataFragment.newInstance("1","2");
                 dialog.show(getSupportFragmentManager(),"");
             });
@@ -284,7 +283,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void cacheOrderId()
     {
-        MySingleton.getInstance().getmDeliveredPackagesMgr().fixtool();
+        MySingleton.getInstance().getPendingPackagesMgr().fixtool();
     }
 
     private void handleGetOrderDetailEvent()
@@ -391,7 +390,7 @@ public class MainActivity extends AppCompatActivity {
         mSystemOperationDialog = new AlertDialog.Builder(this);
 
         mSystemOperationDialog.setTitle(R.string.operation_choose);
-        final String[] opertionsArray = new String[] { "缓存运单号", "分配包裹", "路线检查", "开始派送"};
+        final String[] opertionsArray = new String[] { "缓存运单号", "分配包裹", "路线检查", "开始派送","已派送包裹查询"};
 
         final int selectedIndex[] = { 0 };
 
@@ -418,6 +417,9 @@ public class MainActivity extends AppCompatActivity {
                             case 3:
                                 startDispatch();
                                 break;
+                            case 4:
+                                showDeliveredPackages();
+                                break;
                             default:
                                 break;
                         }
@@ -433,6 +435,14 @@ public class MainActivity extends AppCompatActivity {
                         dialog.dismiss();
                     }
                 });
+    }
+
+    private void showDeliveredPackages() {
+        PackageListFragment packageListFragment = new PackageListFragment();
+        getSupportFragmentManager().beginTransaction()
+                .add(android.R.id.content, packageListFragment)
+                .addToBackStack(null)
+                .commit();
     }
 
     private void initLoginDialog() {

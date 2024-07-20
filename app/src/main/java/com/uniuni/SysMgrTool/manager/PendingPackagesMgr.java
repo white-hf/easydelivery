@@ -1,22 +1,13 @@
 package com.uniuni.SysMgrTool.manager;
 
-import static android.provider.Settings.System.getString;
-
-import android.app.AlertDialog;
 import android.os.Handler;
 import android.util.Log;
-import android.widget.Toast;
-
-import androidx.annotation.NonNull;
 
 import com.uniuni.SysMgrTool.Event.Event;
 import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.Event.Subscriber;
 import com.uniuni.SysMgrTool.MySingleton;
-import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.Request.DeliveredUploadParams;
-import com.uniuni.SysMgrTool.View.LoginDialog;
-import com.uniuni.SysMgrTool.common.ErrResponse;
 import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.common.MultipartUploader;
 import com.uniuni.SysMgrTool.common.UploadCallback;
@@ -24,12 +15,6 @@ import com.uniuni.SysMgrTool.dao.DeliveredPackagesDao;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.PackageEntity;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.SocketTimeoutException;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -40,20 +25,24 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import javax.net.ssl.HttpsURLConnection;
-
-import okhttp3.Call;
 import okhttp3.Callback;
-import okhttp3.Response;
 
 /**
  * This class manages the delivered packages, including saving the delivered packages to the database,uploading the delivered packages to the server, and loading the delivered packages from the database.
  * It use the queue and thread pool for uploading the delivered packages to the server.
  */
-public class DeliveredPackagesMgr implements Subscriber {
+public class PendingPackagesMgr implements Subscriber {
+
+    public ExecutorService getExecutorService() {
+        return executorService;
+    }
+
+    public int size() {
+        return waitingUploadPackageList.size();
+    }
 
     static public enum PackageStatus {
-        WAITING_UPLOADED("waiting_upload"),
+        Pending("waiting_upload"),
         UPLOADED("uploaded"),
         FAILED("failed");
         private final String status;
@@ -77,11 +66,11 @@ public class DeliveredPackagesMgr implements Subscriber {
 
     private LinkedList<PackageEntity> waitingUploadPackageList;
     private final BlockingQueue<PackageEntity> packageQueue = new LinkedBlockingQueue<>();
-    private final ExecutorService executorService = Executors.newFixedThreadPool(2); // 1 producer, 1 consumer
+    private final ExecutorService executorService = Executors.newFixedThreadPool(1); // 1 producer, 1 consumer
 
     private final DeliveredPackagesDao deliveredPackagesDao = MySingleton.getInstance().getmMydb().getDeliveredPackagesDao();
 
-    public DeliveredPackagesMgr() {
+    public PendingPackagesMgr() {
         MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_LOGIN , this);
         waitingUploadPackageList = new LinkedList<>();
 
@@ -89,12 +78,9 @@ public class DeliveredPackagesMgr implements Subscriber {
         executorService.execute(this::consumePackages);
     }
 
-    public int size() {
-        return waitingUploadPackageList.size();
-    }
-
-    public final ExecutorService getExecutorService() {
-        return executorService;
+    public void addQueue(PackageEntity packageEntity) {
+        packageQueue.add(packageEntity);
+        waitingUploadPackageList.add(packageEntity);
     }
 
     public Boolean exit(String trackingId) {
@@ -154,18 +140,28 @@ public class DeliveredPackagesMgr implements Subscriber {
      * @param trackingId
      * @param newStatus
      */
-    public void  update(String trackingId, String newStatus) {
+    public void update(String trackingId, String newStatus) {
         final Handler dbHandler = MySingleton.getInstance().getDbHandler();
-        dbHandler.post(()->{
-            ListIterator<PackageEntity> iterator = waitingUploadPackageList.listIterator();
-            while (iterator.hasNext()) {
-                PackageEntity packageEntity = iterator.next();
-                if (packageEntity.trackingId.equals(trackingId)) {
-                    packageEntity.status = newStatus;
-                    deliveredPackagesDao.update(packageEntity);
-                    iterator.remove();
-                    break;
+        dbHandler.post(() -> {
+            try {
+                ListIterator<PackageEntity> iterator = waitingUploadPackageList.listIterator();
+                while (iterator.hasNext()) {
+                    PackageEntity packageEntity = iterator.next();
+                    if (packageEntity.trackingId.equals(trackingId)) {
+                        packageEntity.status = newStatus;
+                        packageEntity.saveTime = System.currentTimeMillis();
+                        int rows = deliveredPackagesDao.update(packageEntity);
+
+                        if (rows == 0)
+                            throw new Exception("update failed");
+
+                        iterator.remove();
+                        break;
+                    }
                 }
+            } catch (Exception e) {
+                Log.e(MySingleton.TAG, "update delivery data failed", e);
+                FileLog.getInstance().writeLog("update delivery data failed" + e.getMessage());
             }
         });
     }
@@ -180,11 +176,11 @@ public class DeliveredPackagesMgr implements Subscriber {
             };
 
             for (String routeId : routeIds) {
-                final DeliveryInfo info = MySingleton.getInstance().getdDeliveryinfoMgr().getByRouteId(routeId);
+                final DeliveryInfo info = MySingleton.getInstance().getDeliveryinfoMgr().getByRouteId(routeId);
                 if (info != null) {
                     PackageEntity byOrderId = deliveredPackagesDao.getByOrderId(info.getOrderId());
                     if (byOrderId != null) {
-                        byOrderId.status = PackageStatus.WAITING_UPLOADED.getStatus();
+                        byOrderId.status = PackageStatus.Pending.getStatus();
                         deliveredPackagesDao.update(byOrderId);
                     }
                 }
@@ -239,6 +235,12 @@ public class DeliveredPackagesMgr implements Subscriber {
                     Thread.sleep(1000);
                 }
 
+                if ( MySingleton.getInstance().getLoginInfo().userToken == null)
+                {
+                    Thread.sleep(1000);
+                    continue;
+                }
+
                 PackageEntity deliveryInfo = packageQueue.take();
 
                 //check if the package is delivered
@@ -261,7 +263,7 @@ public class DeliveredPackagesMgr implements Subscriber {
 
     @Override
     public void receive(Event event) {
-        load((Short)event.getMessage() , PackageStatus.WAITING_UPLOADED.getStatus());
+        load((Short)event.getMessage() , PackageStatus.Pending.getStatus());
     }
 }
 

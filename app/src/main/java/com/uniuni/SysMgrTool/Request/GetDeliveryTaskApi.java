@@ -1,13 +1,22 @@
 package com.uniuni.SysMgrTool.Request;
 
+import static com.uniuni.SysMgrTool.ServerInterface.DOMAIN_API;
+
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.common.ServerApiBase;
 
 public class GetDeliveryTaskApi<RE,AppRsp> extends ServerApiBase<RE,AppRsp> {
 
-    public GetDeliveryTaskApi(RE req,  Class<AppRsp> rspClass) {
+    private static final String URL_DELIVERING_LIST = DOMAIN_API + "delivery/parcels/delivering?driver_id=%d";
+    public static final String URL_UNSCANNED_LIST = DOMAIN_API + "delivery/parcels/tasks?criteria=UNSCANNED&driver_id=";
+
+    public GetDeliveryTaskApi(RE req,  Class<AppRsp> rspClass , Boolean bDelivering) {
         super(req, rspClass);
-        mUrl = "https://delivery-service-api.uniuni.ca/delivery/parcels/tasks?criteria=UNSCANNED&driver_id=";
+
+        if (!bDelivering)
+            mUrl = URL_UNSCANNED_LIST;
+        else
+            mUrl = URL_DELIVERING_LIST;
         mUrl += MySingleton.getInstance().getLoginInfo().loginId;
     }
 }

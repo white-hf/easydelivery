@@ -15,6 +15,8 @@ import com.uniuni.SysMgrTool.MySingleton;
 
 import org.jetbrains.annotations.NotNull;
 
+import java.net.HttpURLConnection;
+
 public class ServerApiBase<RE , RS> {
     protected String mUrl;
     private final RE mRequest;
@@ -60,7 +62,7 @@ public class ServerApiBase<RE , RS> {
                 }, new Response.ErrorListener() {
                     @Override
                     public void onErrorResponse(VolleyError error) {
-                        if (error.networkResponse != null && error.networkResponse.statusCode == 403)
+                        if (error.networkResponse != null && error.networkResponse.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
                             Toast.makeText(MySingleton.getInstance().getCtx() , com.uniuni.SysMgrTool.R.string.action_need_login , Toast.LENGTH_SHORT).show();
                         else {
                             Toast.makeText(MySingleton.getInstance().getCtx(), com.uniuni.SysMgrTool.R.string.action_req_failure, Toast.LENGTH_SHORT).show();

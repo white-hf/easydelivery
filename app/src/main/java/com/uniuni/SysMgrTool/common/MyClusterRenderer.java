@@ -68,6 +68,6 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
 
     @Override
     protected boolean shouldRenderAsCluster(Cluster<T> cluster) {
-        return cluster.getSize() > 1 && mZoomLevel < 15;
+        return cluster.getSize() > 1 &&  mZoomLevel < 18;
     }
 }

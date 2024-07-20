@@ -42,11 +42,11 @@ public class AppRsp implements TaskBase {
         FileLog.getInstance().writeLog("Get delivering  list:" + this.getBiz_data().size());
 
         //remove the old data from cache firstly.
-        MySingleton.getInstance().getdDeliveryinfoMgr().clearAll();
+        MySingleton.getInstance().getDeliveryinfoMgr().clearAll();
 
         while (listIterator.hasNext()) {
             DeliveringListData d = (DeliveringListData) listIterator.next();
-            MySingleton.getInstance().getdDeliveryinfoMgr().saveDeliveringListData(d);
+            MySingleton.getInstance().getDeliveryinfoMgr().saveDeliveringListData(d);
         }
     }
 }

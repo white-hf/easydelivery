@@ -52,12 +52,12 @@ import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.Event.Subscriber;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
+import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.common.MyClusterRenderer;
 import com.uniuni.SysMgrTool.common.ResponseCallBack;
 import com.uniuni.SysMgrTool.common.Result;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 
-import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -117,8 +117,8 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
         txtViewDeliverySummary = findViewById(R.id.topTextView);
         txtViewDeliverySummary.setText(String.format(getResources().getString(R.string.delivering_d_pending_d),
-                MySingleton.getInstance().getdDeliveryinfoMgr().size(),
-                MySingleton.getInstance().getmDeliveredPackagesMgr().size()));
+                MySingleton.getInstance().getDeliveryinfoMgr().size(),
+                MySingleton.getInstance().getPendingPackagesMgr().size()));
 
         EditText seachEditText = findViewById(R.id.searchEditText);
         seachEditText.setOnEditorActionListener((textView, actionId, keyEvent) -> {
@@ -149,6 +149,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_UPLOAD_FAILURE, this);
         MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_UPLOAD_SUCCESS, this);
         MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_SAVE_DELIVERY_SUCCESS, this);
+        MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_TO_LOGIN, this);
     }
 
     private void performSearch(String routeNumber) {
@@ -178,10 +179,10 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
     private ArrayList<DeliveryInfo> loadData() {
         //Get package list from cache, if empty, try to load from db, if still empty, try to load from server
-        ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo();
+        ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
         if (lst.isEmpty()) {
             //try to load data from db
-            MySingleton.getInstance().getdDeliveryinfoMgr().loadDeliveryInfo(new ResponseCallBack<List<DeliveryInfo>>() {
+            MySingleton.getInstance().getDeliveryinfoMgr().loadDeliveryInfo(new ResponseCallBack<List<DeliveryInfo>>() {
                 @Override
                 public void onComplete(Result<List<DeliveryInfo>> result) {
                     Result.Success success = (Result.Success) result;
@@ -189,7 +190,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
                         List<DeliveryInfo> lst = (List<DeliveryInfo>) success.data;
                         if (lst.isEmpty()) {
                             //try to load data from server
-                            MySingleton.getInstance().getdDeliveryinfoMgr().getDeliveryInfo(MySingleton.getInstance().getLoginInfo().loginId);
+                            MySingleton.getInstance().getDeliveryinfoMgr().getDeliveryInfo(MySingleton.getInstance().getLoginInfo().loginId);
                         }
                     }
                 }
@@ -238,7 +239,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
     }
 
     void test() {
-        MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo().clear();
+        MySingleton.getInstance().getDeliveryinfoMgr().getListDeliveryInfo().clear();
         LatLng centerLocation = new LatLng(37.7749, -122.4194); // 旧金山的经纬度
         googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(centerLocation, 10));
         // Set some lat/lng coordinates to start with.
@@ -258,7 +259,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
             clusterManager.addItem(offsetItem);
 
-            MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo().add(offsetItem);
+            MySingleton.getInstance().getDeliveryinfoMgr().getListDeliveryInfo().add(offsetItem);
         }
 
         clusterManager.cluster();
@@ -357,8 +358,8 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
         LatLng firstMarker = null;
         for (DeliveryInfo info : lst) {
-            if (MySingleton.getInstance().getmDeliveredPackagesMgr().exit(info.getOrderSn()))
-                continue; //only display packages that are not delivered
+            if (MySingleton.getInstance().getPendingPackagesMgr().exit(info.getOrderSn()))
+                continue; //only display packages that are not delivered and not in pending list
 
             //addCustomMarker(info);
             clusterManager.addItem(info);
@@ -366,7 +367,6 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
             if (firstMarker == null) {
                 firstMarker = new LatLng(info.getLatitude(), info.getLongitude());
             }
-
         }
 
         clusterManager.cluster();
@@ -513,7 +513,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         }
 
         if (clusterManager != null) {
-            ArrayList<DeliveryInfo> deliveryinfoLst = MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo();
+            ArrayList<DeliveryInfo> deliveryinfoLst = MySingleton.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
             for (DeliveryInfo info : deliveryinfoLst) {
                 boolean b = clusterManager.removeItem(info);
                 Log.d(TAG, "remove item:" + info.getTitle() + " " + b);
@@ -522,6 +522,12 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
             clusterManager.clearItems(); // Clear added items
             clusterManager = null; // Release reference
         }
+
+        MySingleton.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_UPLOAD_FAILURE, this);
+        MySingleton.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_UPLOAD_SUCCESS, this);
+        MySingleton.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_SAVE_DELIVERY_SUCCESS, this);
+        MySingleton.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_TO_LOGIN, this);
+
 
         mapView.onDestroy();
     }
@@ -534,15 +540,13 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
     @Override
     public void receive(Event event) {
-        DeliveryinfoMgr deliveryinfoMgr = MySingleton.getInstance().getdDeliveryinfoMgr();
+        DeliveryinfoMgr deliveryinfoMgr = MySingleton.getInstance().getDeliveryinfoMgr();
         switch (event.getEventType()) {
             case EventConstant.EVENT_UPLOAD_FAILURE:
-                Event<Integer> uploadEvent = (Event<Integer>) event;
-                Integer rspCode = uploadEvent.getMessage();
                 Toast.makeText(this, "Uploading the data of delivered packages failed", Toast.LENGTH_SHORT).show();
 
                 break;
-            case EventConstant.EVENT_LOGIN:
+            case EventConstant.EVENT_TO_LOGIN:
                 //We have to couple the ui code here
                 AlertDialog alertDialog = LoginDialog.init(this);
                 alertDialog.show();
@@ -554,12 +558,16 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
                 //the data in the local cache is not updated.
                 DeliveryInfo info = deliveryinfoMgr.get(packageEntity.orderId);
                 if (info != null) {
-                    deliveryinfoMgr.getListDeliveryInfo().remove(info);
                     this.removeCustomMarker(info);
+                    deliveryinfoMgr.getListDeliveryInfo().remove(info);
 
                     String msg = String.format(getResources().getString(R.string.save_successfully), info.getRouteNumber());
                     updateDeliveryInfo(msg);
 
+                }
+                else
+                {
+                    FileLog.getInstance().writeLog("When handling save_delivery_success event,failed to get packageEntity.orderId:" + packageEntity.orderId);
                 }
                 break;
             }
@@ -575,8 +583,8 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
     private void updateDeliveryInfo(String msg) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
         txtViewDeliverySummary.setText(String.format(getResources().getString(R.string.delivering_d_pending_d),
-                MySingleton.getInstance().getdDeliveryinfoMgr().size(),
-                MySingleton.getInstance().getmDeliveredPackagesMgr().size()));
+                MySingleton.getInstance().getDeliveryinfoMgr().size(),
+                MySingleton.getInstance().getPendingPackagesMgr().size()));
     }
 
     public void removeThumbnail(int index) {

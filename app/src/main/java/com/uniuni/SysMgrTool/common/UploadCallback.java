@@ -1,12 +1,14 @@
 package com.uniuni.SysMgrTool.common;
 
+import static java.lang.Thread.sleep;
+
 import androidx.annotation.NonNull;
 
 import com.uniuni.SysMgrTool.Event.Event;
 import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.dao.PackageEntity;
-import com.uniuni.SysMgrTool.manager.DeliveredPackagesMgr;
+import com.uniuni.SysMgrTool.manager.PendingPackagesMgr;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -20,10 +22,11 @@ import okhttp3.Callback;
 import okhttp3.Response;
 
 public class UploadCallback implements Callback {
+    public static final int TOO_MUCH_REQUEST = 429;
     private final BlockingQueue<PackageEntity> packageQueue;
-    private final DeliveredPackagesMgr mgr;
+    private final PendingPackagesMgr mgr;
     private final PackageEntity deliveryInfo;
-    public UploadCallback(DeliveredPackagesMgr mgr, BlockingQueue<PackageEntity> packageQueue, PackageEntity deliveryInfo)
+    public UploadCallback(PendingPackagesMgr mgr, BlockingQueue<PackageEntity> packageQueue, PackageEntity deliveryInfo)
     {
         this.packageQueue = packageQueue;
         this.mgr = mgr;
@@ -45,24 +48,36 @@ public class UploadCallback implements Callback {
             if (response.code() == HttpURLConnection.HTTP_UNAUTHORIZED) {
                 //need to login again
                 MySingleton.getInstance().getMainHandler().post(() -> {
-                    MySingleton.getInstance().getPublisher().notify(EventConstant.EVENT_LOGIN, new Event<Integer>(response.code()));
+                    MySingleton.getInstance().getPublisher().notify(EventConstant.EVENT_TO_LOGIN, new Event<Integer>(response.code()));
                 });
+
+                MySingleton.getInstance().getLoginInfo().userToken = null;
                 packageQueue.add(deliveryInfo);
             }
             else if (response.code() == HttpURLConnection.HTTP_FORBIDDEN)
             {
-                //already uploaded
-                mgr.update(deliveryInfo.trackingId, DeliveredPackagesMgr.PackageStatus.UPLOADED.getStatus());
+                //already uploaded, because of local cache, there might be a temporary data inconsistency, but it doesn't matter.
+                mgr.update(deliveryInfo.trackingId, PendingPackagesMgr.PackageStatus.UPLOADED.getStatus());
                 MySingleton.getInstance().getMainHandler().post(() -> {
                     MySingleton.getInstance().getPublisher().notify(EventConstant.EVENT_UPLOAD_SUCCESS, new Event<com.uniuni.SysMgrTool.dao.PackageEntity>(deliveryInfo));
                 });
             }
+            else if (response.code() == TOO_MUCH_REQUEST)
+            {
+                //too many requests, we need to wait a while.
+                packageQueue.add(deliveryInfo);
+                try {
+                    sleep(5000);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
             else {
                 notifyUiUploadResult(false, response.code(), null);
-                mgr.update(deliveryInfo.trackingId, DeliveredPackagesMgr.PackageStatus.FAILED.getStatus());
+                mgr.update(deliveryInfo.trackingId, PendingPackagesMgr.PackageStatus.FAILED.getStatus());
             }
 
-            FileLog.getInstance().writeLog("Upload response is not successful:" + deliveryInfo.trackingId + " " + response.code());
+            FileLog.getInstance().writeLog("Upload response is unsuccessful:" + deliveryInfo.trackingId + " " + response.code());
         } else {
             // Handle successful HTTP response
             if (response.body() != null) {
@@ -74,32 +89,29 @@ public class UploadCallback implements Callback {
                     if (bizCode.equals("DELIVERY.SUBMIT.SUCCESS")) {
                         FileLog.getInstance().writeLog("Upload successful:" + deliveryInfo.trackingId);
 
-                        mgr.update(deliveryInfo.trackingId, DeliveredPackagesMgr.PackageStatus.UPLOADED.getStatus());
+                        mgr.update(deliveryInfo.trackingId, PendingPackagesMgr.PackageStatus.UPLOADED.getStatus());
                         notifyUiUploadResult(true, 0, deliveryInfo);
                     } else {
                         //It depends on the specific business logic.
-                        FileLog.getInstance().writeLog("Upload unsuccessfully:" + deliveryInfo.trackingId + " " + responseBody);
+                        FileLog.getInstance().writeLog("Upload unsuccessfully due to bizcode:" + deliveryInfo.trackingId + " " + responseBody);
 
                         //this situation is unusual, it should not be checked.
-                        mgr.update(deliveryInfo.trackingId, DeliveredPackagesMgr.PackageStatus.FAILED.getStatus());
+                        mgr.update(deliveryInfo.trackingId, PendingPackagesMgr.PackageStatus.FAILED.getStatus());
                         notifyUiUploadResult(false, 0, null);
                     }
                 } catch (JSONException e) {
                     //this situation is unusual, it should not be checked.
-                    mgr.update(deliveryInfo.trackingId, DeliveredPackagesMgr.PackageStatus.FAILED.getStatus());
+                    mgr.update(deliveryInfo.trackingId, PendingPackagesMgr.PackageStatus.FAILED.getStatus());
                     notifyUiUploadResult(false, 0, null);
                     FileLog.getInstance().writeLog("Upload unsuccessfully due to json exception:" + deliveryInfo.trackingId + " " + responseBody);
                 }
 
             } else {
                 //this situation is unusual, it should not be checked.
-                mgr.update(deliveryInfo.trackingId, DeliveredPackagesMgr.PackageStatus.FAILED.getStatus());
+                mgr.update(deliveryInfo.trackingId, PendingPackagesMgr.PackageStatus.FAILED.getStatus());
                 notifyUiUploadResult(false, 0, null);
                 FileLog.getInstance().writeLog("Upload unsuccessfully due to empty body:" + deliveryInfo.trackingId);
             }
-
-
-
         }
     }
 

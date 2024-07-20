@@ -1,6 +1,5 @@
 package com.uniuni.SysMgrTool.View;
 
-import android.graphics.Color;
 import android.os.Bundle;
 
 import androidx.fragment.app.Fragment;
@@ -12,13 +11,10 @@ import android.widget.ListView;
 
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
-import com.uniuni.SysMgrTool.bean.ParcelPlace;
+import com.uniuni.SysMgrTool.View.Adapter.PlaceAdapter;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
 
 /**
  * A simple {@link Fragment} subclass.
@@ -76,7 +72,7 @@ public class ListViewFragment extends Fragment {
         View v =  inflater.inflate(R.layout.fragment_list_view, container, false);
 
         // Create and set the adapter
-        ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getdDeliveryinfoMgr().getListDeliveryInfo();
+        ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
         lst.sort((o1, o2) -> {
             try {
                 if (o1.getRouteNumber() == null || o2.getRouteNumber() == null)

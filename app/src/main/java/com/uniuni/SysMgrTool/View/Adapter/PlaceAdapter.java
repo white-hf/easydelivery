@@ -1,4 +1,4 @@
-package com.uniuni.SysMgrTool.View;
+package com.uniuni.SysMgrTool.View.Adapter;
 
 
 import android.content.Context;
@@ -9,7 +9,6 @@ import android.widget.BaseAdapter;
 import android.widget.TextView;
 
 import com.uniuni.SysMgrTool.R;
-import com.uniuni.SysMgrTool.bean.ParcelPlace;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 
 import java.util.List;

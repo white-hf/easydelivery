@@ -14,8 +14,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-import androidx.core.os.HandlerCompat;
 import androidx.preference.PreferenceManager;
 
 import com.android.volley.Request;
@@ -23,28 +21,20 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.Volley;
 import com.uniuni.SysMgrTool.Event.Publisher;
 import com.uniuni.SysMgrTool.Response.DateTime;
-import com.uniuni.SysMgrTool.Response.DeliveringListData;
 import com.uniuni.SysMgrTool.Response.OrderDetailData;
 import com.uniuni.SysMgrTool.Response.Path;
 import com.uniuni.SysMgrTool.Task.MyHandler;
-import com.uniuni.SysMgrTool.Task.TaskBase;
 import com.uniuni.SysMgrTool.bean.ScanOrder;
 import com.uniuni.SysMgrTool.common.FileLog;
-import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.ScannedRecord;
-import com.uniuni.SysMgrTool.manager.DeliveredPackagesMgr;
+import com.uniuni.SysMgrTool.manager.PendingPackagesMgr;
 import com.uniuni.SysMgrTool.manager.DeliveryinfoMgr;
 
-import java.io.FileOutputStream;
-import java.io.ObjectOutputStream;
-import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.TimeZone;
 
 import java.util.concurrent.ExecutorService;
@@ -67,7 +57,7 @@ public class MySingleton extends Application {
     private static MySingleton instance;
     private RequestQueue requestQueue;
     private com.uniuni.SysMgrTool.Event.Publisher publisher;
-    private DeliveredPackagesMgr mDeliveredPackagesMgr;
+    private PendingPackagesMgr mPendingPackagesMgr;
 
     public static final String TAG = "MySingleton";
 
@@ -90,11 +80,11 @@ public class MySingleton extends Application {
     private MyDb mMydb = new MyDb();
     private LoginInfo mLoginInfo = new LoginInfo();
 
-    public DeliveryinfoMgr getdDeliveryinfoMgr() {
-        return dDeliveryinfoMgr;
+    public DeliveryinfoMgr getDeliveryinfoMgr() {
+        return mDeliveryinfoMgr;
     }
-    public DeliveredPackagesMgr getmDeliveredPackagesMgr() {
-        return mDeliveredPackagesMgr;
+    public PendingPackagesMgr getPendingPackagesMgr() {
+        return mPendingPackagesMgr;
     }
 
 
@@ -106,7 +96,7 @@ public class MySingleton extends Application {
         public Integer warehouseId = 17;
     }
 
-    private DeliveryinfoMgr dDeliveryinfoMgr;
+    private DeliveryinfoMgr mDeliveryinfoMgr;
 
     public MySingleton() {
 
@@ -141,8 +131,8 @@ public class MySingleton extends Application {
 
         mMydb.initDb(ctx);
 
-        dDeliveryinfoMgr = new DeliveryinfoMgr();
-        mDeliveredPackagesMgr = new DeliveredPackagesMgr();
+        mDeliveryinfoMgr = new DeliveryinfoMgr();
+        mPendingPackagesMgr = new PendingPackagesMgr();
         FileLog.getInstance().init(ctx);
 
         setBatchId();
@@ -155,7 +145,7 @@ public class MySingleton extends Application {
     }
 
     private void shutdownExecutorService() {
-        final ExecutorService executorService = mDeliveredPackagesMgr.getExecutorService();
+        final ExecutorService executorService = mPendingPackagesMgr.getExecutorService();
         if (executorService != null) {
             executorService.shutdown();
             try {

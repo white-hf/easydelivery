@@ -22,7 +22,7 @@ import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.common.BitmapUtils;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.PackageEntity;
-import com.uniuni.SysMgrTool.manager.DeliveredPackagesMgr;
+import com.uniuni.SysMgrTool.manager.PendingPackagesMgr;
 
 import android.content.Context;
 import android.hardware.camera2.CameraAccessException;
@@ -221,7 +221,7 @@ public class CameraFragment extends Fragment implements SensorEventListener {
         }
 
         TextView orderInfoTextView = view.findViewById(R.id.orderInfo_textview);
-        final DeliveryInfo deliveryInfo = MySingleton.getInstance().getdDeliveryinfoMgr().get(mOrderId);
+        final DeliveryInfo deliveryInfo = MySingleton.getInstance().getDeliveryinfoMgr().get(mOrderId);
         if (deliveryInfo != null) {
             orderInfoTextView.setText(String.valueOf(deliveryInfo.getRouteNumber() + "|" + deliveryInfo.getAddress()));
         }
@@ -264,9 +264,9 @@ public class CameraFragment extends Fragment implements SensorEventListener {
                 packageEntity.imagePath = Arrays.toString(mImageFiles.stream().filter(Objects::nonNull).map(File::getAbsolutePath).toArray(String[]::new));
                 packageEntity.latitude = mLatitude;
                 packageEntity.longitude = mLongitude;
-                packageEntity.status = DeliveredPackagesMgr.PackageStatus.WAITING_UPLOADED.getStatus();
+                packageEntity.status = PendingPackagesMgr.PackageStatus.Pending.getStatus();
 
-                MySingleton.getInstance().getmDeliveredPackagesMgr().save(packageEntity);
+                MySingleton.getInstance().getPendingPackagesMgr().save(packageEntity);
                 requireActivity().getSupportFragmentManager().popBackStack();
             }
         });

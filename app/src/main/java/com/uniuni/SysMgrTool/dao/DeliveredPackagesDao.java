@@ -1,5 +1,6 @@
 package com.uniuni.SysMgrTool.dao;
 
+import androidx.lifecycle.LiveData;
 import androidx.room.Dao;
 import androidx.room.Insert;
 import androidx.room.Query;
@@ -20,5 +21,8 @@ public interface DeliveredPackagesDao {
     PackageEntity getByOrderId(Long orderId);
 
     @Update
-    void update(PackageEntity packageEntity);
+    int update(PackageEntity packageEntity);
+
+    @Query("SELECT * FROM delivered_packages WHERE status = :status ORDER BY createTime DESC")
+    LiveData<List<PackageEntity>> getPackagesByStatus(String status);
 }

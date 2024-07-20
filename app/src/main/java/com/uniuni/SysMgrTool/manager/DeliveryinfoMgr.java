@@ -29,8 +29,6 @@ import java.util.List;
  */
 public class DeliveryinfoMgr implements Subscriber {
 
-    private static final String URL_DELIVERING_LIST = DOMAIN_API + "delivery/parcels/delivering?driver_id=%d";
-
     String batchId;
 
     public ArrayList<DeliveryInfo> getListDeliveryInfo() {
@@ -101,21 +99,16 @@ public class DeliveryinfoMgr implements Subscriber {
      */
     public void getDeliveryInfo(Short driverId){
         boolean mbAutoSave   =  MySingleton.getInstance().getBooleanProperty(MySingleton.ITEM_AUTO_SAVE_SCAN);
-        if (!mbAutoSave)
-            getDeliveryTask(driverId);
-        else {
-            @SuppressLint("DefaultLocale") String realUrl = String.format(URL_DELIVERING_LIST, MySingleton.getInstance().getLoginInfo().loginId);
-            MySingleton.getInstance().getServerInterface().getRequestWithRsp(driverId, realUrl, null, AppRsp.class, MySingleton.getInstance().getDbHandler());
-        }
+        getDeliveryTask(driverId , mbAutoSave);
     }
 
     /**
      * Get the delivery packages unscanned from the server, it should be called after user login.
      * @param driverId
      */
-    private void getDeliveryTask(Short driverId)
+    private void getDeliveryTask(Short driverId , Boolean bDeliveryTask)
     {
-        GetDeliveryTaskApi<String,AppRsp> api = new GetDeliveryTaskApi<>(null,AppRsp.class);
+        GetDeliveryTaskApi<String,AppRsp> api = new GetDeliveryTaskApi<>(null,AppRsp.class , bDeliveryTask);
         api.doApi();
     }
 

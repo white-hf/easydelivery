@@ -82,7 +82,6 @@ public class ServerInterface {
 
     private static final String URL_LOGIN   = DOMAIN_STRING + "map/login";
     private static final String URL_APP_LOGIN = DOMAIN_API + "auth/login";
-    private static final String URL_DELIVERING_LIST = DOMAIN_API + "delivery/parcels/delivering?driver_id=%d";
 
     private MyHandler myHandler;
 
@@ -224,13 +223,6 @@ public class ServerInterface {
         logReq.setMemo("");
 
         insertOperationLog(logReq);
-    }
-
-    public void getDeliveringList(Integer id)
-    {
-        @SuppressLint("DefaultLocale") String realUrl = String.format(URL_DELIVERING_LIST, MySingleton.getInstance().getLoginInfo().loginId);
-
-        getRequestWithRsp(id , realUrl , null , AppRsp.class, myHandler);
     }
 
     public String putinStorage(OrderDetailData data)

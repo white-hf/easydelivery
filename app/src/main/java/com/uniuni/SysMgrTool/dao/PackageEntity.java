@@ -5,10 +5,9 @@ import androidx.room.PrimaryKey;
 
 @Entity(tableName = "delivered_packages")
 public class PackageEntity {
-    @PrimaryKey(autoGenerate = true)
-    public int id;
-    public String trackingId;
+    @PrimaryKey
     public Long orderId;
+    public String trackingId;
     public String imagePath;// if there are multiple images, separate them by comma
     public long saveTime;
     public long createTime;
