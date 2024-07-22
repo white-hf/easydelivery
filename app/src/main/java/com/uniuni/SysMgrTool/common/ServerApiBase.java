@@ -17,10 +17,17 @@ import org.jetbrains.annotations.NotNull;
 
 import java.net.HttpURLConnection;
 
+/**
+ * This is a base class for all api request. To make a api request, you need to extends this class and set url, request and response class.
+ * It a template for api request.
+ * @param <RE>
+ * @param <RS>
+ */
 public class ServerApiBase<RE , RS> {
     protected String mUrl;
     private final RE mRequest;
     private final Class<RS> mRspClass;
+
     private Integer mMethod;
     private final Handler mHandler = MySingleton.getInstance().getMainHandler();
 
@@ -30,6 +37,10 @@ public class ServerApiBase<RE , RS> {
     {
         mRequest = req;
         mRspClass = rspClass;
+    }
+
+    public void setMethod(Integer mMethod) {
+        this.mMethod = mMethod;
     }
 
     public void doApi()

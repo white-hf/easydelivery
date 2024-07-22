@@ -7,7 +7,7 @@ import com.uniuni.SysMgrTool.common.ServerApiBase;
 
 public class GetDeliveryTaskApi<RE,AppRsp> extends ServerApiBase<RE,AppRsp> {
 
-    private static final String URL_DELIVERING_LIST = DOMAIN_API + "delivery/parcels/delivering?driver_id=%d";
+    private static final String URL_DELIVERING_LIST = DOMAIN_API + "delivery/parcels/delivering?driver_id=";
     public static final String URL_UNSCANNED_LIST = DOMAIN_API + "delivery/parcels/tasks?criteria=UNSCANNED&driver_id=";
 
     public GetDeliveryTaskApi(RE req,  Class<AppRsp> rspClass , Boolean bDelivering) {
