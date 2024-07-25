@@ -1,6 +1,7 @@
 package com.uniuni.SysMgrTool.View;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -8,7 +9,9 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.net.Uri;
 import android.os.Bundle;
+import android.telephony.SmsManager;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -33,6 +36,7 @@ import android.util.Log;
 import android.view.Surface;
 
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
 import java.util.Arrays;
@@ -60,6 +64,9 @@ import java.util.Locale;
 import java.util.Objects;
 
 public class CameraFragment extends Fragment implements SensorEventListener {
+
+    private static final int SMS_PERMISSION_REQUEST_CODE = 1;
+    private static final int CALL_PERMISSION_REQUEST_CODE = 2;
 
     private static final String TAG = "CameraActivity";
     private static final int CAMERA_PERMISSION_REQUEST_CODE = 1001;
@@ -296,7 +303,32 @@ public class CameraFragment extends Fragment implements SensorEventListener {
             requireActivity().getSupportFragmentManager().popBackStack();
         }
 
+        Button smsButton = view.findViewById(R.id.sms_button);
+        Button phoneButton = view.findViewById(R.id.phone_button);
+
+        smsButton.setOnClickListener(v -> showSmsBottomSheet());
+        phoneButton.setOnClickListener(v -> makeCall());
+
         return view;
+    }
+
+    private void showSmsBottomSheet() {
+        SmsBottomSheetFragment smsBottomSheetFragment = new SmsBottomSheetFragment(mOrderId);
+        smsBottomSheetFragment.show(requireActivity().getSupportFragmentManager(), "SmsBottomSheetFragment");
+
+    }
+
+    private void makeCall() {
+        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.CALL_PHONE}, CALL_PERMISSION_REQUEST_CODE);
+        } else {
+            final DeliveryInfo deliveryInfo = MySingleton.getInstance().getDeliveryinfoMgr().get(mOrderId);
+            if (deliveryInfo != null) {
+                Intent callIntent = new Intent(Intent.ACTION_CALL);
+                callIntent.setData(Uri.parse("tel:" + deliveryInfo.getPhone()));
+                startActivity(callIntent);
+            }
+        }
     }
 
     private ImageView createEmptyImageView(int index) {

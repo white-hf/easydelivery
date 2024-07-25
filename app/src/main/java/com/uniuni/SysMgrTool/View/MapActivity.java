@@ -102,7 +102,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         View content = findViewById(android.R.id.content);
         content.setBackgroundColor(Color.WHITE);
 
-        STRING_DELIVERY_SUCCESS = getResources().getString(R.string.save_successfully);
+        STRING_DELIVERY_SUCCESS = getResources().getString(R.string.upload_successfully);
 
         mapView = findViewById(R.id.mapView);
         mapView.onCreate(savedInstanceState);
