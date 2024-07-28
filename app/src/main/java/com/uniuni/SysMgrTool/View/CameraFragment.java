@@ -100,6 +100,8 @@ public class CameraFragment extends Fragment implements SensorEventListener {
     private double mLatitude;
     private double mLongitude;
 
+    private SmsBottomSheetFragment mSmsBottomSheetFragment = new SmsBottomSheetFragment(mOrderId);
+
     @Override
     public void onStart() {
         super.onStart();
@@ -313,9 +315,8 @@ public class CameraFragment extends Fragment implements SensorEventListener {
     }
 
     private void showSmsBottomSheet() {
-        SmsBottomSheetFragment smsBottomSheetFragment = new SmsBottomSheetFragment(mOrderId);
-        smsBottomSheetFragment.show(requireActivity().getSupportFragmentManager(), "SmsBottomSheetFragment");
-
+        mSmsBottomSheetFragment.setOrderId(mOrderId);
+        mSmsBottomSheetFragment.show(requireActivity().getSupportFragmentManager(), "SmsBottomSheetFragment");
     }
 
     private void makeCall() {

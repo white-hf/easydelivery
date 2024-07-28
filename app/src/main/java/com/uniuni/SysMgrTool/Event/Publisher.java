@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// 定义发布者
+//
 public class Publisher {
     private Map<String, List<Subscriber>> subscribers = new HashMap<>();
 

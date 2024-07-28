@@ -8,5 +8,6 @@ public class EventConstant {
     public final static String EVENT_UPLOAD_SUCCESS = "upload_success";
     public final static String EVENT_SAVE_DELIVERY_SUCCESS = "save_delivery_success";
     public final static String EVENT_REQUEST_LOGIN  = "request_login";
+    public final static String EVENT_DELIVERY_DATA_READY  = "delivery_data_ready";
 
 }

@@ -22,10 +22,16 @@
     </string-array>
 
     <string-array name="sms_tempalte">
-        <item>Hi, this is your UniUni Delivery driver. I have a parcel for you, are you home?</item>
-        <item>Hi, this is your UniUni delivery driver. I have delivered your parcel at:</item>
+        <item>Hi, this is your UniUni Delivery driver. I have a parcel for you and will be delivering it to you. Are you home?</item>
+        <item>Hi, this is your UniUni delivery driver. I have delivered your parcel at: mailroom</item>
         <item>Hi, This is your UniUni delivery driver. I have a parcel for you. Please call or message me to arrange for delivery. Thank you!</item>
         <item>Hi, This is your UniUni delivery driver. I have a parcel for you but could not reach you.</item>
+    </string-array>
+
+    <string-array name="delviery_data_type">
+        <item>delivering</item>
+        <item>unscanned</item>
+        <item>scanned</item>
     </string-array>
 
 </resources>

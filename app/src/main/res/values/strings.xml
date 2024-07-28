@@ -116,8 +116,8 @@
         vestibulum. Fusce dictum libero quis erat maximus, vitae volutpat diam dignissim.
     </string>
     <string name="title_activity_camera">CameraActivity</string>
-    <string name="cancel">Cancel</string>
-    <string name="ok">OK</string>
+    <string name="cancel">取消</string>
+    <string name="ok">派送</string>
     <string name="takephoto">拍照</string>
     <string name="route_id">包裹号：</string>
     <string name="unit_id">单元号：</string>
@@ -135,4 +135,7 @@
     <string name="phone">电话</string>
     <string name="sms">短信</string>
     <string name="save_successfully">Save %s successfully</string>
+    <string name="login_tip">请先登录</string>
+    <string name="refreshing_data">数据获取中</string>
+    <string name="package_id">包裹号</string>
 </resources>

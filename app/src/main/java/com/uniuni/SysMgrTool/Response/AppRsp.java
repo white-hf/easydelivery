@@ -2,6 +2,8 @@ package com.uniuni.SysMgrTool.Response;
 
 import android.os.Message;
 
+import com.uniuni.SysMgrTool.Event.Event;
+import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.Task.TaskBase;
 import com.uniuni.SysMgrTool.common.FileLog;
@@ -48,5 +50,8 @@ public class AppRsp implements TaskBase {
             DeliveringListData d = (DeliveringListData) listIterator.next();
             MySingleton.getInstance().getDeliveryinfoMgr().saveDeliveringListData(d);
         }
+
+        //notify the ui delivery data is ready
+        MySingleton.getInstance().getPublisher().notify(EventConstant.EVENT_DELIVERY_DATA_READY, new Event<Integer>(1));
     }
 }

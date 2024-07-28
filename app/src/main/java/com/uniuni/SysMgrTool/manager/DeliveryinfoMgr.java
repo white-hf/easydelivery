@@ -96,17 +96,9 @@ public class DeliveryinfoMgr implements Subscriber {
 
     /**
      * Get the delivery info from the server, it should be called after user login.
-     */
-    public void getDeliveryInfo(Short driverId){
-        boolean mbAutoSave   =  MySingleton.getInstance().getBooleanProperty(MySingleton.ITEM_AUTO_SAVE_SCAN);
-        getDeliveryTask(driverId , mbAutoSave);
-    }
-
-    /**
-     * Get the delivery packages unscanned from the server, it should be called after user login.
      * @param driverId
      */
-    private void getDeliveryTask(Short driverId , Boolean bDeliveryTask)
+    public void getDeliveryInfo(Short driverId , Boolean bDeliveryTask)
     {
         GetDeliveryTaskApi<String,AppRsp> api = new GetDeliveryTaskApi<>(null,AppRsp.class , bDeliveryTask);
         api.doApi();
@@ -127,25 +119,23 @@ public class DeliveryinfoMgr implements Subscriber {
 
        DeliveryInfoDao deliveryInfoDao = MySingleton.getInstance().getmMydb().getDeliveryInfoDao();
 
+        DeliveryInfo info = new DeliveryInfo();
+        info.setRouteNumber(String.valueOf(d.getRoute_no()));
+        info.setLatitude(Double.parseDouble(d.getLat()));
+        info.setLongitude(Double.parseDouble(d.getLng()));
+        info.setAddress(d.getAddress());
+        info.setName(d.getName());
+        info.setPhone(d.getMobile());
+        info.setUnitNumber(d.getUnit_number());
+        info.setBatchNumber(batchId);
+        info.setDriverId(driverId);
+        info.setOrderSn(d.getTracking_no());
+        info.setOrderId(d.getOrder_id());
+
+        listDeliveryInfo.add(info);
         MySingleton.getInstance().getDbHandler().post(() -> {
             try {
-
-                DeliveryInfo info = new DeliveryInfo();
-                info.setRouteNumber(String.valueOf(d.getRoute_no()));
-                info.setLatitude(Double.parseDouble(d.getLat()));
-                info.setLongitude(Double.parseDouble(d.getLng()));
-                info.setAddress(d.getAddress());
-                info.setName(d.getName());
-                info.setPhone(d.getMobile());
-                info.setUnitNumber(d.getUnit_number());
-                info.setBatchNumber(batchId);
-                info.setDriverId(driverId);
-                info.setOrderSn(d.getTracking_no());
-                info.setOrderId(d.getOrder_id());
-
-                deliveryInfoDao.insert(info);
-
-                listDeliveryInfo.add(info);
+                    deliveryInfoDao.insert(info);
                 } catch (Exception e) {
                     Log.e(TAG, "save delivery info failed " + e.getMessage());
                 }
@@ -194,6 +184,6 @@ public class DeliveryinfoMgr implements Subscriber {
      */
     @Override
     public void receive(Event event) {
-        getDeliveryInfo((Short)event.getMessage());
+        getDeliveryInfo((Short)event.getMessage() , true);
     }
 }

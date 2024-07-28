@@ -33,10 +33,15 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
     private Button sendButton;
     private ListView templateListView;
     private String lastSentMessage;
+
     private Long mOrderId;
 
     public SmsBottomSheetFragment(Long orderId) {
         this.mOrderId = orderId;
+    }
+
+    public void setOrderId(Long mOrderId) {
+        this.mOrderId = mOrderId;
     }
 
     @Nullable
@@ -64,8 +69,6 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
         });
 
         // Set up the template list view here
-        // For simplicity, let's use a static list of templates
-        String[] templates = {"Template 1", "Template 2", "Template 3"};
         ArrayAdapter<CharSequence> spinnerAdapter = ArrayAdapter.createFromResource(getContext(),
                 R.array.sms_tempalte, android.R.layout.simple_list_item_1);
 

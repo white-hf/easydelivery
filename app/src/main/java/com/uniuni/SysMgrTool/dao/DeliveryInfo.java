@@ -8,6 +8,7 @@ import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
 import com.google.android.gms.maps.model.LatLng;
+import com.uniuni.SysMgrTool.common.Utils;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -51,7 +52,11 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     private Long orderId;
 
     @Ignore
-    private Integer civilNumber;
+    private Integer civilNumber = Integer.valueOf(0);
+
+    @Ignore
+    private String streetName = "";
+
     public String getOrderSn() {
         return orderSn;
     }
@@ -125,10 +130,15 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
 
     public void setAddress(String address) {
         this.address = address;
-        String unitNumber = extractFirstNumber(address);
 
-        if (!unitNumber.isEmpty())
-            civilNumber = Integer.parseInt(unitNumber);
+        Utils.AddressInfo addressInfo = Utils.extractApartmentAndStreetNumber(address);
+
+        if (!addressInfo.getStreetNumber().isEmpty())
+            civilNumber = Integer.parseInt(addressInfo.getStreetNumber());
+
+        unitNumber = addressInfo.getApartmentNumber();
+
+        streetName = Utils.extractFirstWord(address);
     }
 
     public String getUnitNumber() {
@@ -155,23 +165,6 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
         this.phone = phone;
     }
 
-    private static final Pattern NUMBER_PATTERN = Pattern.compile("(\\d+)");
-    private String extractFirstNumber(String address) {
-        if (address == null || address.isEmpty()) {
-            return "";
-        }
-
-        Matcher matcher = NUMBER_PATTERN.matcher(address);
-
-        if (matcher.find()) {
-            return matcher.group(1).trim();
-        }
-
-        return "";
-    }
-
-
-
     @NonNull
     @Override
     public LatLng getPosition() {
@@ -181,7 +174,10 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @Nullable
     @Override
     public String getTitle() {
-        return routeNumber + " (" + String.valueOf(civilNumber) + ")";
+        if (civilNumber != null)
+            return routeNumber + " (" + String.valueOf(civilNumber) + ")";
+        else
+            return routeNumber;
     }
 
     @Nullable
@@ -204,5 +200,9 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
 
     public void setOrderId(Long orderId) {
         this.orderId = orderId;
+    }
+
+    public String getStreetName() {
+        return streetName;
     }
 }

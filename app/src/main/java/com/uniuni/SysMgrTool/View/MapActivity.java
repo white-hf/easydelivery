@@ -21,7 +21,10 @@ import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
+import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -56,6 +59,8 @@ import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.common.MyClusterRenderer;
 import com.uniuni.SysMgrTool.common.ResponseCallBack;
 import com.uniuni.SysMgrTool.common.Result;
+import com.uniuni.SysMgrTool.common.SmartLocationManager;
+import com.uniuni.SysMgrTool.common.Utils;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 
 import java.util.ArrayList;
@@ -67,20 +72,19 @@ import com.google.maps.android.clustering.ClusterManager;
 import com.uniuni.SysMgrTool.dao.PackageEntity;
 import com.uniuni.SysMgrTool.manager.DeliveryinfoMgr;
 
-public class MapActivity extends AppCompatActivity implements Subscriber, OnMapReadyCallback, LocationListener {
+public class MapActivity extends AppCompatActivity implements Subscriber, OnMapReadyCallback , SmartLocationManager.LocationUpdateListener {
 
     private String STRING_DELIVERY_SUCCESS = null;
     private MapView mapView;
     private TextView txtViewDeliverySummary;
     private GoogleMap googleMap;
 
-    private LocationManager locationManager;
-
     private ClusterManager<DeliveryInfo> clusterManager;
 
     private double mLatitude;
     private double mLongitude;
 
+    private SmartLocationManager mSmartLocationManager;
     private Location mLastLocation = new Location("");
 
     private MyClusterRenderer<DeliveryInfo> myClusterRenderer;
@@ -91,7 +95,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
     private final Bundle args = new Bundle();
     public static final String TAG = "MapFragment";
     private static final int MAX_ITEMS_PER_CLUSTER = 20;
-    private static final int DEFAULT_ZOOM_LEVEL = 12;
+    private static final int DEFAULT_ZOOM_LEVEL = 16;
 
     @Nullable
     @Override
@@ -136,7 +140,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         }
 
         mapView.onResume();
-        // 检查位置权限
+
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{
@@ -146,10 +150,41 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
             getLocation();
         }
 
+        checkLoginStatus();
+
+        initUpdateUi();
+
         MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_UPLOAD_FAILURE, this);
         MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_UPLOAD_SUCCESS, this);
         MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_SAVE_DELIVERY_SUCCESS, this);
         MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_TO_LOGIN, this);
+        MySingleton.getInstance().getPublisher().subscribe(EventConstant.EVENT_DELIVERY_DATA_READY, this);
+    }
+
+    private void checkLoginStatus()
+    {
+        if (MySingleton.getInstance().getLoginInfo().userToken == null)
+            Toast.makeText(this , R.string.login_tip, Toast.LENGTH_SHORT).show();
+    }
+
+    private void initUpdateUi() {
+
+        Spinner spinner = findViewById(R.id.spinner_delivery_data_type);
+        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
+                R.array.delviery_data_type, android.R.layout.simple_spinner_item);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+
+
+        ImageButton refreshButton = findViewById(R.id.refreshButton);
+        refreshButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                int selectedItemPosition = spinner.getSelectedItemPosition();
+                MySingleton.getInstance().getDeliveryinfoMgr().getDeliveryInfo(MySingleton.getInstance().getLoginInfo().loginId, selectedItemPosition == 0);
+                Toast.makeText(getApplicationContext(), R.string.refreshing_data, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void performSearch(String routeNumber) {
@@ -164,79 +199,15 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
     }
 
     private void getLocation() {
-        try {
-            locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-
-            Criteria criteria = new Criteria();
-            criteria.setAccuracy(Criteria.ACCURACY_FINE);
-            criteria.setPowerRequirement(Criteria.POWER_HIGH);
-            String provider = locationManager.getBestProvider(criteria, true);
-            locationManager.requestLocationUpdates((provider != null) ? provider : LocationManager.GPS_PROVIDER, 1000, 5, this);
-        } catch (SecurityException e) {
-            Log.e(TAG, "getLocation: " + e.getMessage());
-        }
+        mSmartLocationManager = new SmartLocationManager(this);
+        mSmartLocationManager.setLocationUpdateListener(this);
     }
 
     private ArrayList<DeliveryInfo> loadData() {
         //Get package list from cache, if empty, try to load from db, if still empty, try to load from server
-        ArrayList<DeliveryInfo> lst = MySingleton.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
-        if (lst.isEmpty()) {
-            //try to load data from db
-            MySingleton.getInstance().getDeliveryinfoMgr().loadDeliveryInfo(new ResponseCallBack<List<DeliveryInfo>>() {
-                @Override
-                public void onComplete(Result<List<DeliveryInfo>> result) {
-                    Result.Success success = (Result.Success) result;
-                    if (success.data != null) {
-                        List<DeliveryInfo> lst = (List<DeliveryInfo>) success.data;
-                        if (lst.isEmpty()) {
-                            //try to load data from server
-                            MySingleton.getInstance().getDeliveryinfoMgr().getDeliveryInfo(MySingleton.getInstance().getLoginInfo().loginId);
-                        }
-                    }
-                }
-
-                @Override
-                public void onFail(Result<List<DeliveryInfo>> result) {
-                }
-            });
-        }
-
-        return lst;
+        return MySingleton.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
     }
 
-    @Override
-    public void onLocationChanged(Location location) {
-
-        mLatitude = location.getLatitude();
-        mLongitude = location.getLongitude();
-
-//        LatLng markerLatLng = new LatLng(mLatitude, mLongitude);
-//        float distance = location.distanceTo(mLastLocation);
-//
-//        if (distance > 2) {
-//            CameraPosition cameraPosition = googleMap.getCameraPosition();
-//            float zoomLevel = cameraPosition.zoom;
-//            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(markerLatLng, zoomLevel));
-//
-//        }
-
-        mLastLocation = location;
-    }
-
-    @Override
-    public void onProviderDisabled(String provider) {
-
-    }
-
-    @Override
-    public void onProviderEnabled(String provider) {
-
-    }
-
-    @Override
-    public void onStatusChanged(String provider, int status, Bundle extras) {
-
-    }
 
     void test() {
         MySingleton.getInstance().getDeliveryinfoMgr().getListDeliveryInfo().clear();
@@ -265,28 +236,9 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         clusterManager.cluster();
     }
 
-    private static final Pattern NUMBER_PATTERN = Pattern.compile("(\\d+)");
-
     private String extractApartmentNumber(String address) {
-
-        if (address == null || address.isEmpty()) {
-            return "";
-        }
-
-        Matcher matcher = NUMBER_PATTERN.matcher(address);
-        String[] numbers = new String[2];
-        int count = 0;
-
-        while (matcher.find() && count < 2) {
-            numbers[count] = matcher.group(1).trim();
-            count++;
-        }
-
-        if (count < 2) {
-            numbers[count] = "";
-        }
-
-        return numbers[1];
+        Utils.AddressInfo addressInfo = Utils.extractApartmentAndStreetNumber(address);
+        return addressInfo.getApartmentNumber();
     }
 
     private void showClusterItemListDialog(Cluster<DeliveryInfo> cluster) {
@@ -303,10 +255,10 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
         for (DeliveryInfo item : clusterItems) {
             String unitNumber = extractApartmentNumber(item.getAddress());
-            if (!unitNumber.isEmpty())
-                itemTitles.add(item.getTitle() + " (" + unitNumber + ")");
+            if (unitNumber != null && !unitNumber.isEmpty())
+                itemTitles.add(item.getTitle() + " -" + unitNumber +" -" + item.getStreetName());
             else
-                itemTitles.add(item.getTitle());
+                itemTitles.add(item.getTitle() + " -" + item.getStreetName());
         }
 
         builder.setItems(itemTitles.toArray(new String[0]), new DialogInterface.OnClickListener() {
@@ -337,22 +289,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
     }
 
-    private void initClusterManager() {
-        clusterManager = null;
-        myClusterRenderer = null;
-
-        clusterManager = new ClusterManager<DeliveryInfo>(getApplicationContext(), googleMap);
-        myClusterRenderer = new MyClusterRenderer<>(getApplicationContext(), googleMap, clusterManager);
-        clusterManager.setRenderer(myClusterRenderer);
-
-        googleMap.setOnCameraIdleListener(clusterManager);
-        googleMap.setOnCameraMoveListener(() -> {
-            CameraPosition cameraPosition = googleMap.getCameraPosition();
-            MyClusterRenderer<DeliveryInfo> myClusterRenderer = (MyClusterRenderer) clusterManager.getRenderer();
-            myClusterRenderer.setZoomLevel(cameraPosition.zoom);
-            clusterManager.cluster();
-        });
-
+    private void initMarker() {
 
         ArrayList<DeliveryInfo> lst = loadData();
 
@@ -371,14 +308,30 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
         clusterManager.cluster();
 
-        //if (lst.isEmpty())
-        //   test();
-
         if (firstMarker != null) {
             mLastLocation.setLongitude(firstMarker.longitude);
             mLastLocation.setLatitude(firstMarker.latitude);
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstMarker, DEFAULT_ZOOM_LEVEL));
         }
+    }
+
+    private void initClusterManager() {
+        clusterManager = null;
+        myClusterRenderer = null;
+
+        clusterManager = new ClusterManager<DeliveryInfo>(getApplicationContext(), googleMap);
+        myClusterRenderer = new MyClusterRenderer<>(getApplicationContext(), googleMap, clusterManager);
+        clusterManager.setRenderer(myClusterRenderer);
+
+        googleMap.setOnCameraIdleListener(clusterManager);
+        googleMap.setOnCameraMoveListener(() -> {
+            CameraPosition cameraPosition = googleMap.getCameraPosition();
+            MyClusterRenderer<DeliveryInfo> myClusterRenderer = (MyClusterRenderer) clusterManager.getRenderer();
+            myClusterRenderer.setZoomLevel(cameraPosition.zoom);
+            clusterManager.cluster();
+        });
+
+        initMarker();
 
         clusterManager.setOnClusterClickListener(cluster -> {
             if (cluster.getSize() < MAX_ITEMS_PER_CLUSTER) {
@@ -490,6 +443,10 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
             CameraPosition cameraPosition = googleMap.getCameraPosition();
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, cameraPosition.zoom));
         }
+
+
+        mSmartLocationManager.startLocationUpdates();
+
     }
 
     @Override
@@ -500,6 +457,8 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         if (googleMap != null) {
             savedPosition = googleMap.getCameraPosition().target; // 保存当前地图中心点
         }
+
+        mSmartLocationManager.stopLocationUpdates();
     }
 
     @Override
@@ -527,9 +486,11 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         MySingleton.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_UPLOAD_SUCCESS, this);
         MySingleton.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_SAVE_DELIVERY_SUCCESS, this);
         MySingleton.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_TO_LOGIN, this);
-
+        MySingleton.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_DELIVERY_DATA_READY, this);
 
         mapView.onDestroy();
+
+        mSmartLocationManager.stopLocationUpdates();
     }
 
     @Override
@@ -563,6 +524,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
                     String msg = String.format(getResources().getString(R.string.save_successfully), info.getRouteNumber());
                     updateDeliveryInfo(msg);
+                    Utils.vibrate(this, 500);
 
                 }
                 else
@@ -577,6 +539,10 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
                 updateDeliveryInfo(msg);
                 break;
             }
+            case EventConstant.EVENT_DELIVERY_DATA_READY:{
+                initMarker();
+                break;
+            }
         }
     }
 
@@ -589,5 +555,17 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
     public void removeThumbnail(int index) {
         mCameraFragment.removeThumbnail(index);
+    }
+
+    @Override
+    public void onLocationUpdate(Location location, SmartLocationManager.MovementState state) {
+        mLatitude = location.getLatitude();
+        mLongitude = location.getLongitude();
+
+        if (Math.abs(mLastLocation.getLatitude()) < 1e10) {
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(location.getLatitude(), location.getLongitude()), DEFAULT_ZOOM_LEVEL));
+
+            mLastLocation = location;
+        }
     }
 }
