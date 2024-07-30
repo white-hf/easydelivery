@@ -74,6 +74,7 @@ import com.uniuni.SysMgrTool.manager.DeliveryinfoMgr;
 
 public class MapActivity extends AppCompatActivity implements Subscriber, OnMapReadyCallback , SmartLocationManager.LocationUpdateListener {
 
+    private static final double MIN_NEXT_PACKAGE_DISTANCE = 50;
     private String STRING_DELIVERY_SUCCESS = null;
     private MapView mapView;
     private TextView txtViewDeliverySummary;
@@ -298,7 +299,6 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
             if (MySingleton.getInstance().getPendingPackagesMgr().exit(info.getOrderSn()))
                 continue; //only display packages that are not delivered and not in pending list
 
-            //addCustomMarker(info);
             clusterManager.addItem(info);
 
             if (firstMarker == null) {
@@ -391,22 +391,6 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
             clusterManager.removeItem(pkg);
             clusterManager.cluster();
         }
-    }
-
-    private void addCustomMarker(DeliveryInfo pkg) {
-        // Create a custom marker bitmap with the package number
-        BitmapDescriptor icon = BitmapDescriptorFactory.fromBitmap(
-                getMarkerBitmapFromView(pkg.getRouteNumber()));
-
-        // Add the marker to the map
-        Marker m = googleMap.addMarker(new MarkerOptions()
-                .position(new LatLng(pkg.getLatitude(), pkg.getLongitude()))
-                .icon(icon).title(pkg.getRouteNumber()));
-
-        googleMap.setOnMapLoadedCallback(() -> {
-            if (m != null)
-                m.showInfoWindow();
-        });
     }
 
     private Bitmap getMarkerBitmapFromView(String number) {
@@ -537,6 +521,20 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
                 PackageEntity packageEntity = (PackageEntity) event.getMessage();
                 String msg = String.format(STRING_DELIVERY_SUCCESS, packageEntity.trackingId);
                 updateDeliveryInfo(msg);
+
+                //show the next package to be delivered
+                DeliveryInfo info = deliveryinfoMgr.findNearestPackage(packageEntity.latitude , packageEntity.latitude , MIN_NEXT_PACKAGE_DISTANCE);
+                if (info != null)
+                {
+                    Marker marker = myClusterRenderer.getMarker(info);
+                    if (marker != null)
+                        marker.showInfoWindow();
+
+                    LatLng nextPosition = new LatLng(info.getLatitude(), info.getLongitude());
+                    CameraPosition cameraPosition = googleMap.getCameraPosition();
+                    googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(nextPosition, cameraPosition.zoom));
+                }
+
                 break;
             }
             case EventConstant.EVENT_DELIVERY_DATA_READY:{

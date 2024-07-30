@@ -1,9 +1,7 @@
 package com.uniuni.SysMgrTool.manager;
 
 import static com.uniuni.SysMgrTool.MySingleton.TAG;
-import static com.uniuni.SysMgrTool.ServerInterface.DOMAIN_API;
 
-import android.annotation.SuppressLint;
 import android.util.Log;
 
 import com.uniuni.SysMgrTool.Event.Event;
@@ -28,6 +26,22 @@ import java.util.List;
  * saving the delivery info to the database, and loading the delivery info from the database.
  */
 public class DeliveryinfoMgr implements Subscriber {
+
+    static public class DistanceCalculator {
+        private static final double EARTH_RADIUS = 6371e3; // in meters
+
+        public static double haversine(double lat1, double lon1, double lat2, double lon2) {
+            double dLat = Math.toRadians(lat2 - lat1);
+            double dLon = Math.toRadians(lon2 - lon1);
+
+            double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return EARTH_RADIUS * c;
+        }
+    }
 
     String batchId;
 
@@ -178,6 +192,27 @@ public class DeliveryinfoMgr implements Subscriber {
         listDeliveryInfo.add(p);
     }
 
+    /**
+     * Find the nearest package to the current location. It should be called after one package is delivered, then show the next package.
+     * @param currentLat
+     * @param currentLon
+     * @param minDistance
+     * @return
+     */
+    public DeliveryInfo findNearestPackage(double currentLat, double currentLon, double minDistance) {
+        DeliveryInfo nearestPackage = null;
+        double minDistanceFound = Double.MAX_VALUE;
+
+        for (DeliveryInfo deliveryInfo : listDeliveryInfo) {
+            double distance = DistanceCalculator.haversine(currentLat, currentLon, deliveryInfo.getLatitude(), deliveryInfo.getLongitude());
+            if (distance > minDistance && distance < minDistanceFound) {
+                nearestPackage = deliveryInfo;
+                break;
+            }
+        }
+
+        return nearestPackage;
+    }
     /**
      * called when user login
      * @param event
