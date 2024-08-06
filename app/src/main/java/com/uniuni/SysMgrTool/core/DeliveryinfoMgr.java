@@ -1,4 +1,4 @@
-package com.uniuni.SysMgrTool.manager;
+package com.uniuni.SysMgrTool.core;
 
 import static com.uniuni.SysMgrTool.MySingleton.TAG;
 
@@ -11,12 +11,10 @@ import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.Request.GetDeliveryTaskApi;
 import com.uniuni.SysMgrTool.Response.AppRsp;
 import com.uniuni.SysMgrTool.Response.DeliveringListData;
-import com.uniuni.SysMgrTool.ServerInterface;
 import com.uniuni.SysMgrTool.common.ResponseCallBack;
 import com.uniuni.SysMgrTool.common.Result;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.DeliveryInfoDao;
-import com.uniuni.SysMgrTool.dao.PackageEntity;
 
 import java.util.ArrayList;
 import java.util.List;

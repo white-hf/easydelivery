@@ -27,8 +27,8 @@ import com.uniuni.SysMgrTool.Task.MyHandler;
 import com.uniuni.SysMgrTool.bean.ScanOrder;
 import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.dao.ScannedRecord;
-import com.uniuni.SysMgrTool.manager.PendingPackagesMgr;
-import com.uniuni.SysMgrTool.manager.DeliveryinfoMgr;
+import com.uniuni.SysMgrTool.core.PendingPackagesMgr;
+import com.uniuni.SysMgrTool.core.DeliveryinfoMgr;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;

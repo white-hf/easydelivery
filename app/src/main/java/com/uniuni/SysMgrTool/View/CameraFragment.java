@@ -11,7 +11,6 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.net.Uri;
 import android.os.Bundle;
-import android.telephony.SmsManager;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,7 +24,7 @@ import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.common.BitmapUtils;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 import com.uniuni.SysMgrTool.dao.PackageEntity;
-import com.uniuni.SysMgrTool.manager.PendingPackagesMgr;
+import com.uniuni.SysMgrTool.core.PendingPackagesMgr;
 
 import android.content.Context;
 import android.hardware.camera2.CameraAccessException;

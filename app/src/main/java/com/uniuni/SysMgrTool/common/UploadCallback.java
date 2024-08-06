@@ -8,7 +8,7 @@ import com.uniuni.SysMgrTool.Event.Event;
 import com.uniuni.SysMgrTool.Event.EventConstant;
 import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.dao.PackageEntity;
-import com.uniuni.SysMgrTool.manager.PendingPackagesMgr;
+import com.uniuni.SysMgrTool.core.PendingPackagesMgr;
 
 import org.json.JSONException;
 import org.json.JSONObject;

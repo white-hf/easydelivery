@@ -12,10 +12,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.location.Criteria;
 import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -38,13 +35,10 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.MapsInitializer;
 import com.google.android.gms.maps.OnMapReadyCallback;
-import com.google.android.gms.maps.model.BitmapDescriptor;
-import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
-import com.google.android.gms.maps.model.MarkerOptions;
 
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
@@ -57,20 +51,16 @@ import com.uniuni.SysMgrTool.MySingleton;
 import com.uniuni.SysMgrTool.R;
 import com.uniuni.SysMgrTool.common.FileLog;
 import com.uniuni.SysMgrTool.common.MyClusterRenderer;
-import com.uniuni.SysMgrTool.common.ResponseCallBack;
-import com.uniuni.SysMgrTool.common.Result;
-import com.uniuni.SysMgrTool.common.SmartLocationManager;
+import com.uniuni.SysMgrTool.core.SmartLocationManager;
 import com.uniuni.SysMgrTool.common.Utils;
 import com.uniuni.SysMgrTool.dao.DeliveryInfo;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import com.google.maps.android.clustering.ClusterManager;
 import com.uniuni.SysMgrTool.dao.PackageEntity;
-import com.uniuni.SysMgrTool.manager.DeliveryinfoMgr;
+import com.uniuni.SysMgrTool.core.DeliveryinfoMgr;
 
 public class MapActivity extends AppCompatActivity implements Subscriber, OnMapReadyCallback , SmartLocationManager.LocationUpdateListener {
 
@@ -142,6 +132,13 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
         mapView.onResume();
 
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{
+                    Manifest.permission.ACTIVITY_RECOGNITION
+            }, 1);
+        }
+
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{
@@ -200,7 +197,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
     }
 
     private void getLocation() {
-        mSmartLocationManager = new SmartLocationManager(this);
+        mSmartLocationManager =  SmartLocationManager.getInstance(this);
         mSmartLocationManager.setLocationUpdateListener(this);
     }
 

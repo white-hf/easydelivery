@@ -1,4 +1,4 @@
-package com.uniuni.SysMgrTool.manager;
+package com.uniuni.SysMgrTool.core;
 
 import android.os.Handler;
 import android.util.Log;
