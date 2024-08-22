@@ -13,79 +13,8 @@
             android:layout_width="match_parent"
             android:layout_height="40dp" />
 
-        <EditText
-            android:id="@+id/editTextBarcode"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="0dp"
-            android:drawableRight="@android:drawable/ic_menu_camera"
-            android:ems="10"
-            android:hint="请输入订单最后四位"
-            android:inputType="textPersonName" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:orientation="horizontal">
-
-                <ListView
-                    android:id="@+id/lv_search_order"
-                    android:layout_width="match_parent"
-                    android:layout_height="79dp"
-                    tools:visibility="visible" />
-        </LinearLayout>
-
-        <FrameLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="10dp"
-            android:gravity="center">
-
-                <ImageView
-                    android:id="@+id/imageView"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-
-        </FrameLayout>
-
-        <Spinner
-            android:id="@+id/spinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="10dp"
-            tools:visibility="gone" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/mRecyclerView"
-            android:layout_width="match_parent"
-            android:layout_height="18dp"
-            tools:visibility="gone" />
-
-        <EditText
-            android:id="@+id/editTextPickNumber"
-            android:layout_width="match_parent"
-            android:layout_height="41dp"
-            android:ems="10"
-            android:inputType="number" />
-
         <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btn_queryOrderDetail"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="订单信息" />
-
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btn_Barcode_scan"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="10dp"
-            android:background="@android:color/background_dark"
-            android:text="扫描"
-            android:textColor="@android:color/white"
-            android:visibility="gone" />
-
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btnLlogin"
+            android:id="@+id/btnLogin"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="登录" />
@@ -100,12 +29,6 @@
             android:textColor="@android:color/white"
             android:visibility="visible"
             tools:visibility="visible" />
-
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btn_scanneddata"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="已扫描" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_cacheOrders"
