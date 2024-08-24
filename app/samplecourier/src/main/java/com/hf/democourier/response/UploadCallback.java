@@ -6,9 +6,6 @@ import com.hf.courierservice.apihelper.exception.ForbiddenException;
 import com.hf.courierservice.apihelper.exception.TooMuchRequestException;
 import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.io.IOException;
 import java.net.HttpURLConnection;
 
@@ -27,7 +24,7 @@ import okhttp3.Response;
 public class UploadCallback implements Callback {
 
     private static final int TOO_MUCH_REQUEST = 1; //modify based on your API;
-    private ResponseCallBack<Void> callback;
+    private final ResponseCallBack<Void> callback;
     public UploadCallback(ResponseCallBack<Void> callback)
     {
         this.callback = callback;
