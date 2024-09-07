@@ -34,7 +34,7 @@ During my experience as a part-time package delivery driver, I encountered signi
 - **Data Security and Consistency Considerations**:
   - **Data Security**: Once a package is delivered and its data is successfully uploaded, the app deletes the local data to mitigate security risks.
   - **Data Consistency**: There is a risk that key information might be modified during delivery, potentially affecting delivery accuracy. To reduce this risk, a lightweight data synchronization API is used to ensure data integrity.
-
+![](https://github.com/white-hf/blog/blob/main/img/easydelivery.jpg)
 ## How to Install and Run the Project
 
 1. **Clone the repository from GitHub**:
