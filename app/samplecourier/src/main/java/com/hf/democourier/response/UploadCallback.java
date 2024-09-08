@@ -1,7 +1,7 @@
 package com.hf.democourier.response;
 import androidx.annotation.NonNull;
 
-import com.hf.courierservice.ResponseCallBack;
+import com.hf.courierservice.IResponseCallBack;
 import com.hf.courierservice.apihelper.exception.ForbiddenException;
 import com.hf.courierservice.apihelper.exception.TooMuchRequestException;
 import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
@@ -24,8 +24,8 @@ import okhttp3.Response;
 public class UploadCallback implements Callback {
 
     private static final int TOO_MUCH_REQUEST = 1; //modify based on your API;
-    private final ResponseCallBack<Void> callback;
-    public UploadCallback(ResponseCallBack<Void> callback)
+    private final IResponseCallBack<Void> callback;
+    public UploadCallback(IResponseCallBack<Void> callback)
     {
         this.callback = callback;
     }

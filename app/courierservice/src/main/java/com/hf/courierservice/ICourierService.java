@@ -12,8 +12,9 @@ import java.util.List;
  * The interface is used to adapt different couriers' service. EasyDelivery App uses {@link ICourierService} to
  * carry out the actual delivery work, and it is designed to run without network.
  *
- * <p>If you need to support a new courier service, you can modify and implement this interface.</p>
- * The interface is designed for asynchronous call, so you also need to implement  {@link ResponseCallBack}.
+ * <p>If you need to support a new courier service, you can implement this interface, and
+ * it only comprises four basic methods.</p>
+ * The interface is designed for asynchronous call, so you also need to implement  {@link IResponseCallBack}.
  * @author jvtang
  * @since 2024-08-16
  */
@@ -30,7 +31,7 @@ public interface ICourierService {
      * @param password
      * @param callback
      */
-    void login(String username, String password, ResponseCallBack<String> callback);
+    void login(String username, String password, IResponseCallBack<String> callback);
 
     /*
      * Get delivery package list from courier service.
@@ -41,7 +42,7 @@ public interface ICourierService {
      *        the app and the courier service, but it is not a problem.
      * @param callback
      */
-    void getPackageList(String userId , boolean bReadyForDelivery, ResponseCallBack<List<DeliveringListData>> callback);
+    void getPackageList(String userId , boolean bReadyForDelivery, IResponseCallBack<List<DeliveringListData>> callback);
 
     /**
      * Upload delivered packages to courier service. This interface should be idempotent, so App might call it multiple times
@@ -49,5 +50,5 @@ public interface ICourierService {
      * @param uploadInfo
      * @param callback
      */
-    boolean uploadDeliveredPackages(DeliveredUploadParams uploadInfo, ResponseCallBack<Void> callback);
+    boolean uploadDeliveredPackages(DeliveredUploadParams uploadInfo, IResponseCallBack<Void> callback);
 }

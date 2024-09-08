@@ -9,7 +9,7 @@ import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.Volley;
-import com.hf.courierservice.ResponseCallBack;
+import com.hf.courierservice.IResponseCallBack;
 import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
 
 import java.net.HttpURLConnection;
@@ -53,7 +53,7 @@ public class ApiRequestBase<RE , RS> {
         mHeader = header;
     }
 
-    public void doApi(ResponseCallBack cb)
+    public void doApi(IResponseCallBack cb)
     {
         if (mMethod == null)
             mMethod = Method.GET;
@@ -64,7 +64,7 @@ public class ApiRequestBase<RE , RS> {
         commRequestWithRsp(mMethod , mUrl , mRequest , mRspClass , cb);
     }
 
-    private  <T , RR > void commRequestWithRsp(int m , String url , T req , Class<RR> clazz ,ResponseCallBack cb)
+    private  <T , RR > void commRequestWithRsp(int m , String url , T req , Class<RR> clazz , IResponseCallBack cb)
     {
         // Request a string response from the provided URL.
         GeneticReq<T , RR> geneticReq = new GeneticReq<T , RR>

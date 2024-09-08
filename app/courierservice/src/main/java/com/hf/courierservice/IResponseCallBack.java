@@ -6,7 +6,7 @@ package com.hf.courierservice;
  * @author jvtang
  * @since 2024-08-21
  */
-public interface ResponseCallBack<T> {
+public interface IResponseCallBack<T> {
         void onComplete(Result<T> result);
         void onFail(Exception result);
 }

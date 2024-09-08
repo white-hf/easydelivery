@@ -1,12 +1,19 @@
 package com.hf.easydelivery.view;
 
+import static com.hf.easydelivery.Constants.ITEM_CURRENT_BATCH_ID;
+
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.os.Bundle;
 
+import android.os.LocaleList;
+import android.util.DisplayMetrics;
 import android.util.Log;
 
 
@@ -17,9 +24,11 @@ import android.widget.Spinner;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 import com.hf.easydelivery.R;
+import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.map.MapActivity;
 
 import java.util.ArrayList;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -65,7 +74,6 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-
     private void initSystemOperation()
     {
         AppCompatButton btn_systemOperation = (AppCompatButton)findViewById(R.id.btn_cacheOrders);
@@ -78,7 +86,6 @@ public class MainActivity extends AppCompatActivity {
 
         mSystemOperationDialog = new AlertDialog.Builder(this);
 
-        mSystemOperationDialog.setTitle(R.string.operation_choose);
         final String[] opertionsArray = new String[] {"已派送包裹查询"};
 
         final int selectedIndex[] = { 0 };

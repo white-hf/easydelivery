@@ -1,6 +1,6 @@
 package com.hf.democourier.response;
 
-import com.hf.courierservice.ResponseCallBack;
+import com.hf.courierservice.IResponseCallBack;
 import com.hf.courierservice.Result;
 import com.hf.courierservice.apihelper.TaskBase;
 
@@ -39,7 +39,7 @@ public class AppLoginRsp implements TaskBase<String> {
     }
 
     @Override
-    public void doIt(ResponseCallBack<String> cb) {
+    public void doIt(IResponseCallBack<String> cb) {
         if (this.getRspCode().equalsIgnoreCase("SUCCESS")) {
 
             //Get token from response,....

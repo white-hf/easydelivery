@@ -35,12 +35,14 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.MapsInitializer;
 import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.Projection;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 
 
+import com.google.android.gms.maps.model.VisibleRegion;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.maps.android.clustering.Cluster;
 import com.google.maps.android.clustering.ClusterItem;
@@ -71,6 +73,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
     private MapView mapView;
     private TextView txtViewDeliverySummary;
     private GoogleMap googleMap;
+    private Projection mProjection;
 
     private ClusterManager<DeliveryInfo> clusterManager;
 
@@ -208,34 +211,6 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
         return ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
     }
 
-
-    void test() {
-        ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo().clear();
-        LatLng centerLocation = new LatLng(37.7749, -122.4194); // 旧金山的经纬度
-        googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(centerLocation, 10));
-        // Set some lat/lng coordinates to start with.
-
-        // Add ten cluster items in close proximity, for purposes of this example.
-        for (int i = 0; i < 10; i++) {
-            double lat = 37.7749 + i * 0.01;
-            double lng = -122.4194 + i * 0.01;
-            DeliveryInfo offsetItem = new DeliveryInfo();
-            offsetItem.setLatitude(lat);
-            offsetItem.setLongitude(lng);
-            offsetItem.setRouteNumber("Title " + i);
-            offsetItem.setName("Snippet " + i);
-            offsetItem.setOrderId((long) (100 + i));
-            offsetItem.setOrderSn("Tracking " + i);
-            offsetItem.setAddress("Address " + i);
-
-            clusterManager.addItem(offsetItem);
-
-            ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo().add(offsetItem);
-        }
-
-        clusterManager.cluster();
-    }
-
     private String extractApartmentNumber(String address) {
         Utils.AddressInfo addressInfo = Utils.extractApartmentAndStreetNumber(address);
         return addressInfo.getApartmentNumber();
@@ -302,6 +277,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
             if (firstMarker == null) {
                 firstMarker = new LatLng(info.getLatitude(), info.getLongitude());
+                mProjection = googleMap.getProjection();
             }
         }
 
@@ -549,6 +525,20 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
                 ResourceMgr.getInstance().getPendingPackagesMgr().size()));
     }
 
+    private void keepCentered(Location location)
+    {
+        //if current position will be out of map view, zoom to current position
+        if (mProjection == null)
+            mProjection = googleMap.getProjection();
+        VisibleRegion visibleRegion = mProjection.getVisibleRegion();
+
+        LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+        if (!visibleRegion.latLngBounds.contains(latLng)) {
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, DEFAULT_ZOOM_LEVEL));
+            mProjection = googleMap.getProjection();
+        }
+    }
+
     public void removeThumbnail(int index) {
         mCameraFragment.removeThumbnail(index);
     }
@@ -563,5 +553,7 @@ public class MapActivity extends AppCompatActivity implements Subscriber, OnMapR
 
             mLastLocation = location;
         }
+
+        keepCentered(location);
     }
 }

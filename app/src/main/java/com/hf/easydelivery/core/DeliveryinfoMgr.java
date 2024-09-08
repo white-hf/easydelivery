@@ -11,7 +11,7 @@ import com.hf.easydelivery.event.Subscriber;
 
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.courierservice.bean.DeliveringListData;
-import com.hf.courierservice.ResponseCallBack;
+import com.hf.courierservice.IResponseCallBack;
 import com.hf.courierservice.Result;
 import com.hf.easydelivery.api.GetPackageListRspCb;
 import com.hf.easydelivery.dao.DeliveryInfo;
@@ -162,7 +162,7 @@ public class DeliveryinfoMgr implements Subscriber {
      * Load the delivery info from the database and save it to the local cache.
      * It should be called every time the app is started.
      */
-    public void loadDeliveryInfo(ResponseCallBack<List<DeliveryInfo>> callBack){
+    public void loadDeliveryInfo(IResponseCallBack<List<DeliveryInfo>> callBack){
         Short driverId = ResourceMgr.getInstance().getLoginInfo().loginId;
 
         if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {

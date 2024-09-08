@@ -1,6 +1,6 @@
 package com.hf.democourier.response;
 
-import com.hf.courierservice.ResponseCallBack;
+import com.hf.courierservice.IResponseCallBack;
 import com.hf.courierservice.Result;
 import com.hf.courierservice.apihelper.TaskBase;
 import com.hf.courierservice.bean.DeliveringListData;
@@ -42,7 +42,7 @@ public class GetDeliveringListRsp implements TaskBase<List<DeliveringListData>> 
     }
 
     @Override
-    public void doIt(ResponseCallBack<List<DeliveringListData>> cb) {
+    public void doIt(IResponseCallBack<List<DeliveringListData>> cb) {
         List<DeliveringListData> lst = this.getRspData();
 
         //do something here

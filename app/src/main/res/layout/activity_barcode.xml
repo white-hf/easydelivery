@@ -17,29 +17,28 @@
             android:id="@+id/btnLogin"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="登录" />
+            android:text="@string/str_login" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_setting"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="10dp"
-            android:background="@android:color/background_dark"
-            android:text="设置"
             android:textColor="@android:color/white"
             android:visibility="visible"
+            android:text="@string/str_setting"
             tools:visibility="visible" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_cacheOrders"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="管理操作" />
+            android:text="@string/management" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_delivery"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="配送" />
+            android:text="@string/delivery" />
 
 </LinearLayout>

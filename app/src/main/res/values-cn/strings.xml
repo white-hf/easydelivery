@@ -1,0 +1,65 @@
+<resources>
+    <string name="app_name">易派送</string>
+    <string name="action_settings">设置</string>
+    <string name="action_scan">扫描</string>
+    <string name="action_load_orders">加载扫描数据</string>
+    <string name="action_success">操作成功</string>
+    <string name="action_failure">操作失败</string>
+    <string name="action_req_failure">请求服务失败</string>
+    <string name="action_svr_failure">服务返回失败</string>
+    <string name="action_need_login">请先登录</string>
+    <string name="default_scanned_location">哈利法克斯仓库</string>
+    <integer name="default_warehouse_id">17</integer>
+    <string name="str_login_success">登录成功</string>
+    <string name="str_login_failure">登录失败</string>
+    <string name="str_req_timeout">请求超时</string>
+    <string name="version">1.0_0406_1</string>
+    <string name="title_activity_settings">设置窗口</string>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">基础配置</string>
+    <string name="sync_header">数据同步</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">批次号</string>
+    <string name="another_driver_id">混合堆司机号</string>
+    <string name="driver_id">司机号</string>
+    <string name="transfer_package_id">单号分配</string>
+    <string name="operation_completion">操作完成</string>
+
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">自动保存</string>
+    <string name="commit_title">自动提交</string>
+    <string name="view_list">列表显示</string>
+    <string name="view_map">地图显示</string>
+
+
+    <string name="cancel">取消</string>
+    <string name="ok">派送</string>
+    <string name="takephoto">拍照</string>
+    <string name="route_id">包裹号：</string>
+    <string name="unit_id">单元号：</string>
+
+    <string name="take_picture">请至少拍2张照片.</string>
+    <string name="delivering_d_pending_d">配送中:%d,上传中:%d</string>
+    <string name="full_image">全尺寸图片</string>
+    <string name="take_picture_full">已拍足够照片.</string>
+    <string name="search">搜索</string>
+    <string name="upload_successfully">上传包裹 %s 数据成功</string>
+    <string name="picture_saved">拍照已保存</string>
+    <string name="phone">电话</string>
+    <string name="sms">短信</string>
+    <string name="save_successfully">保存包裹 %s 数据成功</string>
+    <string name="login_tip">请先登录</string>
+    <string name="refreshing_data">数据获取中</string>
+    <string name="package_id">包裹号</string>
+    <string name="swith_cn">中文</string>
+    <string name="str_login">用户登录</string>
+    <string name="str_confirm">确定</string>
+    <string name="str_cancel">取消</string>
+    <string name="str_login_tips">请输入用户名和密码</string>
+    <string name="management">管理操作</string>
+    <string name="delivery">配送</string>
+    <string name="str_setting">设置</string>
+</resources>

@@ -2,7 +2,7 @@ package com.hf.easydelivery.api;
 
 import android.widget.Toast;
 
-import com.hf.courierservice.ResponseCallBack;
+import com.hf.courierservice.IResponseCallBack;
 import com.hf.courierservice.Result;
 import com.hf.easydelivery.event.Event;
 import com.hf.easydelivery.event.EventConstant;
@@ -10,7 +10,7 @@ import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.common.FileLog;
 
-public class LoginResponseCb implements ResponseCallBack<String> {
+public class LoginResponseCb implements IResponseCallBack<String> {
     @Override
     public void onComplete(Result<String> result) {
         Result.Success<String> success = (Result.Success<String>) result;

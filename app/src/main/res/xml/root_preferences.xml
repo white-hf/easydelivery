@@ -1,9 +1,13 @@
-<PreferenceScreen
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory
         app:title="@string/messages_header">
 
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="switch_cn"
+            android:title="@string/swith_cn"/>
         <EditTextPreference
             app:defaultValue="HASUB-2023"
             app:key="current_batch_id"
@@ -18,16 +22,6 @@
         <EditTextPreference
             app:key="driver_id"
             app:title="@string/driver_id"
-            app:useSimpleSummaryProvider="true"/>
-
-        <EditTextPreference
-            app:key="syn_orders_id"
-            app:title="@string/syn_orders_id"
-            app:useSimpleSummaryProvider="true"/>
-
-        <EditTextPreference
-            app:key="transfer_package_id"
-            app:title="@string/transfer_package_id"
             app:useSimpleSummaryProvider="true"/>
 
 

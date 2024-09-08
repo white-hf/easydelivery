@@ -2,13 +2,13 @@ package com.hf.easydelivery.api;
 
 import android.widget.Toast;
 
-import com.hf.courierservice.ResponseCallBack;
+import com.hf.courierservice.IResponseCallBack;
 import com.hf.courierservice.Result;
 import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.common.FileLog;
 
-public class ResponseCallBackBase<T> implements ResponseCallBack<T> {
+public class ResponseCallBackBase<T> implements IResponseCallBack<T> {
 
     @Override
     public void onComplete(Result<T> result) {

@@ -3,7 +3,7 @@ package com.hf.democourier;
 import android.content.Context;
 
 import com.hf.courierservice.ICourierService;
-import com.hf.courierservice.ResponseCallBack;
+import com.hf.courierservice.IResponseCallBack;
 import com.hf.courierservice.apihelper.ApiRequestBase;
 import com.hf.courierservice.apihelper.MultipartUploader;
 import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
@@ -43,7 +43,7 @@ public class CourierService implements ICourierService {
     }
 
     @Override
-    public void login(@NotNull String username, @NotNull String password, ResponseCallBack<String> callback) {
+    public void login(@NotNull String username, @NotNull String password, IResponseCallBack<String> callback) {
         AppLoginReq req = new AppLoginReq();
         req.setPwd(password);
         req.setUser(username);
@@ -53,14 +53,14 @@ public class CourierService implements ICourierService {
     }
 
     @Override
-    public void getPackageList(String userId , boolean bDelivered,ResponseCallBack<List<DeliveringListData>> callback) {
+    public void getPackageList(String userId , boolean bDelivered, IResponseCallBack<List<DeliveringListData>> callback) {
         NullReq req = new NullReq();
         GetDeliveryTaskApiRequest api = new GetDeliveryTaskApiRequest(req , userId, bDelivered);
         api.doApi(callback);
     }
 
     @Override
-    public boolean uploadDeliveredPackages(DeliveredUploadParams uploadInfo, ResponseCallBack<Void> callback) {
+    public boolean uploadDeliveredPackages(DeliveredUploadParams uploadInfo, IResponseCallBack<Void> callback) {
         String DELIVERED_API = "Your api url" + "delivery";
 
         DeliveredUploadParams params = new DeliveredUploadParams();

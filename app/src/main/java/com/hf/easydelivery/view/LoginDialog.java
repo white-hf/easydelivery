@@ -27,9 +27,7 @@ public class LoginDialog extends AlertDialog {
 
     public static AlertDialog init(Context mContext) {
         AlertDialog.Builder  dialog = new AlertDialog.Builder(mContext);
-        dialog.setTitle(R.string.str_login);
 
-        // 取得自定义View
         LayoutInflater layoutInflater = LayoutInflater.from(mContext);
         final View myLoginView = layoutInflater.inflate(
                 R.layout.my_login_layout, null);
