@@ -47,11 +47,10 @@ During my experience as a part-time package delivery driver, I encountered signi
 
 ## How to Use the Project
 
-1. **Login**: Start by logging into the app using your courier service credentials.
-2. **Package List**: Once logged in, you'll see a list of packages assigned to you for delivery.
-3. **Offline Mode**: You can access and manage your deliveries even when offline. The app syncs data once the network is available.
-4. **Delivery Status**: Update the status of each delivery as you complete it.
-5. **Battery Optimization**: The app intelligently manages GPS updates to conserve battery life.
+1. **Implement courier module**: Implement your courier module by creating a new Android Library and implementing two interfaces, ICourierService and IResponseCallBack.
+2. **Modify gradle files**: First, Add "include ':app: your module name'" to settings.gradle, then add "implementation project(':app:your module name')" to build.gradle of app. 
+3. **Modify config.json**: Modify the value of the key 'courier' to your module name.
+4. **Add your Google Maps API key**: Add 'MAPS_API_KEY' to local.properties, the value should be your Google Maps API key.
 
 ## Future Enhancements
 
