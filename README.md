@@ -4,7 +4,7 @@
 
 ## Why I Created This Project
 
-During my experience as a part-time package delivery driver, I encountered significant challenges with the apps provided by courier companies. These apps often had the following issues:
+During my work developing applications for package delivery drivers, I encountered significant challenges with the apps provided by the head office. These apps often had the following issues:
 
 1. **Network Dependency**: The apps heavily relied on network connectivity, making numerous unnecessary backend API calls each time a UI was accessed. This caused slow operations and made the app unusable in areas with poor network coverage, such as inside buildings.
    
