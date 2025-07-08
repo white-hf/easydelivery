@@ -12,7 +12,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="账号：" />
+            android:text="@string/txt_account" />
 
         <EditText
             android:id="@+id/my_login_account_et"
@@ -30,7 +30,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="密码：" />
+            android:text="@string/txt_password" />
 
         <EditText
             android:id="@+id/my_login_password_et"
@@ -44,7 +44,8 @@
         android:id="@+id/spinner_location"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:entries="@array/login_location"/>
+        android:entries="@array/login_location"
+        android:visibility="invisible" />
 
 
 </LinearLayout>

@@ -20,13 +20,18 @@
             android:text="@string/str_login" />
 
         <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btn_delivery"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/delivery" />
+
+        <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_setting"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="10dp"
-            android:textColor="@android:color/white"
-            android:visibility="visible"
             android:text="@string/str_setting"
+            android:visibility="visible"
             tools:visibility="visible" />
 
         <androidx.appcompat.widget.AppCompatButton
@@ -35,10 +40,30 @@
             android:layout_height="wrap_content"
             android:text="@string/management" />
 
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btn_delivery"
+        <EditText
+            android:id="@+id/editTextTextMultiLine"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/delivery" />
+            android:autofillHints=""
+            android:ems="10"
+            android:gravity="start|top"
+            android:inputType="textMultiLine"
+            android:visibility="invisible"
+            tools:ignore="LabelFor" />
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+                <TextView
+                    android:id="@+id/textView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="52dp"
+                    android:text="@string/txt_company"
+                    android:textSize="16sp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    tools:layout_editor_absoluteX="45dp" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
 </LinearLayout>

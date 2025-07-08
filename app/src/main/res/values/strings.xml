@@ -64,5 +64,10 @@
     <string name="management">Management operation</string>
     <string name="delivery">Delivery</string>
     <string name="str_setting">Setting</string>
+    <string name="txt_password">Password</string>
+    <string name="txt_account">Driver ID</string>
+    <string name="txt_delivered_packages">Delivered Packages</string>
+    <string name="txt_company">      Developed by 3324959 NS LTD.</string>
+    <string name="txt_slogan">Easy delivery, happy working in Halifax</string>
 
 </resources>

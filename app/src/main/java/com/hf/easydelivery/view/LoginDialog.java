@@ -57,6 +57,8 @@ public class LoginDialog extends AlertDialog {
                             ResourceMgr.getInstance().getLoginInfo().loginName = name;
 
                             if (isNumeric(name)) {
+                                ResourceMgr.getInstance().getLoginInfo().loginId = Short.valueOf(name);
+
                                 ICourierService courierService = ResourceMgr.getInstance().getCourierService();
                                 assert courierService != null;
 

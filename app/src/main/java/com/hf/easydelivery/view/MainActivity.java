@@ -71,6 +71,7 @@ public class MainActivity extends AppCompatActivity {
 
 
         initSystemOperation();
+        mLoginDialog.show();
 
     }
 
@@ -86,7 +87,7 @@ public class MainActivity extends AppCompatActivity {
 
         mSystemOperationDialog = new AlertDialog.Builder(this);
 
-        final String[] opertionsArray = new String[] {"已派送包裹查询"};
+        final String[] opertionsArray = new String[] {getString(R.string.txt_delivered_packages)};
 
         final int selectedIndex[] = { 0 };
 

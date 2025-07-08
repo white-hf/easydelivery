@@ -3,6 +3,8 @@ package com.hf.easydelivery;
 import android.app.Application;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.content.res.Resources;
+import android.os.Build;
 import android.os.LocaleList;
 
 import java.util.Locale;
@@ -33,18 +35,24 @@ public class MyApplication extends Application {
 
     private void setLocale(Context c) {
         boolean bCn = ResourceMgr.getInstance().getBooleanProperty("switch_cn");
-        LocaleList locales;
+        Locale locale;
         if (!bCn)
         {
-            locales = new LocaleList(Locale.ENGLISH);
+            locale = new Locale("en");
         }
         else
-            locales = new LocaleList(Locale.CHINESE);
+            locale = new Locale("zh", "CN");
 
-        Configuration configuration = getResources().getConfiguration();
+        Locale.setDefault(locale);
+        Resources res = c.getResources();
+        Configuration config = new Configuration(res.getConfiguration());
 
-        configuration.setLocales(locales);
-        Context newContext = createConfigurationContext(configuration);
-        getResources().updateConfiguration(configuration, newContext.getResources().getDisplayMetrics());
+        if (Build.VERSION.SDK_INT >= 17) {
+            config.setLocale(locale);
+            c = c.createConfigurationContext(config);
+        } else {
+            config.locale = locale;
+            res.updateConfiguration(config, res.getDisplayMetrics());
+        }
     }
 }

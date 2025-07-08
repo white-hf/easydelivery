@@ -49,7 +49,7 @@ public class ResourceMgr {
     private Handler mMainHandler;
 
     static public class LoginInfo {
-        public String loginName = "0";
+        public String loginName = "";
         public Short loginId = 0;
         public String userToken = null;
         public String loginLocation = "Halifax Warehouse";
