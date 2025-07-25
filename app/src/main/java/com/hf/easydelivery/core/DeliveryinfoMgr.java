@@ -5,6 +5,9 @@ import static com.hf.easydelivery.Constants.ITEM_CURRENT_BATCH_ID;
 import android.util.Log;
 
 import com.hf.courierservice.ICourierService;
+import com.hf.courierservice.bean.ScanBatchReportData;
+import com.hf.easydelivery.common.FileLog;
+import com.hf.easydelivery.common.Utils;
 import com.hf.easydelivery.event.Event;
 import com.hf.easydelivery.event.EventConstant;
 import com.hf.easydelivery.event.Subscriber;
@@ -26,6 +29,12 @@ import java.util.List;
  * It is a key class for running without network.
  */
 public class DeliveryinfoMgr implements Subscriber {
+
+    public long getScanBatchId() {
+        return scanBatchId;
+    }
+
+    private long scanBatchId;
 
     static public class DistanceCalculator {
         private static final double EARTH_RADIUS = 6371e3; // in meters
@@ -69,6 +78,14 @@ public class DeliveryinfoMgr implements Subscriber {
         return listDeliveryInfo.stream().filter(pkg->pkg.getOrderId().equals(orderId)).findFirst().orElse(null);
     }
 
+    public final DeliveryInfo getByTrackingNo(String trackingNo) {
+        if (trackingNo == null || trackingNo.isEmpty())
+            return null;
+
+        return listDeliveryInfo.stream().filter(pkg->pkg.getOrderSn().equals(trackingNo)).findFirst().orElse(null);
+    }
+
+
     public final DeliveryInfo getByRouteId(String routeId) {
         if (routeId == null)
             return null;
@@ -89,7 +106,7 @@ public class DeliveryinfoMgr implements Subscriber {
     }
 
     public void clearAll() {
-        Short driverId = ResourceMgr.getInstance().getLoginInfo().loginId;
+        Short driverId = ResourceMgr.getInstance().getLoginInfo().loginId.shortValue();
         batchId = ResourceMgr.getInstance().getProperty(ITEM_CURRENT_BATCH_ID);
 
         if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
@@ -128,7 +145,7 @@ public class DeliveryinfoMgr implements Subscriber {
      */
     public void saveDeliveringListData(DeliveringListData d)
     {
-        Short driverId = ResourceMgr.getInstance().getLoginInfo().loginId;
+        Short driverId = ResourceMgr.getInstance().getLoginInfo().loginId.shortValue();
         if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
             return;
         }
@@ -163,7 +180,7 @@ public class DeliveryinfoMgr implements Subscriber {
      * It should be called every time the app is started.
      */
     public void loadDeliveryInfo(IResponseCallBack<List<DeliveryInfo>> callBack){
-        Short driverId = ResourceMgr.getInstance().getLoginInfo().loginId;
+        Short driverId = ResourceMgr.getInstance().getLoginInfo().loginId.shortValue();
 
         if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
             return;
@@ -215,12 +232,42 @@ public class DeliveryinfoMgr implements Subscriber {
 
         return nearestPackage;
     }
+
+    public void fechScanBatchId()
+    {
+        ICourierService courierService = ResourceMgr.getInstance().getCourierService();
+        assert courierService != null;
+
+        final ResourceMgr.LoginInfo loginInfo = ResourceMgr.getInstance().getLoginInfo();
+        courierService.fetchDriverReport(loginInfo.warehouseId, loginInfo.loginId, Utils.getCurrentDate(), new IResponseCallBack<List<ScanBatchReportData>>() {
+                    @Override
+                    public void onComplete(Result<List<ScanBatchReportData>> result) {
+                        Result.Success<List<ScanBatchReportData>> su = (Result.Success<List<ScanBatchReportData>>)result;
+                        List<ScanBatchReportData> lst = su.data;
+                        if (!lst.isEmpty())
+                        {
+                            scanBatchId = lst.get(0).getScan_batch_id();
+                        }else {
+                            FileLog.getInstance().writeLog("Can't fetch the scanbatchid for " + loginInfo.loginId);
+                        }
+                    }
+
+                    @Override
+                    public void onFail(Exception result) {
+                        FileLog.getInstance().writeLog("Failed to fetch the scanbatchid for " + loginInfo.loginId + result.getMessage());
+                    }
+                }
+        );
+    }
+
     /**
      * called when user login
      * @param event
      */
     @Override
     public void receive(Event event) {
+
+        fechScanBatchId();
         getDeliveryInfo((String)event.getMessage() , true);
     }
 }

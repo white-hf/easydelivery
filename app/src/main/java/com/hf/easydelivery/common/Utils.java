@@ -6,15 +6,19 @@ import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import android.os.VibratorManager;
 import android.util.Log;
+import android.widget.Toast;
 
 import com.hf.easydelivery.Constants;
 import com.hf.easydelivery.MyApplication;
@@ -47,6 +51,11 @@ public class Utils {
     private static final Pattern POSTAL_CODE_PATTERN = Pattern.compile("\\b\\d{1,3}\\s?\\w{1,2}\\s?\\d{1,3}\\b");
     private static final Pattern WORD_PATTERN = Pattern.compile("\\b[a-zA-Z]+\\b");
 
+
+    public String getTodayString() {
+        return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                .format(new Date());
+    }
 
     public static AddressInfo extractApartmentAndStreetNumber(String strAddress) {
         if (strAddress == null || strAddress.isEmpty()) {
@@ -166,6 +175,12 @@ public class Utils {
     public static String getCurrentDate() {
         SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd");
         return df.format(new Date());
+    }
+
+    public static void showOnUi(Context context, String msg) {
+        new Handler(Looper.getMainLooper()).post(() ->
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+        );
     }
 
 }

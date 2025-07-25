@@ -12,12 +12,14 @@ import com.hf.courierservice.apihelper.TaskBase;
 import com.hf.easydelivery.dao.AppDatabase;
 import com.hf.easydelivery.dao.DeliveredPackagesDao;
 import com.hf.easydelivery.dao.DeliveryInfoDao;
+import com.hf.easydelivery.dao.ScanRecordDao;
 
 import java.util.Objects;
 
 public class MyDb {
     private DeliveryInfoDao deliveryInfoDao;
     private DeliveredPackagesDao deliveredPackagesDao;
+    private ScanRecordDao scanRecordDao;
     private Handler mHandler;
 
     public Handler getHandler() {
@@ -48,6 +50,7 @@ public class MyDb {
 
         deliveryInfoDao  = db.deliveryInfoDao();
         deliveredPackagesDao = db.deliveredPackagesDao();
+        scanRecordDao = db.scanRecordDao();
 
         dbLooperThread.start();
     }
@@ -58,5 +61,9 @@ public class MyDb {
 
     public DeliveredPackagesDao getDeliveredPackagesDao() {
         return deliveredPackagesDao;
+    }
+
+    public ScanRecordDao getScanRecordDao() {
+        return scanRecordDao;
     }
 }

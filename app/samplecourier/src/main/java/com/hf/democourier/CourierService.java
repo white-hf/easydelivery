@@ -9,6 +9,8 @@ import com.hf.courierservice.apihelper.MultipartUploader;
 import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
 import com.hf.courierservice.bean.DeliveredUploadParams;
 import com.hf.courierservice.bean.DeliveringListData;
+import com.hf.courierservice.bean.ParcelScanData;
+import com.hf.courierservice.bean.ScanBatchReportData;
 import com.hf.democourier.request.AppLoginReq;
 import com.hf.democourier.request.NullReq;
 import com.hf.democourier.request.GetDeliveryTaskApiRequest;
@@ -89,5 +91,22 @@ public class CourierService implements ICourierService {
         params.setImageFiles(uploadInfo.getImageFiles());
         Callback cb = new UploadCallback(callback);
         return  MultipartUploader.upload(params,cb);
+    }
+
+    /**
+     * Set a package to scanned status. It is the most popular drivers' operation.
+     *
+     * @param trackingNo
+     * @param batchId
+     * @param callback
+     */
+    @Override
+    public void scan(String trackingNo, Long batchId, IResponseCallBack<ParcelScanData> callback) {
+
+    }
+
+    @Override
+    public void fetchDriverReport(int warehouse, int driverId, String date, IResponseCallBack<List<ScanBatchReportData>> callback) {
+
     }
 }

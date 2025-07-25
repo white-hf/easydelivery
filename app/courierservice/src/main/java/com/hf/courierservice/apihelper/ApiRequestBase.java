@@ -10,6 +10,7 @@ import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.Volley;
 import com.hf.courierservice.IResponseCallBack;
+import com.hf.courierservice.apihelper.exception.RequestParamException;
 import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
 
 import java.net.HttpURLConnection;
@@ -81,8 +82,13 @@ public class ApiRequestBase<RE , RS> {
                 }, new Response.ErrorListener() {
                     @Override
                     public void onErrorResponse(VolleyError error) {
+
+
                         if (error.networkResponse != null && error.networkResponse.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
                             cb.onFail(new UnAuthorizedException());
+                        }else if (error.networkResponse != null && error.networkResponse.statusCode == HttpURLConnection.HTTP_BAD_REQUEST)
+                        {
+                            cb.onFail(new RequestParamException());
                         }
                         else {
                             cb.onFail(error);

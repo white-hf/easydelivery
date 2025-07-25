@@ -186,6 +186,15 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
         return name;
     }
 
+    /**
+     * The z-index of this marker.
+     */
+    @Nullable
+    @Override
+    public Float getZIndex() {
+        return 0f;
+    }
+
     public Short getDriverId() {
         return driverId;
     }

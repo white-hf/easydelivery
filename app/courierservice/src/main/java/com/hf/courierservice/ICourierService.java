@@ -4,6 +4,8 @@ import android.content.Context;
 
 import com.hf.courierservice.bean.DeliveredUploadParams;
 import com.hf.courierservice.bean.DeliveringListData;
+import com.hf.courierservice.bean.ParcelScanData;
+import com.hf.courierservice.bean.ScanBatchReportData;
 
 import java.util.List;
 
@@ -51,4 +53,16 @@ public interface ICourierService {
      * @param callback
      */
     boolean uploadDeliveredPackages(DeliveredUploadParams uploadInfo, IResponseCallBack<Void> callback);
+
+    /**
+     * Set a package to scanned status. It is the most popular drivers' operation.
+     * @param trackingNo
+     * @param batchId
+     * @param callback
+     */
+    void scan(String  trackingNo, Long batchId , IResponseCallBack<ParcelScanData> callback);
+
+    void fetchDriverReport(int warehouse, int driverId, String date , IResponseCallBack<List<ScanBatchReportData>> callback);
+
+
 }

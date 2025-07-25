@@ -20,6 +20,12 @@
             android:text="@string/str_login" />
 
         <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btn_scan"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/action_scan" />
+
+        <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_delivery"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

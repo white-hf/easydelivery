@@ -3,7 +3,7 @@ package com.hf.easydelivery.view;
 import static com.hf.easydelivery.Constants.ITEM_CURRENT_BATCH_ID;
 
 import android.annotation.SuppressLint;
-import android.app.AlertDialog;
+import androidx.appcompat.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -11,7 +11,6 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Bundle;
-
 import android.os.LocaleList;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -64,6 +63,14 @@ public class MainActivity extends AppCompatActivity {
         AppCompatButton btn_delivery = findViewById(R.id.btn_delivery);
         btn_delivery.setOnClickListener((view)->{
             Intent intent = new Intent(getApplication(), MapActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            startActivity(intent);
+        });
+
+        AppCompatButton btn_scan = findViewById(R.id.btn_scan);
+        btn_scan.setOnClickListener((view)->{
+            Intent intent = new Intent(getApplication(), ScanActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
 
             startActivity(intent);

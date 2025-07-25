@@ -1,4 +1,8 @@
 <resources>
+    <style name="ScanToolbar.Title" parent="TextAppearance.Widget.AppCompat.Toolbar.Title">
+        <item name="android:textSize">18sp</item>           <!-- 比默认 20sp 略小 -->
+        <item name="android:textColor">#FFFFFF</item>       <!-- 白色，和深色背景对比 -->
+    </style>
 
     <style name="AppTheme.NoActionBar">
         <item name="windowActionBar">false</item>

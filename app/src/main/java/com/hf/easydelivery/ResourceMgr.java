@@ -50,7 +50,7 @@ public class ResourceMgr {
 
     static public class LoginInfo {
         public String loginName = "";
-        public Short loginId = 0;
+        public Integer loginId = 0;
         public String userToken = null;
         public String loginLocation = "Halifax Warehouse";
         public Integer warehouseId = 17;
@@ -99,8 +99,15 @@ public class ResourceMgr {
         mPendingPackagesMgr = new PendingPackagesMgr();
 
         mConfigurationManager = new ConfigurationManager(ctx , "config.json");
-        mCourierService = CourierServiceFactory.createCourierService();
-        mCourierService.init(ctx);
+
+        try {
+            mCourierService = CourierServiceFactory.createCourierService();
+            mCourierService.init(ctx);
+            
+        } catch (Exception e) {
+            Utils.showOnUi(ctx , ctx.getString(R.string.str_courierservice_failure));
+            throw new RuntimeException(e);
+        }
 
         mMainHandler = new Handler(Looper.getMainLooper());
         setBatchId();
