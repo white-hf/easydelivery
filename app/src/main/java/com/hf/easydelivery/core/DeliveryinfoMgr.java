@@ -23,6 +23,10 @@ import com.hf.easydelivery.dao.DeliveryInfoDao;
 import java.util.ArrayList;
 import java.util.List;
 
+import android.location.Location;
+import android.util.Pair;
+
+
 /**
  * This class manages the delivery info,including getting the delivery info from the server,
  * saving the delivery info to the database, and loading the delivery info from the database.
@@ -60,6 +64,36 @@ public class DeliveryinfoMgr implements Subscriber {
 
     public int size() {
         return listDeliveryInfo.size();
+    }
+
+
+// ...
+
+    /**
+     * Find the nearest package to the given location, return Pair<DeliveryInfo, distance>.
+     * @param loc Current location
+     * @param lastLocation 可选，可用于速度/方向判断，这里只用loc
+     * @param minDistance 最小距离，单位米（只返回大于此距离的包裹）
+     * @return Pair<DeliveryInfo, Double> 最近包裹和距离（单位米），没有则返回 (null, null)
+     */
+    public Pair<DeliveryInfo, Double> findNearestPackage(Location loc, Location lastLocation, double minDistance) {
+        if (loc == null) return new Pair<>(null, null);
+
+        DeliveryInfo nearest = null;
+        double nearestDistance = Double.MAX_VALUE;
+
+        for (DeliveryInfo deliveryInfo : listDeliveryInfo) {
+            double distance = DistanceCalculator.haversine(
+                    loc.getLatitude(), loc.getLongitude(),
+                    deliveryInfo.getLatitude(), deliveryInfo.getLongitude()
+            );
+            if (distance > minDistance && distance < nearestDistance) {
+                nearest = deliveryInfo;
+                nearestDistance = distance;
+            }
+        }
+        if (nearest == null) return new Pair<>(null, null);
+        return new Pair<>(nearest, nearestDistance);
     }
 
     private ArrayList<DeliveryInfo> listDeliveryInfo;

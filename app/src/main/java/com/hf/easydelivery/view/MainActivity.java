@@ -1,157 +1,67 @@
 package com.hf.easydelivery.view;
 
-import static com.hf.easydelivery.Constants.ITEM_CURRENT_BATCH_ID;
 
-import android.annotation.SuppressLint;
-import androidx.appcompat.app.AlertDialog;
-import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
-
-import android.content.res.Configuration;
-import android.content.res.Resources;
+import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.os.LocaleList;
-import android.util.DisplayMetrics;
-import android.util.Log;
-
-
-import android.view.View;
-import android.widget.EditText;
-import android.widget.ListView;
-import android.widget.Spinner;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.AppCompatButton;
+import androidx.fragment.app.Fragment;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
-import com.hf.easydelivery.map.MapActivity;
-
-import java.util.ArrayList;
-import java.util.Locale;
+import com.hf.easydelivery.map.MapFragment;
 
 public class MainActivity extends AppCompatActivity {
+    private BottomNavigationView bottomNav;
 
-    AppCompatButton  btn_order_detail;
-    private EditText mEditText;
-    private EditText mPickId;
-    private Spinner spinner;
-
-    private final ArrayList<String> mSearchOrder = new ArrayList<>();
-    
-    private ListView mLvSearchOrder;
-
-    private AlertDialog mLoginDialog;
-    private AlertDialog.Builder  mSystemOperationDialog;
-
-
-    @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
-        setContentView(R.layout.activity_barcode);
-
-        initLoginDialog();
-
-
-        AppCompatButton btn_Setting = findViewById(R.id.btn_setting);
-        btn_Setting.setOnClickListener((view)->{
-                Intent intent = new Intent(getApplication(), SettingsActivity.class);
-                startActivity(intent);
-            });
-
-        AppCompatButton btn_delivery = findViewById(R.id.btn_delivery);
-        btn_delivery.setOnClickListener((view)->{
-            Intent intent = new Intent(getApplication(), MapActivity.class);
-            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-
+        // 1. 检查登录态
+        if (!isLoggedIn()) {
+            // 跳转登录页
+            Intent intent = new Intent(this, LoginActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK); // 禁止回退到主页
             startActivity(intent);
-        });
+            // 可选：return;（避免主页面初始化被误执行）
+        }
 
-        AppCompatButton btn_scan = findViewById(R.id.btn_scan);
-        btn_scan.setOnClickListener((view)->{
-            Intent intent = new Intent(getApplication(), ScanActivity.class);
-            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        bottomNav = findViewById(R.id.bottom_nav);
 
-            startActivity(intent);
-        });
+        // 默认显示送件
+        if (savedInstanceState == null) {
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.container, new MapFragment())
+                    .commit();
+        }
 
+        bottomNav.setOnItemSelectedListener(item -> {
+            Fragment selected = null; // Initialize selected to null
+            int itemId = item.getItemId();
 
-        initSystemOperation();
-        mLoginDialog.show();
-
-    }
-
-    private void initSystemOperation()
-    {
-        AppCompatButton btn_systemOperation = (AppCompatButton)findViewById(R.id.btn_cacheOrders);
-        btn_systemOperation.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mSystemOperationDialog.show();
-             }
-        });
-
-        mSystemOperationDialog = new AlertDialog.Builder(this);
-
-        final String[] opertionsArray = new String[] {getString(R.string.txt_delivered_packages)};
-
-        final int selectedIndex[] = { 0 };
-
-        mSystemOperationDialog.setSingleChoiceItems(opertionsArray, 0,
-                (dialog,which)->{
-                        selectedIndex[0] = which;
-                    });
-
-        mSystemOperationDialog.setPositiveButton(R.string.str_confirm,
-                new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        switch (selectedIndex[0])
-                        {
-                            case 0:
-                                showDeliveredPackages();
-                                break;
-                            default:
-                                break;
-                        }
-
-                        dialog.dismiss();
-                    }
-                });
-
-        mSystemOperationDialog.setNegativeButton(R.string.str_cancel,
-                new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        dialog.dismiss();
-                    }
-                });
-    }
-
-    private void initLoginDialog() {
-        AppCompatButton btn_login = (AppCompatButton)findViewById(R.id.btnLogin);
-        btn_login.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mLoginDialog.show();
+            if (itemId == R.id.nav_deliver) {
+                selected = new MapFragment();
+            } else if (itemId == R.id.nav_scan) {
+                selected = new ScanFragment();
+            } else if (itemId == R.id.nav_me) {
+                selected = new MeFragment();
             }
+
+            if (selected != null) {
+                getSupportFragmentManager().beginTransaction()
+                        .replace(R.id.container, selected)
+                        .commit();
+                return true;
+            }
+            return false;
         });
-
-        mLoginDialog = LoginDialog.init(this);
     }
-    private void showDeliveredPackages() {
-        PackageListFragment packageListFragment = new PackageListFragment();
-        getSupportFragmentManager().beginTransaction()
-                .add(android.R.id.content, packageListFragment)
-                .addToBackStack(null)
-                .commit();
-    }
+    // 判断是否已登录（可自定义token规则）
+    private boolean isLoggedIn() {
+        return  ResourceMgr.getInstance().getLoginInfo().bIsLoggedIn;
 
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        Log.d("debug", "onResume()");
     }
 }

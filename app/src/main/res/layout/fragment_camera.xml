@@ -1,105 +1,249 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+    Drawable resources to create in res/drawable:
+    - bg_circle_dark.xml: 56 dp circle, fill #222222, alpha 0.75, <corners android:radius="28dp" />.
+    - bg_circle_primary.xml: 72 dp circle, fill @color/colorPrimary, <corners android:radius="36dp" />.
+-->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp"
-    android:background="@android:color/white">
+    android:background="@android:color/black"
+    android:clickable="true"
+    android:focusable="true">
 
-    <!-- 拍照镜头界面 -->
-    <TextView
-        android:id="@+id/orderInfo_textview"
-        android:layout_width="match_parent"
-        android:layout_height="32dp"
-        android:textSize="14sp"
-        android:textStyle="bold" />
-
-    <FrameLayout
-        android:id="@+id/camera_preview"
-        android:layout_width="wrap_content"
-        android:layout_height="0dp"
-        android:layout_gravity="center"
-        android:layout_weight="2"
-        android:layout_marginTop="16dp"
-        android:layout_marginBottom="16dp"
-        android:background="@android:color/darker_gray"
-        android:minWidth="200dp"
-        android:minHeight="200dp" />
-
-    <!-- 拍照按钮 -->
-    <Button
-        android:id="@+id/capture_button"
-        android:layout_width="wrap_content"
+    <!-- 1. 顶部 infoBar -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/info_bar"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:text="@string/takephoto"
-        android:layout_marginTop="16dp"
-        android:layout_marginBottom="16dp" />
-
-    <!-- Cancel 和 OK 按钮 -->
-    <LinearLayout
-        style="?android:attr/buttonBarStyle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_gravity="center">
-
-        <Button
-            android:id="@+id/cancel_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginBottom="16dp"
-            android:layout_weight="1"
-            android:text="@string/cancel" />
-
-        <Button
-            android:id="@+id/sms_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginBottom="16dp"
-            android:layout_weight="1"
-            android:text="@string/sms" />
-
-        <Button
-            android:id="@+id/phone_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginBottom="16dp"
-            android:layout_weight="1"
-            android:text="@string/phone" />
-
-        <Button
-            android:id="@+id/ok_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/ok"
-            android:layout_marginStart="8dp"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="16dp" />
-
-    </LinearLayout>
-
-    <!-- 照片缩略图列表 -->
-    <HorizontalScrollView
-        android:id="@+id/thumbnail_scroll"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:scrollbars="none"
-        android:layout_marginBottom="16dp">
+        app:cardCornerRadius="20dp"
+        app:cardElevation="8dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="24dp"
+        android:layout_marginStart="18dp"
+        android:layout_marginEnd="18dp"
+        android:backgroundTint="#F5F5F5">
 
         <LinearLayout
-            android:id="@+id/thumbnail_container"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:orientation="horizontal" />
-    </HorizontalScrollView>
+            android:orientation="horizontal"
+            android:padding="12dp"
+            android:gravity="center_vertical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
 
-</LinearLayout>
+            <ImageButton
+                android:id="@+id/cancel_button"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:tint="@android:color/black"
+                android:contentDescription="@android:string/cancel"
+                android:layout_marginEnd="12dp"/>
+
+            <TextView
+                android:id="@+id/tv_route_number"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="@android:color/black"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginStart="12dp">
+
+                <TextView android:id="@+id/tv_tracking_number" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/tv_customer_name" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/tv_unit_number" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/tv_address" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- 2. Camera preview -->
+    <FrameLayout
+        android:id="@+id/camera_preview"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@id/info_bar"
+        app:layout_constraintBottom_toTopOf="@id/thumb_bar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="@android:color/black"/>
+
+    <!-- 3. 缩略图条 thumbBar -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/thumb_bar"
+        android:layout_width="0dp"
+        android:layout_height="72dp"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="4dp"
+        app:layout_constraintTop_toBottomOf="@id/camera_preview"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/shutter_bar"
+        android:layout_marginStart="18dp"
+        android:layout_marginEnd="18dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:backgroundTint="#EDEDED">
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="8dp"
+            android:scrollbars="none">
+            <LinearLayout
+                android:id="@+id/thumbnail_container"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"/>
+        </HorizontalScrollView>
+    </androidx.cardview.widget.CardView>
+
+    <!-- 4. 快门栏 -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/shutter_bar"
+        android:layout_width="0dp"
+        android:layout_height="92dp"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="6dp"
+        android:layout_marginStart="18dp"
+        android:layout_marginEnd="18dp"
+        android:layout_marginBottom="6dp"
+        android:backgroundTint="#1E1E1E"
+        app:layout_constraintBottom_toTopOf="@id/action_bar2"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <ImageButton
+                android:id="@+id/gallery_button"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="@drawable/bg_circle_dark"
+                android:scaleType="centerInside"
+                android:tint="@android:color/white"
+                android:gravity="center"
+                android:src="@drawable/ic_gallery"
+                app:srcCompat="@drawable/ic_gallery" />
+
+            <ImageButton
+                android:id="@+id/shutter_button"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:background="@drawable/bg_circle_primary"
+                android:scaleType="centerInside"
+                android:tint="@android:color/white"
+                android:gravity="center"
+                android:src="@drawable/ic_shutter"
+                app:srcCompat="@drawable/ic_shutter"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp" />
+
+            <ImageButton
+                android:id="@+id/retake_button"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="@drawable/bg_circle_dark"
+                android:scaleType="centerInside"
+                android:tint="@android:color/white"
+                android:gravity="center"
+                android:src="@drawable/ic_retake"
+                app:srcCompat="@drawable/ic_retake" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- 5. 底部操作栏：浅灰 + 阴影 -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/action_bar2"
+        android:layout_width="0dp"
+        android:layout_height="62dp"
+        android:layout_marginBottom="12dp"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="6dp"
+        android:backgroundTint="#1E1E1E"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <!-- 短信 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/sms_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="短信"
+                android:textSize="14sp"
+                android:textColor="@android:color/white"
+                app:icon="@drawable/ic_sms"
+                app:iconTint="@android:color/white"
+                app:backgroundTint="@android:color/transparent"/>
+
+            <!-- 拨号 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/phone_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="拨号"
+                android:textSize="14sp"
+                android:textColor="@android:color/white"
+                app:icon="@drawable/ic_phone"
+                app:iconTint="@android:color/white"
+                app:backgroundTint="@android:color/transparent"/>
+
+            <!-- 失败 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/fail_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="失败"
+                android:textSize="14sp"
+                android:textColor="@android:color/white"
+                app:icon="@drawable/ic_fail"
+                app:iconTint="@android:color/white"
+                app:backgroundTint="@android:color/transparent"/>
+
+            <!-- 完成 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/ok_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="完成"
+                android:textSize="14sp"
+                android:textColor="@android:color/white"
+                app:icon="@drawable/ic_done"
+                app:iconTint="@android:color/white"
+                app:backgroundTint="@android:color/transparent"/>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+</androidx.constraintlayout.widget.ConstraintLayout>

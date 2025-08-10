@@ -1,3 +1,15 @@
+/**
+ * SmartLocationManager 主要逻辑：
+ * 1. 连续/高精度定位：根据司机运动状态（静止、步行、慢车、快车）动态调整定位间隔与精度；
+ * 2. Burst 模式：当车辆靠近未完成派送包裹时，自动进入高频定位模式，以保证精确度，持续一定时长后恢复常规定位；
+ * 3. 位置平滑：使用指数平滑算法减少 GPS 抖动，提升定位稳定性；
+ * 4. 弱信号检测：当连续多次定位精度差（超出阈值）时，触发 onWeakSignal 回调提醒；
+ * 5. 省电策略：静止时切换到 Significant Location Change 更新模式，避免持续高耗电。
+ *
+ * 本类目标：在不影响司机拍照和派送核心操作的前提下，通过动态策略兼顾定位精度与电量消耗，
+ * 并结合运动状态和包裹位置智能切换定位模式，提升驾驶体验与里程效率。
+ */
+
 package com.hf.easydelivery.core;
 
 import android.Manifest;
@@ -12,6 +24,12 @@ import android.os.Looper;
 import android.util.Log;
 
 import androidx.core.app.ActivityCompat;
+import android.util.Pair;
+
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 
 import com.google.android.gms.location.ActivityRecognition;
 import com.google.android.gms.location.ActivityRecognitionClient;
@@ -26,6 +44,8 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
+import com.hf.easydelivery.ResourceMgr;
+import com.hf.easydelivery.dao.DeliveryInfo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +63,7 @@ public class SmartLocationManager {
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
     private Location lastLocation;
+    private Location lastSmoothedLocation;
     private float speed;
     private long lastUpdateTime;
     private MovementState currentState = MovementState.STATIONARY;
@@ -52,6 +73,27 @@ public class SmartLocationManager {
     private Runnable burstModeRunnable;
     private ActivityRecognitionClient activityRecognitionClient;
     private PendingIntent activityRecognitionPendingIntent;
+    private int weakSignalCount = 0;
+    private static final double SMOOTHING_FACTOR = 0.2;
+    private static final float WEAK_SIGNAL_THRESHOLD = 100f;
+
+    // === Heading (bearing) support via sensors ===
+    private SensorManager sensorManager;
+    private Sensor rotationVectorSensor;
+    private final float[] rotationMatrix = new float[9];
+    private final float[] orientationAngles = new float[3];
+    private float currentHeadingDegrees = Float.NaN; // 0..360, NaN if unknown
+    private int headingAccuracy = SensorManager.SENSOR_STATUS_UNRELIABLE;
+
+    // Keep a reference to remove only our burst runnable, not all callbacks
+    private Runnable burstModeRunnableRef;
+
+    // Low-pass for heading smoothing (0..1). Larger = quicker but noisier
+    private static final float HEADING_ALPHA = 0.2f;
+
+    public interface WeakSignalListener extends LocationUpdateListener {
+        void onWeakSignal();
+    }
 
     public enum MovementState {
         STATIONARY,
@@ -88,6 +130,11 @@ public class SmartLocationManager {
         activityRecognitionPendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         registerActivityTransitionUpdates();
+
+        sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
+        if (sensorManager != null) {
+            rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+        }
     }
 
     public void setLocationUpdateListener(LocationUpdateListener listener) {
@@ -113,17 +160,15 @@ public class SmartLocationManager {
         };
 
         // Set initial update request
-        requestLocationUpdates();
+        updateLocationParametersForState();
+        startHeadingUpdates();
     }
 
-    private void requestLocationUpdates() {
+    private void requestLocationUpdates(long interval, long minInterval) {
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // Handle the case where permission is not granted
             return;
         }
-
-        long interval = inBurstMode ? getBurstModeInterval() : getRecommendedUpdateInterval();
-        long minInterval = inBurstMode ? getBurstModeInterval() : getMinUpdateInterval();
 
         LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY)
                 .setIntervalMillis(interval)
@@ -135,18 +180,30 @@ public class SmartLocationManager {
                 Looper.getMainLooper());
     }
 
+    private void switchToSignificantChanges() {
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // Handle the case where permission is not granted
+            return;
+        }
+        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_PASSIVE)
+                .setIntervalMillis(60 * 1000) // 1 minute interval or as preferred
+                .build();
+
+        fusedLocationClient.requestLocationUpdates(locationRequest,
+                locationCallback,
+                Looper.getMainLooper());
+    }
+
     private void updateLocation(Location newLocation) {
-        if (lastLocation != null) {
+        // Prefer device-provided speed (m/s) if available; otherwise compute from distance/time
+        if (newLocation.hasSpeed()) {
+            speed = newLocation.getSpeed();
+        } else if (lastLocation != null) {
             float distance = lastLocation.distanceTo(newLocation);
             long timeDiff = newLocation.getTime() - lastUpdateTime;
-
-            if (timeDiff > 0) {
-                speed = (distance / timeDiff) * 1000; // Convert to meters per second
-            } else {
-                speed = 0; // Assume zero speed if time difference is zero
-            }
+            speed = (timeDiff > 0) ? (distance / (float) timeDiff) * 1000f : 0f; // m/s
         } else {
-            speed = 0; // Cannot calculate speed on first update
+            speed = 0f;
         }
 
         lastLocation = newLocation;
@@ -154,18 +211,46 @@ public class SmartLocationManager {
 
         boolean stateChanged = updateMovementState();
 
+        Location outputLoc;
+        if (lastSmoothedLocation != null) {
+            double lat = lastSmoothedLocation.getLatitude() + SMOOTHING_FACTOR * (newLocation.getLatitude() - lastSmoothedLocation.getLatitude());
+            double lon = lastSmoothedLocation.getLongitude() + SMOOTHING_FACTOR * (newLocation.getLongitude() - lastSmoothedLocation.getLongitude());
+            outputLoc = new Location(newLocation);
+            outputLoc.setLatitude(lat);
+            outputLoc.setLongitude(lon);
+        } else {
+            outputLoc = newLocation;
+        }
+        lastSmoothedLocation = outputLoc;
+
         if (listener != null) {
-            listener.onLocationUpdate(newLocation, currentState);
+            listener.onLocationUpdate(outputLoc, currentState);
         }
 
-        // If state changed or in burst mode, update location request
+        if (newLocation.getAccuracy() > WEAK_SIGNAL_THRESHOLD) {
+            weakSignalCount++;
+            if (weakSignalCount >= 3) {
+                weakSignalCount = 0;
+                if (listener instanceof WeakSignalListener) {
+                    ((WeakSignalListener) listener).onWeakSignal();
+                }
+            }
+        } else {
+            weakSignalCount = 0;
+        }
+
+        // If state changed or in burst mode, update location parameters
         if (stateChanged || inBurstMode) {
-            requestLocationUpdates();
+            updateLocationParametersForState();
         }
 
         // If state changed to non-stationary, exit burst mode
         if (stateChanged && currentState != MovementState.STATIONARY) {
             exitBurstMode();
+        }
+
+        if (lastSmoothedLocation != null) {
+            checkNearestPackageDistanceForBurst();
         }
     }
 
@@ -183,28 +268,46 @@ public class SmartLocationManager {
 
         if (newState != currentState) {
             currentState = newState;
-            if (currentState == MovementState.STATIONARY) {
-                enterBurstMode();
-            }
+            // Removed automatic enterBurstMode on STATIONARY to allow explicit burst mode or distance-based triggers
             return true; // State has changed
         }
         return false; // State has not changed
     }
 
     private void enterBurstMode() {
-        inBurstMode = true;
-        requestLocationUpdates();
-        if (burstModeRunnable != null) {
-            handler.removeCallbacks(burstModeRunnable);
+        if (!inBurstMode) {
+            inBurstMode = true;
+            updateLocationParametersForState();
+            if (burstModeRunnableRef != null) {
+                handler.removeCallbacks(burstModeRunnableRef);
+            }
+            burstModeRunnableRef = this::exitBurstMode;
+            handler.postDelayed(burstModeRunnableRef, BURST_MODE_DURATION_MS);
         }
-        burstModeRunnable = this::exitBurstMode;
-        handler.postDelayed(burstModeRunnable, BURST_MODE_DURATION_MS);
     }
 
     private void exitBurstMode() {
-        inBurstMode = false;
-        handler.removeCallbacksAndMessages(null);
-        requestLocationUpdates();
+        if (inBurstMode) {
+            inBurstMode = false;
+            if (burstModeRunnableRef != null) {
+                handler.removeCallbacks(burstModeRunnableRef);
+                burstModeRunnableRef = null;
+            }
+            updateLocationParametersForState();
+        }
+    }
+
+    private void updateLocationParametersForState() {
+        if (currentState == MovementState.STATIONARY && !inBurstMode) {
+            switchToSignificantChanges();
+            return;
+        }
+        long interval = inBurstMode ? getBurstModeInterval() : getRecommendedUpdateInterval();
+        long minInterval = inBurstMode ? getBurstModeInterval() : getMinUpdateInterval();
+        if (fusedLocationClient != null && locationCallback != null) {
+            fusedLocationClient.removeLocationUpdates(locationCallback);
+        }
+        requestLocationUpdates(interval, minInterval);
     }
 
     private long getRecommendedUpdateInterval() {
@@ -241,10 +344,21 @@ public class SmartLocationManager {
         return 1000; // 1 second during burst mode
     }
 
+    private void checkNearestPackageDistanceForBurst() {
+        if (lastSmoothedLocation == null) return;
+        Pair<DeliveryInfo, Double> nearest = ResourceMgr.getInstance()
+                .getDeliveryinfoMgr()
+                .findNearestPackage(lastSmoothedLocation, lastSmoothedLocation, 200);
+        if (!inBurstMode && nearest.second != null && nearest.second < 200 && speed < 2.22f) {
+            enterBurstMode();
+        }
+    }
+
     public void stopLocationUpdates() {
         if (fusedLocationClient != null && locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
         }
+        stopHeadingUpdates();
         handler.removeCallbacksAndMessages(null);
     }
 
@@ -256,8 +370,8 @@ public class SmartLocationManager {
         return currentState;
     }
 
-    public static void updateActivityState(int activityType, int transitionType) {
-        MovementState newState = MovementState.STATIONARY;
+    public static void updateActivityState(Context ctx, int activityType, int transitionType) {
+        MovementState newState;
         switch (activityType) {
             case DetectedActivity.IN_VEHICLE:
                 newState = MovementState.NORMAL_DRIVING;
@@ -272,18 +386,16 @@ public class SmartLocationManager {
                 newState = MovementState.STATIONARY;
                 break;
         }
-
-        // Assuming you have a singleton or static reference to SmartLocationManager instance
-        SmartLocationManager instance = getInstance(null);
-        if (instance != null) {
-            instance.updateStateFromActivity(newState);
+        SmartLocationManager inst = getInstance(ctx != null ? ctx.getApplicationContext() : null);
+        if (inst != null) {
+            inst.updateStateFromActivity(newState);
         }
     }
 
     private void updateStateFromActivity(MovementState newState) {
         if (newState != currentState) {
             currentState = newState;
-            requestLocationUpdates();
+            updateLocationParametersForState();
         }
     }
 
@@ -334,17 +446,17 @@ public class SmartLocationManager {
             if (ActivityTransitionResult.hasResult(intent)) {
                 ActivityTransitionResult result = ActivityTransitionResult.extractResult(intent);
                 for (ActivityTransitionEvent event : result.getTransitionEvents()) {
-                    handleActivityTransition(event.getActivityType(), event.getTransitionType());
+                    handleActivityTransition(context, event.getActivityType(), event.getTransitionType());
                 }
             }
         }
 
-        private void handleActivityTransition(int activityType, int transitionType) {
+        private void handleActivityTransition(Context context, int activityType, int transitionType) {
             String activityName = getActivityName(activityType);
             String transitionName = getTransitionName(transitionType);
             Log.d("ActivityTransition", "Activity: " + activityName + ", Transition: " + transitionName);
             // Implement state update logic based on activity transitions here
-            SmartLocationManager.updateActivityState(activityType, transitionType);
+            SmartLocationManager.updateActivityState(context.getApplicationContext(), activityType, transitionType);
         }
 
         private String getActivityName(int activityType) {
@@ -379,5 +491,68 @@ public class SmartLocationManager {
                     return "Unknown";
             }
         }
+    }
+
+
+    // === Heading lifecycle ===
+    private void startHeadingUpdates() {
+        if (sensorManager != null && rotationVectorSensor != null) {
+            sensorManager.registerListener(headingListener, rotationVectorSensor, SensorManager.SENSOR_DELAY_UI);
+        }
+    }
+
+    private void stopHeadingUpdates() {
+        if (sensorManager != null) {
+            sensorManager.unregisterListener(headingListener);
+        }
+    }
+
+    private final SensorEventListener headingListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR) {
+                SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
+                SensorManager.getOrientation(rotationMatrix, orientationAngles);
+                float azimuthRad = orientationAngles[0];
+                float azimuthDeg = (float) Math.toDegrees(azimuthRad);
+                if (azimuthDeg < 0) azimuthDeg += 360f;
+                if (Float.isNaN(currentHeadingDegrees)) {
+                    currentHeadingDegrees = azimuthDeg;
+                } else {
+                    currentHeadingDegrees = lowPassHeading(azimuthDeg, currentHeadingDegrees, HEADING_ALPHA);
+                }
+            }
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+            headingAccuracy = accuracy;
+        }
+    };
+
+    private static float lowPassHeading(float input, float output, float alpha) {
+        // Handle wrap-around near 0/360 to avoid jumps
+        float delta = input - output;
+        if (Math.abs(delta) > 180f) {
+            if (delta > 0f) output += 360f; else output -= 360f;
+        }
+        float result = output + alpha * (input - output);
+        if (result >= 360f) result -= 360f;
+        if (result < 0f) result += 360f;
+        return result;
+    }
+
+    public boolean hasReliableHeading() {
+        return !Float.isNaN(currentHeadingDegrees) && headingAccuracy != SensorManager.SENSOR_STATUS_UNRELIABLE;
+    }
+
+    /** Returns current heading in degrees [0,360), or NaN if unavailable. */
+    public float getCurrentHeading() {
+        return currentHeadingDegrees;
+    }
+
+    /** Returns last smoothed location (may be null). */
+    public Location getLastSmoothedLocation() {
+        return lastSmoothedLocation;
     }
 }
