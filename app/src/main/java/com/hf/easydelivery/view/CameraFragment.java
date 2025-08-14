@@ -14,6 +14,8 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
 
@@ -67,6 +69,8 @@ import java.util.Objects;
 import com.google.android.material.button.MaterialButton;
 
 import androidx.cardview.widget.CardView;
+import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.constraintlayout.widget.ConstraintLayout.LayoutParams;
 
 import com.hf.easydelivery.common.FileLog;
 
@@ -87,6 +91,14 @@ import com.hf.easydelivery.common.FileLog;
 public class CameraFragment extends Fragment implements SensorEventListener {
     // 标记预览是否已启动，避免重复
     private boolean isPreviewStarted = false;
+
+    // 防重绑：相机是否已绑定（打开并完成预览配置）
+    private boolean cameraBound = false;
+
+    // 复用实例时新任务参数（可选）
+    private Long pendingOrderId = null;
+    private Double pendingLatitude = null;
+    private Double pendingLongitude = null;
 
     private static final int SMS_PERMISSION_REQUEST_CODE = 1;
     private static final int CALL_PERMISSION_REQUEST_CODE = 2;
@@ -144,25 +156,99 @@ public class CameraFragment extends Fragment implements SensorEventListener {
     private double mLongitude;
 
     // 短信弹窗
-    private SmsBottomSheetFragment mSmsBottomSheetFragment = new SmsBottomSheetFragment(mOrderId);
+    private SmsBottomSheetFragment mSmsBottomSheetFragment;
+
+    private View hostToolbar;
+    private View hostBottomBar;
+
+    private void prepareHostChromeRefs() {
+        // 使用资源名称动态查找，避免编译期直接引用不存在的 R.id.*
+        try {
+            String pkg = requireActivity().getPackageName();
+            String[] toolbarNames = new String[]{"toolbar", "appbar", "top_bar"};
+            for (String name : toolbarNames) {
+                int resId = getResources().getIdentifier(name, "id", pkg);
+                if (resId != 0) {
+                    View v = requireActivity().findViewById(resId);
+                    if (v != null) { hostToolbar = v; break; }
+                }
+            }
+
+            String[] bottomNames = new String[]{"bottom_nav", "nav_view", "tab_layout", "bottom_bar"};
+            for (String name : bottomNames) {
+                int resId = getResources().getIdentifier(name, "id", pkg);
+                if (resId != 0) {
+                    View v = requireActivity().findViewById(resId);
+                    if (v != null) { hostBottomBar = v; break; }
+                }
+            }
+        } catch (Exception e) {
+            FileLog.getInstance().debug("CameraActivity", "prepareHostChromeRefs error: " + e.getMessage());
+        }
+    }
+
+    private void hideHostChrome() {
+        try {
+            if (hostToolbar != null) hostToolbar.setVisibility(View.GONE);
+            if (hostBottomBar != null) hostBottomBar.setVisibility(View.GONE);
+        } catch (Exception e) {
+            FileLog.getInstance().debug("CameraActivity", "hideHostChrome: " + e.getMessage());
+        }
+    }
+
+    private void showHostChrome() {
+        try {
+            if (hostToolbar != null) hostToolbar.setVisibility(View.VISIBLE);
+            if (hostBottomBar != null) hostBottomBar.setVisibility(View.VISIBLE);
+        } catch (Exception e) {
+            FileLog.getInstance().debug("CameraActivity", "showHostChrome: " + e.getMessage());
+        }
+    }
+
+    private void enterImmersiveFullscreen() {
+        try {
+            final Window window = requireActivity().getWindow();
+            View decor = window.getDecorView();
+            int flags = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+            decor.setSystemUiVisibility(flags);
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } catch (Exception e) {
+            FileLog.getInstance().debug("CameraActivity", "enterImmersiveFullscreen: " + e.getMessage());
+        }
+    }
+
+    private void exitImmersiveFullscreen() {
+        try {
+            final Window window = requireActivity().getWindow();
+            View decor = window.getDecorView();
+            decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } catch (Exception e) {
+            FileLog.getInstance().debug("CameraActivity", "exitImmersiveFullscreen: " + e.getMessage());
+        }
+    }
 
     @Override
     public void onStart() {
         super.onStart();
-        mImageFiles.forEach(img->{img = null;});
         // 不在 onStart 启动预览，交由 onResume 控制
+        FileLog.getInstance().debug(TAG, "onStart: no-op for thumbnails (kept as-is)");
     }
 
     @Override
     public void onResume() {
         FileLog.getInstance().debug(TAG, "onResume: init camera if needed, register sensors.");
         super.onResume();
+        prepareHostChromeRefs();
+        enterImmersiveFullscreen();
+        hideHostChrome();
 
-        if (mCameraDevice == null) {
-            initCamera();
-        } else if (!isPreviewStarted) {
-            startPreview();
-        }
+        startCameraIfNeeded();
 
         if (accelerometer != null && magnetometer != null) {
             sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
@@ -173,9 +259,20 @@ public class CameraFragment extends Fragment implements SensorEventListener {
     @Override
     public void onPause() {
         FileLog.getInstance().debug(TAG, "onPause: releasing camera and unregistering sensors.");
-        closeCamera();
+        exitImmersiveFullscreen();
+        showHostChrome();
+        stopCameraIfBound();
         super.onPause();
-        sensorManager.unregisterListener(this);
+        if (sensorManager != null) sensorManager.unregisterListener(this);
+    }
+
+
+    @Override
+    public void onDestroyView() {
+        FileLog.getInstance().debug(TAG, "onDestroyView: force close camera and clean up resources.");
+        showHostChrome();   // 再保险
+        stopCameraIfBound();
+        super.onDestroyView();
     }
 
     @Override
@@ -275,6 +372,8 @@ public class CameraFragment extends Fragment implements SensorEventListener {
             mLatitude = args.getDouble("latitude", -1);
             mLongitude = args.getDouble("longitude", -1);
         }
+        // -- initialize SmsBottomSheetFragment here with valid mOrderId
+        mSmsBottomSheetFragment = new SmsBottomSheetFragment(mOrderId);
 
         // 2. infoBar 顶部信息栏
         infoBar = (CardView) view.findViewById(R.id.info_bar);
@@ -351,11 +450,6 @@ public class CameraFragment extends Fragment implements SensorEventListener {
             }
         });
 
-        ImageButton closeButton = view.findViewById(R.id.btn_close);
-        if (closeButton != null) {
-            closeButton.setOnClickListener(
-                    v -> requireActivity().getSupportFragmentManager().popBackStack());
-        }
 
         // 完成按钮初始校验
         updateOkButtonState();
@@ -375,12 +469,74 @@ public class CameraFragment extends Fragment implements SensorEventListener {
             requireActivity().getSupportFragmentManager().popBackStack();
         }
 
+        // 1) 悬浮关闭键 —— 若布局中无 @id/btn_close，则动态创建并添加到根 ConstraintLayout
+        ImageButton closeButton = view.findViewById(R.id.btn_close);
+        if (closeButton == null) {
+            try {
+                // 根容器必须是 ConstraintLayout（fragment_camera.xml 的根就是）
+                ConstraintLayout root = (ConstraintLayout) view;
+                closeButton = new ImageButton(requireContext());
+                // 若 R.id.btn_close 不存在则动态生成一个 id
+                int closeId = getResources().getIdentifier("btn_close", "id", requireContext().getPackageName());
+                if (closeId != 0) {
+                    closeButton.setId(closeId);
+                } else {
+                    closeButton.setId(View.generateViewId());
+                }
+                // 样式与尺寸：40dp，圆形无边框点击效果，白色图标
+                int size = (int) (40 * getResources().getDisplayMetrics().density);
+                LayoutParams lp = new LayoutParams(size, size);
+                lp.topToTop = LayoutParams.PARENT_ID;
+                lp.startToStart = LayoutParams.PARENT_ID;
+                int margin = (int) (12 * getResources().getDisplayMetrics().density);
+                lp.setMargins(margin, margin, margin, margin);
+                closeButton.setLayoutParams(lp);
+                closeButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                closeButton.setBackgroundResource(android.R.drawable.btn_default_small);
+                closeButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
+                closeButton.setColorFilter(android.graphics.Color.WHITE);
+                closeButton.setContentDescription(getString(android.R.string.cancel));
+                closeButton.setElevation(24f);
+                // 添加到根布局
+                root.addView(closeButton);
+                FileLog.getInstance().debug(TAG, "Floating close button created programmatically.");
+            } catch (Exception e) {
+                FileLog.getInstance().error(TAG, "create floating close button failed", e);
+            }
+        } else {
+            // 如果布局里已有，则确保可见并放到最上层
+            closeButton.setVisibility(View.VISIBLE);
+            closeButton.bringToFront();
+        }
+        // 点击关闭：退出拍照界面
+        if (closeButton != null) {
+            closeButton.setOnClickListener(v -> {
+                try {
+                    requireActivity().getSupportFragmentManager().popBackStack();
+                } catch (Exception e) {
+                    FileLog.getInstance().error(TAG, "closeButton popBackStack error", e);
+                }
+            });
+        }
+
+
+// 2) 隐藏 infoBar 里的 cancel_button，避免占位（若布局无此ID，安全跳过）
+        try {
+            int cancelId = getResources().getIdentifier("cancel_button", "id", requireContext().getPackageName());
+            if (cancelId != 0) {
+                View cb = view.findViewById(cancelId);
+                if (cb != null) cb.setVisibility(View.GONE);
+            }
+        } catch (Exception e) {
+            FileLog.getInstance().debug(TAG, "optional cancel_button not found: " + e.getMessage());
+        }
+
         // 8. 初始化相机
         initCamera();
 
-        // 9. 其它功能按钮
-        ImageButton cancelButton = view.findViewById(R.id.cancel_button);
-        cancelButton.setOnClickListener(v -> requireActivity().getSupportFragmentManager().popBackStack());
+        cameraBound = false; // 新视图创建后，等待 onResume 按需绑定
+
+        // prepareHostChromeRefs() is now called in onResume before hideHostChrome
         return view;
     }
 
@@ -468,6 +624,7 @@ public class CameraFragment extends Fragment implements SensorEventListener {
     private void clearThumbnails() {
         for (int i = 0; i < MAX_PHOTOS; i++) {
             removeThumbnail(i);
+
         }
         updateOkButtonState();
     }
@@ -531,7 +688,6 @@ public class CameraFragment extends Fragment implements SensorEventListener {
         imageView.setClipToOutline(true);
         imageView.setTag(index);
         imageView.setOnClickListener(v -> showFullImage((int) v.getTag()));
-        imageView.setImageResource(R.drawable.ic_marker_background);
 
         cardView.addView(imageView);
         mImageViews.add(imageView);
@@ -544,15 +700,28 @@ public class CameraFragment extends Fragment implements SensorEventListener {
                 PackageManager.PERMISSION_GRANTED;
     }
 
-    private void closeCamera()
-    {
+    private void closeCamera() {
         FileLog.getInstance().debug(TAG, "closeCamera: invoked.");
+        try {
+            if (mCaptureSession != null) {
+                mCaptureSession.stopRepeating();
+                mCaptureSession.close();
+            }
+        } catch (Exception ignore) {}
+        mCaptureSession = null;
+
+        if (imageReader != null) {
+            try { imageReader.close(); } catch (Exception ignore) {}
+            imageReader = null;
+        }
+
         if (mCameraDevice != null) {
-            mCameraDevice.close();
+            try { mCameraDevice.close(); } catch (Exception ignore) {}
             mCameraDevice = null;
             FileLog.getInstance().debug(TAG, "closeCamera: mCameraDevice closed and set to null.");
         }
         isPreviewStarted = false;
+        cameraBound = false;
     }
 
     private final CameraDevice.StateCallback mCameraStateCallback =
@@ -560,6 +729,8 @@ public class CameraFragment extends Fragment implements SensorEventListener {
                 @Override
                 public void onOpened(@NonNull CameraDevice cameraDevice) {
                     mCameraDevice = cameraDevice;
+                    cameraBound = true;
+                    FileLog.getInstance().debug(TAG, "mCameraStateCallback.onOpened: cameraBound=true");
                     startPreview();
                 }
 
@@ -567,67 +738,81 @@ public class CameraFragment extends Fragment implements SensorEventListener {
                 public void onDisconnected(@NonNull CameraDevice cameraDevice) {
                     mCameraDevice = cameraDevice;
                     closeCamera();
+                    cameraBound = false;
+                    FileLog.getInstance().debug(TAG, "mCameraStateCallback.onDisconnected/onError: cameraBound=false");
                 }
 
                 @Override
                 public void onError(@NonNull CameraDevice cameraDevice, int error) {
                     mCameraDevice = cameraDevice;
                     closeCamera();
+                    cameraBound = false;
+                    FileLog.getInstance().debug(TAG, "mCameraStateCallback.onDisconnected/onError: cameraBound=false");
                 }
             };
 
     public void startPreview() {
-        if (mCameraDevice == null || isPreviewStarted)
+        if (mCameraDevice == null || isPreviewStarted) return;
+
+        FileLog.getInstance().debug(TAG, "startPreview: enter (bound=" + cameraBound + ", previewStarted=" + isPreviewStarted + ")");
+
+        // Ensure preview surface has valid size; if not, retry after layout.
+        final int w = mCameraPreview != null ? mCameraPreview.getWidth() : 0;
+        final int h = mCameraPreview != null ? mCameraPreview.getHeight() : 0;
+        if (w <= 0 || h <= 0) {
+            FileLog.getInstance().debug(TAG, "startPreview: preview size not ready (w=" + w + ", h=" + h + "), retry in 16ms");
+            if (cameraPreviewLayout != null) {
+                cameraPreviewLayout.postDelayed(this::startPreview, 16);
+            }
             return;
+        }
 
         mCameraPreview.setCameraManager(mCameraManager);
-
-        Surface previewSurface = mCameraPreview.getSurface();
+        final Surface previewSurface = mCameraPreview.getSurface();
         try {
             final CaptureRequest.Builder previewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             previewRequestBuilder.addTarget(previewSurface);
 
-            if (imageReader == null)
-                imageReader = ImageReader.newInstance(
-                    mCameraPreview.getWidth(), mCameraPreview.getHeight(),
-                    android.graphics.ImageFormat.JPEG, 1);
+            if (imageReader == null) {
+                imageReader = ImageReader.newInstance(w, h, android.graphics.ImageFormat.JPEG, 1);
+            }
 
             List<Surface> outputSurfaces = new ArrayList<>(2);
             outputSurfaces.add(imageReader.getSurface());
-            outputSurfaces.add(mCameraPreview.getSurface());
+            outputSurfaces.add(previewSurface);
 
-            mCameraDevice.createCaptureSession(outputSurfaces,
-                    new CameraCaptureSession.StateCallback() {
-                        @Override
-                        public void onConfigured(@NonNull CameraCaptureSession session) {
-                            mCaptureSession = session;
-                            if (null == mCameraDevice) return;
-                            try {
-                                previewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                                previewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
-                                if (mPreviewRequest == null)
-                                    mPreviewRequest = previewRequestBuilder.build();
+            mCameraDevice.createCaptureSession(outputSurfaces, new CameraCaptureSession.StateCallback() {
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession session) {
+                    mCaptureSession = session;
+                    if (mCameraDevice == null) return;
+                    try {
+                        previewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+                        previewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
+                        if (mPreviewRequest == null) mPreviewRequest = previewRequestBuilder.build();
+                        mCaptureSession.setRepeatingRequest(mPreviewRequest, null, null);
+                        isPreviewStarted = true;
+                        cameraBound = true;
+                        FileLog.getInstance().debug(TAG, "startPreview: configured successfully (" + w + "x" + h + ")");
+                    } catch (CameraAccessException e) {
+                        FileLog.getInstance().error(TAG, "startPreview: CameraAccessException in onConfigured", e);
+                    }
+                }
 
-                                mCaptureSession.setRepeatingRequest(mPreviewRequest, null, null);
-                            } catch (CameraAccessException e) {
-                                e.printStackTrace();
-                            }
-                            isPreviewStarted = true; // 只在预览成功后标记
-                        }
-
-                        @Override
-                        public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                            FileLog.getInstance().error(TAG, "Failed to configure camera capture session");
-                        }
-                    }, null);
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                    FileLog.getInstance().error(TAG, "startPreview: onConfigureFailed");
+                }
+            }, null);
 
         } catch (CameraAccessException e) {
-            FileLog.getInstance().error(TAG, "Error starting camera preview", e);
+            FileLog.getInstance().error(TAG, "startPreview: CameraAccessException", e);
         }
     }
 
     // 拍照
     private void takePicture() {
+        FileLog.getInstance().debug(TAG, "takePicture: cameraBound=" + cameraBound + ", device=" + (mCameraDevice != null));
         if (mCameraDevice == null) {
             FileLog.getInstance().error(TAG, "CameraDevice is null. Cannot take picture.");
             return;
@@ -697,6 +882,77 @@ public class CameraFragment extends Fragment implements SensorEventListener {
         }
     }
 
+    /** 按需启动相机：已绑定则不重复；未绑定则初始化/启动 */
+    private void startCameraIfNeeded() {
+        if (cameraBound) {
+            FileLog.getInstance().debug(TAG, "startCameraIfNeeded: already bound, skip.");
+            if (!isPreviewStarted) {
+                startPreview();
+            }
+            return;
+        }
+        if (mCameraDevice == null) {
+            initCamera();
+        } else {
+            startPreview();
+        }
+    }
+
+    /** 停止相机预览并释放资源（若已绑定） */
+    private void stopCameraIfBound() {
+        if (!cameraBound && mCameraDevice == null && !isPreviewStarted) {
+            FileLog.getInstance().debug(TAG, "stopCameraIfBound: nothing to stop.");
+            return;
+        }
+        try {
+            if (mCaptureSession != null) {
+                mCaptureSession.stopRepeating();
+                mCaptureSession.close();
+            }
+        } catch (Exception ignore) {}
+        mCaptureSession = null;
+
+        if (imageReader != null) {
+            try { imageReader.close(); } catch (Exception ignore) {}
+            imageReader = null;
+        }
+
+        closeCamera();      // 将 cameraDevice 关闭并复位标志位
+        cameraBound = false;
+        FileLog.getInstance().debug(TAG, "stopCameraIfBound: camera released.");
+    }
+
+    /**
+     * 复用 CameraFragment 实例时，应用一个新的任务（包裹）：
+     * - 更新 orderId/坐标
+     * - 刷新 infoBar 文本
+     * - 清空旧的缩略图
+     */
+    public void applyNewTask(@NonNull Long orderId, double latitude, double longitude) {
+        this.mOrderId = orderId;
+        this.mLatitude = latitude;
+        this.mLongitude = longitude;
+
+        try {
+            final DeliveryInfo deliveryInfo = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
+            if (deliveryInfo != null) {
+                if (tvRouteNumber != null) tvRouteNumber.setText(String.valueOf(deliveryInfo.getRouteNumber()));
+                if (tvOrderSn != null) tvOrderSn.setText(deliveryInfo.getOrderSn());
+                if (tvCustomerName != null) tvCustomerName.setText(ellipsis(deliveryInfo.getName(), 8));
+                if (tvUnitNumber != null) tvUnitNumber.setText(deliveryInfo.getUnitNumber());
+                if (tvAddress != null) tvAddress.setText(ellipsis(deliveryInfo.getAddress(), 15));
+            }
+            clearThumbnails();
+            updateOkButtonState();
+            if (mSmsBottomSheetFragment != null) {
+                mSmsBottomSheetFragment.setOrderId(mOrderId);
+            }
+            FileLog.getInstance().debug(TAG, "applyNewTask: updated UI for orderId=" + orderId);
+        } catch (Exception e) {
+            FileLog.getInstance().error(TAG, "applyNewTask error", e);
+        }
+    }
+
     // 创建图片文件
     private File createImageFile() throws IOException {
         String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
@@ -756,11 +1012,11 @@ public class CameraFragment extends Fragment implements SensorEventListener {
         for (int i = 0; i < MAX_PHOTOS; i++) {
             if (mImageFiles.get(i) == null) {
                 mImageFiles.set(i, imageFile);
-                Bitmap thumb = BitmapUtils.decodeSampledBitmapFromFile(
-                        imageFile.getAbsolutePath(),
-                        getResources().getDimensionPixelSize(R.dimen.thumbnail_width),
-                        getResources().getDimensionPixelSize(R.dimen.thumbnail_height)
-                );
+                int tw = getResources().getDimensionPixelSize(R.dimen.thumbnail_width);
+                int th = getResources().getDimensionPixelSize(R.dimen.thumbnail_height);
+                if (tw <= 0) tw = (int) (64 * getResources().getDisplayMetrics().density);
+                if (th <= 0) th = (int) (64 * getResources().getDisplayMetrics().density);
+                Bitmap thumb = BitmapUtils.decodeSampledBitmapFromFile(imageFile.getAbsolutePath(), tw, th);
                 ImageView iv = mImageViews.get(i);
                 iv.setImageBitmap(thumb);
                 if (withAnim) {
@@ -789,11 +1045,47 @@ public class CameraFragment extends Fragment implements SensorEventListener {
 
     /**
      * 删除指定缩略图，重布局
+     * 真正移除图像内容，取消动画，强制重绘，并更新完成按钮状态
      */
     public void removeThumbnail(int index) {
+        if (index < 0 || index >= mImageFiles.size()) return;
+
+        // 1) 数据层清空并尝试删除文件（可选）
+        File f = mImageFiles.get(index);
         mImageFiles.set(index, null);
-        mImageViews.get(index).setImageResource(R.drawable.ic_marker_background);
-        // 动画已在调用方处理
+        if (f != null && f.exists()) {
+            // noinspection ResultOfMethodCallIgnored
+            f.delete();
+        }
+
+        // 2) 视图层复位：一定要把 image 本身清掉，而不是只换 background
+        ImageView iv = (index < mImageViews.size()) ? mImageViews.get(index) : null;
+        if (iv == null) return;
+
+        // 取消可能的动画，避免动画完成后把旧位图又“带回来”
+        iv.animate().cancel();
+
+        // 真正移除图像内容
+        iv.setImageDrawable(null);
+        iv.setImageBitmap(null);
+
+        // 复位属性，防止残留的缩放/透明度
+        iv.setAlpha(1f);
+        iv.setScaleX(1f);
+        iv.setScaleY(1f);
+
+        // 保留圆角底或占位底
+        iv.setBackgroundResource(R.drawable.bg_thumb_image_rounded);
+
+        // 强制重绘
+        iv.invalidate();
+        if (thumbnailContainer != null) {
+            thumbnailContainer.invalidate();
+            thumbnailContainer.requestLayout();
+        }
+
+        // 3) 更新“完成”按钮可用态
+        updateOkButtonState();
     }
 
     /**
@@ -804,11 +1096,5 @@ public class CameraFragment extends Fragment implements SensorEventListener {
         Toast.makeText(getContext(), "失败原因弹窗", Toast.LENGTH_SHORT).show();
     }
 
-    @Override
-    public void onDestroyView() {
-        FileLog.getInstance().debug(TAG, "onDestroyView: force close camera and clean up resources.");
-        closeCamera(); // 确保所有相机资源释放
-        super.onDestroyView();
-    }
 }
 

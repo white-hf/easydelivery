@@ -24,57 +24,39 @@
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
-    <!-- 左上角状态概览卡片 -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/card_status"
-        android:layout_width="match_parent"
+    <!-- 右侧中部 Mini Bar（列表 / 定位 / 地图类型） -->
+    <include
+        android:id="@+id/include_minibar"
+        layout="@layout/include_map_minibar"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="8dp" />
+
+
+    <!-- Transparent compact status overlay (floats over the map) -->
+    <TextView
+        android:id="@+id/tv_status_compact"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="12dp"
         android:layout_marginTop="?attr/actionBarSize"
-        app:cardCornerRadius="8dp"
-        app:cardElevation="4dp"
-        android:layout_gravity="top">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="12dp"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:id="@+id/tv_status_delivered"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="已送: 0"
-                android:layout_marginEnd="18dp"
-                style="@style/TextAppearance.MaterialComponents.Body2" />
-
-            <TextView
-                android:id="@+id/tv_status_pending"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="等送: 0"
-                android:layout_marginEnd="18dp"
-                style="@style/TextAppearance.MaterialComponents.Body2" />
-
-            <TextView
-                android:id="@+id/tv_status_uploading"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="上传中: 0"
-                android:layout_marginEnd="18dp"
-                style="@style/TextAppearance.MaterialComponents.Body2" />
-
-            <TextView
-                android:id="@+id/tv_status_failed"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="失败: 0"
-                style="@style/TextAppearance.MaterialComponents.Body2" />
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:fontFamily="monospace"
+        android:text="0/0/0/0"
+        android:textStyle="bold"
+        android:textSize="15sp"
+        android:textColor="@android:color/black"
+        android:shadowColor="#80000000"
+        android:shadowDx="0"
+        android:shadowDy="0"
+        android:shadowRadius="3"
+        android:background="@android:color/transparent"
+        android:alpha="0.35"/>
 
     <!-- 右下角 切换 列表/地图 按钮 -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton

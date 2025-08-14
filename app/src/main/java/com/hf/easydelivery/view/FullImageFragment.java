@@ -30,22 +30,45 @@ public class FullImageFragment extends DialogFragment {
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+        if (getDialog() != null && getDialog().getWindow() != null) {
+            getDialog().getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            getDialog().getWindow().setBackgroundDrawableResource(android.R.color.black);
+        }
+    }
+
+    @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_full_image, container, false);
 
         ImageView imageView = rootView.findViewById(R.id.full_image_view);
-        imageView.setOnClickListener(v -> getParentFragmentManager().popBackStack());
+        imageView.setOnClickListener(v -> dismiss());
         imageView.setOnLongClickListener(v -> deleteImage());
+        imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
 
-        imageFilePath = getArguments().getString("imageFile");
-        imageIndex = getArguments().getInt("imageIndex");
+        Bundle args = getArguments();
+        if (args != null) {
+            imageFilePath = args.getString("image_path");
+            imageIndex = args.getInt("index", -1);
+        }
 
-        Bitmap bitmap = BitmapFactory.decodeFile(imageFilePath);
-        imageView.setImageBitmap(bitmap);
+        if (imageFilePath != null) {
+            Bitmap bitmap = BitmapFactory.decodeFile(imageFilePath);
+            if (bitmap != null) {
+                imageView.setImageBitmap(bitmap);
+            } else {
+                Toast.makeText(getContext(), "无法加载图片：" + imageFilePath, Toast.LENGTH_SHORT).show();
+                dismiss();
+            }
+        } else {
+            Toast.makeText(getContext(), "图片路径无效", Toast.LENGTH_SHORT).show();
+            dismiss();
+        }
 
         // 左上角关闭按钮
         View btnClose = rootView.findViewById(R.id.btn_close);
-        btnClose.setOnClickListener(v -> getParentFragmentManager().popBackStack());
+        btnClose.setOnClickListener(v -> dismiss());
 
         return rootView;
     }
@@ -57,11 +80,10 @@ public class FullImageFragment extends DialogFragment {
 
             // Close the fragment
             Toast.makeText(getContext(), "Image deleted", Toast.LENGTH_SHORT).show();
-            getParentFragmentManager().popBackStack();
+            dismiss();
             return true;
         }
         else
             return false;
     }
 }
-

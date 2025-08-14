@@ -121,5 +121,10 @@
     <string name="gallery">图库</string>
     <string name="shutter">拍照</string>
     <string name="retake">重拍</string>
+    <string name="parcel_list">包裹列表</string>
+    <string name="my_location">我的位置</string>
+    <string name="map_type_toggle">切换地图类型</string>
+    <string name="status_help">状态说明</string>
+    <string name="camera_not_ready">相机尚未就绪，请稍后重试</string>
 
 </resources>

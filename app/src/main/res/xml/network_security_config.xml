@@ -9,6 +9,12 @@
     <domain-config cleartextTrafficPermitted="true">
         <domain>10.254.3.183</domain>
     </domain-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain>172.30.242.140</domain>
+    </domain-config>
+
+
+
 
 
 

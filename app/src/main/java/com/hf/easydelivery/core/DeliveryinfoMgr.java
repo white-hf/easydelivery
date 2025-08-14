@@ -40,6 +40,9 @@ public class DeliveryinfoMgr implements Subscriber {
 
     private long scanBatchId;
 
+    private int  scanBatchStatus;
+
+
     static public class DistanceCalculator {
         private static final double EARTH_RADIUS = 6371e3; // in meters
 
@@ -66,6 +69,9 @@ public class DeliveryinfoMgr implements Subscriber {
         return listDeliveryInfo.size();
     }
 
+    public int getScanBatchStatus() {
+        return scanBatchStatus;
+    }
 
 // ...
 
@@ -163,12 +169,12 @@ public class DeliveryinfoMgr implements Subscriber {
      * Get the delivery info from the server, it should be called after user login.
      * @param driverId
      */
-    public void getDeliveryInfo(String driverId , Boolean bDeliveryTask)
+    public void getDeliveryInfo(Integer driverId , Boolean bDeliveryTask)
     {
         ICourierService courierService = ResourceMgr.getInstance().getCourierService();
         assert courierService != null;
 
-        courierService.getPackageList(driverId , bDeliveryTask , new GetPackageListRspCb());
+        courierService.getPackageList(String.valueOf(driverId) , bDeliveryTask , new GetPackageListRspCb());
     }
 
     /**
@@ -198,6 +204,7 @@ public class DeliveryinfoMgr implements Subscriber {
         info.setDriverId(driverId);
         info.setOrderSn(d.getTracking_no());
         info.setOrderId(d.getOrder_id());
+        info.setState(d.getState());
 
         listDeliveryInfo.add(info);
         ResourceMgr.getInstance().getDbHandler().post(() -> {
@@ -281,8 +288,11 @@ public class DeliveryinfoMgr implements Subscriber {
                         if (!lst.isEmpty())
                         {
                             scanBatchId = lst.get(0).getScan_batch_id();
+                            scanBatchStatus = lst.get(0).getScan_batch_status();
                         }else {
                             FileLog.getInstance().writeLog("Can't fetch the scanbatchid for " + loginInfo.loginId);
+                            scanBatchId = 0;
+                            scanBatchStatus = 1;
                         }
                     }
 
@@ -302,6 +312,7 @@ public class DeliveryinfoMgr implements Subscriber {
     public void receive(Event event) {
 
         fechScanBatchId();
-        getDeliveryInfo((String)event.getMessage() , true);
+        String userId = (String)event.getMessage();
+        getDeliveryInfo(Integer.parseInt(userId) , true);
     }
 }

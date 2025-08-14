@@ -57,12 +57,25 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @Ignore
     private String streetName = "";
 
+
+    @Ignore
+    private Integer state  = 0;
+
+
     public String getOrderSn() {
         return orderSn;
     }
     public Integer getCivilNumber()
     {
         return civilNumber;
+    }
+
+    public Integer getState() {
+        return state;
+    }
+
+    public void setState(Integer s) {
+        state = s;
     }
 
     public PackageEntity transferToPackageEntity() {
@@ -73,6 +86,7 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
         packageEntity.orderId = orderId;
         packageEntity.longitude = longitude;
         packageEntity.latitude = latitude;
+        //packageEntity.status = String.valueOf(state);
 
         return packageEntity;
     }
@@ -174,9 +188,6 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @Nullable
     @Override
     public String getTitle() {
-        if (civilNumber != null)
-            return routeNumber + " (" + String.valueOf(civilNumber) + ")";
-        else
             return routeNumber;
     }
 
