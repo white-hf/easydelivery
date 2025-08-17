@@ -126,5 +126,15 @@
     <string name="map_type_toggle">切换地图类型</string>
     <string name="status_help">状态说明</string>
     <string name="camera_not_ready">相机尚未就绪，请稍后重试</string>
+    <string name="switch_view">切换视图</string>
+    <string name="picture_save_failed">图片保持失败</string>
+    <string name="close_button">关闭</string>
+    <string name="camera_shutter_button">拍照</string>
+    <string name="sms_button">短信</string>
+    <string name="phone_button">拨号</string>
+    <string name="fail_button">失败</string>
+    <string name="ok_button">完成</string>
+
+
 
 </resources>

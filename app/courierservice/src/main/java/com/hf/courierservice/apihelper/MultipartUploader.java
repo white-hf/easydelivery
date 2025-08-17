@@ -33,11 +33,22 @@ public class MultipartUploader {
         // List of image files
         final List<File> imageFiles = parseImagePath(params.getImageFiles());
 
-        // Add image files
+        // Add image files (skip missing/unreadable safely)
         int i = 0;
+        if (imageFiles.isEmpty()) {
+            Log.w(TAG, "upload: no valid image files parsed from imagePath");
+        }
         for (File file : imageFiles) {
-            builder.addFormDataPart("pod_images[]", String.format("image%d.jpg", i++),
-                    RequestBody.create(file, MEDIA_TYPE_JPEG));
+            try {
+                if (file != null && file.exists() && file.isFile() && file.length() > 0) {
+                    builder.addFormDataPart("pod_images[]", String.format("image%d.jpg", i++),
+                            RequestBody.create(file, MEDIA_TYPE_JPEG));
+                } else {
+                    Log.w(TAG, "upload: skip invalid image file -> " + (file == null ? "null" : file.getAbsolutePath()));
+                }
+            } catch (Throwable t) {
+                Log.e(TAG, "upload: failed to add image file: " + t.getMessage());
+            }
         }
 
         MultipartBody requestBody = builder.build();
@@ -56,11 +67,10 @@ public class MultipartUploader {
 
         Log.d(TAG, "Request : " + request.toString());
         try {
-            Response response = client.newCall(request).execute();
-            callback.onResponse(null, response);
-
-            return true;
-
+            try (Response response = client.newCall(request).execute()) {
+                callback.onResponse(null, response);
+                return true;
+            }
         } catch (IOException e) {
             callback.onFailure(null, e);
             return false;
@@ -71,18 +81,49 @@ public class MultipartUploader {
     static private List<File> parseImagePath(String imagePath) {
         List<File> fileList = new ArrayList<>();
 
-        // Check if the string is empty or doesn't have the expected format
-        if (imagePath == null || imagePath.isEmpty()) {
-            return fileList; // Return an empty list or handle error
-        }
+        try {
+            if (imagePath == null) {
+                Log.w(TAG, "parseImagePath: imagePath is null");
+                return fileList;
+            }
+            String trimmed = imagePath.trim();
+            if (trimmed.isEmpty()) {
+                Log.w(TAG, "parseImagePath: imagePath is empty");
+                return fileList;
+            }
 
-        // Remove leading and trailing square brackets and split the string
-        String[] paths = imagePath.substring(1, imagePath.length() - 1).split(", ");
+            // Accept formats:
+            // 1) "[/path/a.jpg, /path/b.jpg]"
+            // 2) "/path/a.jpg,/path/b.jpg"
+            // 3) single path: "/path/a.jpg"
+            String content = trimmed;
+            if (trimmed.startsWith("[") && trimmed.endsWith("]") && trimmed.length() >= 2) {
+                content = trimmed.substring(1, trimmed.length() - 1);
+            }
 
-        // Iterate over paths, create File objects, and add them to the list
-        for (String path : paths) {
-            String trimmedPath = path.trim(); // Trim leading/trailing spaces
-            fileList.add(new File(trimmedPath)); // Create File object and add to list
+            // Split by comma if present; otherwise treat as a single path
+            String[] paths = content.contains(",") ? content.split(",") : new String[]{content};
+
+            for (String raw : paths) {
+                String p = raw.trim();
+                if (p.isEmpty()) continue;
+                File f = new File(p);
+                if (!f.exists()) {
+                    Log.w(TAG, "parseImagePath: file not found -> " + p);
+                    continue;
+                }
+                if (!f.isFile()) {
+                    Log.w(TAG, "parseImagePath: not a file -> " + p);
+                    continue;
+                }
+                if (f.length() <= 0) {
+                    Log.w(TAG, "parseImagePath: zero length file -> " + p);
+                    continue;
+                }
+                fileList.add(f);
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "parseImagePath: unexpected error: " + t.getMessage());
         }
 
         return fileList;

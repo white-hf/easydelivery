@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="horizontal"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="16dp">
+
+    <EditText
+        android:id="@+id/et_search"
+        android:layout_width="0dp"
+        android:layout_height="40dp"
+        android:layout_weight="1"
+        android:hint="输入包裹号/客户/地址"
+        android:background="@drawable/rounded_gray_bg"
+        android:drawableLeft="@drawable/ic_search"
+        android:drawablePadding="8dp"
+        android:textColor="@android:color/black"
+        android:textSize="15sp"/>
+
+    <ImageButton
+        android:id="@+id/btn_search_ok"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:src="@drawable/ic_check"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="搜索"/>
+</LinearLayout>

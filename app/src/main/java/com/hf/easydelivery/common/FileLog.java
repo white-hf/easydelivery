@@ -8,6 +8,19 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Date;
 
+import android.content.ContentResolver;
+import android.content.ContentValues;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
+import java.io.OutputStream;
+import java.io.BufferedOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.BufferedWriter;
+import java.io.Writer;
+import android.content.SharedPreferences;
+
 /**
  * 文件日志类，支持 info/debug/warning/error 四级日志，支持格式化字符串和 tag。
  * 日志文件格式为：时间 | LEVEL | TAG | 内容
@@ -15,11 +28,23 @@ import java.util.Date;
  * 仿照 iOS Logger 结构。
  */
 public class FileLog {
-    public final static String LOG_DIR_NAME = "logs";//\Environment.getExternalStorageDirectory() + "/PhoneData/";
-    private final static String LOG_FILE_NAME = "sysmgrtool.log";
+    // We now write logs to the public Downloads collection via MediaStore (Android 10+),
+    // falling back to app-private files for older OS or failure cases.
+    public final static String LOG_DISPLAY_NAME = "easydelivery.log"; // filename shown in Downloads
+    private static final String PREFS_NAME = "filelog_prefs";
+    private static final String PREF_KEY_URI = "downloads_log_uri";
 
     private static final String DEFAULT_TAG = "FileLog";
 
+    // App context
+    private Context appCtx;
+
+    // MediaStore path (preferred on Android 10+)
+    private Uri mLogUri;
+    private OutputStream mOs; // append output stream
+    private Writer mWriter;
+
+    // Legacy fallback
     File mFile;
     RandomAccessFile mRaf;
 
@@ -54,38 +79,86 @@ public class FileLog {
      * @return 是否初始化成功
      */
     public boolean init(Context context) {
+        appCtx = context.getApplicationContext();
         try {
-            boolean b = false;
-            File logDir = new File(context.getFilesDir(), LOG_DIR_NAME);
-            if (!logDir.exists()) {
-                b = logDir.mkdirs();
-            }
-
-            mFile = new File(logDir, LOG_FILE_NAME);
-            try {
-                if (!mFile.exists()) {
-                    b = mFile.createNewFile();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Try MediaStore Downloads first
+                mLogUri = restoreOrCreateDownloadsUri(appCtx);
+                if (mLogUri != null) {
+                    try {
+                        // "wa" = write-append
+                        mOs = appCtx.getContentResolver().openOutputStream(mLogUri, "wa");
+                        if (mOs != null) {
+                            mWriter = new BufferedWriter(new OutputStreamWriter(new BufferedOutputStream(mOs)));
+                            return true;
+                        }
+                    } catch (Exception e) {
+                        Log.e("FileLog", "openOutputStream failed, fallback to legacy", e);
+                    }
                 }
-            } catch (IOException e) {
-                Log.e("FileLog", "Failed to create log file", e);
             }
-
-
-            if (!b)
-            {
-                File fDir = context.getExternalCacheDir();
-                mFile = new File(fDir , LOG_FILE_NAME);
-            }
-
-            mRaf  = new RandomAccessFile(mFile, "rw");
+            // Fallback: app-private file
+            File logDir = new File(appCtx.getFilesDir(), "logs");
+            if (!logDir.exists()) logDir.mkdirs();
+            mFile = new File(logDir, LOG_DISPLAY_NAME);
+            if (!mFile.exists()) mFile.createNewFile();
+            mRaf = new RandomAccessFile(mFile, "rw");
             mRaf.seek(mFile.length());
-
             return true;
         } catch (Exception e) {
             Log.e("FileLog", "Failed to init log file", e);
+            return false;
         }
+    }
 
-        return false;
+    private Uri restoreOrCreateDownloadsUri(Context ctx) {
+        try {
+            SharedPreferences sp = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            String saved = sp.getString(PREF_KEY_URI, null);
+            ContentResolver cr = ctx.getContentResolver();
+            if (saved != null) {
+                Uri u = Uri.parse(saved);
+                // sanity check: can we open it?
+                try (OutputStream test = cr.openOutputStream(u, "wa")) {
+                    if (test != null) return u;
+                } catch (Exception ignore) { }
+            }
+            // query existing by DISPLAY_NAME in Downloads
+            Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+            String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=?";
+            String[] selArgs = new String[]{ LOG_DISPLAY_NAME };
+            try (android.database.Cursor c = cr.query(collection, new String[]{ MediaStore.MediaColumns._ID }, sel, selArgs, null)) {
+                if (c != null && c.moveToFirst()) {
+                    long id = c.getLong(0);
+                    Uri existing = Uri.withAppendedPath(collection, String.valueOf(id));
+                    sp.edit().putString(PREF_KEY_URI, existing.toString()).apply();
+                    return existing;
+                }
+            }
+            // not found -> create
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, LOG_DISPLAY_NAME);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, "text/plain");
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+            Uri created = cr.insert(collection, values);
+            if (created != null) {
+                sp.edit().putString(PREF_KEY_URI, created.toString()).apply();
+            }
+            return created;
+        } catch (Exception e) {
+            Log.e("FileLog", "restoreOrCreateDownloadsUri failed", e);
+            return null;
+        }
+    }
+
+    private void writeLine(String line) throws IOException {
+        if (line == null) return;
+        if (mWriter != null) {
+            mWriter.write(line);
+            mWriter.flush();
+        } else if (mRaf != null) {
+            mRaf.write(line.getBytes());
+        }
     }
 
     /**
@@ -264,11 +337,9 @@ public class FileLog {
         Date d = new Date();
         String strContent = String.format("%tF %tT | %s | %s | %s\n", d, d, level, tag == null ? DEFAULT_TAG : tag, content);
         try {
-            if (mRaf != null) {
-                mRaf.write(strContent.getBytes());
-            }
+            writeLine(strContent);
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e("FileLog", "writeLogToFile failed", e);
         }
     }
 
@@ -286,15 +357,33 @@ public class FileLog {
     /**
      * 关闭日志文件，释放资源。
      */
-    public void close()
-    {
+    public void close() {
         try {
-            if (mRaf != null)
-                mRaf.close();
-            mFile = null;
-            mRaf = null;
+            if (mWriter != null) {
+                mWriter.flush();
+                // Do not close mOs twice; closing writer will close underlying stream
+                mWriter.close();
+            } else if (mOs != null) {
+                mOs.flush();
+                mOs.close();
+            }
         } catch (IOException e) {
-            e.printStackTrace();
+            Log.e("FileLog", "close writer/stream failed", e);
         }
+        try {
+            if (mRaf != null) mRaf.close();
+        } catch (IOException e) {
+            Log.e("FileLog", "close mRaf failed", e);
+        }
+        mWriter = null;
+        mOs = null;
+        mRaf = null;
+        mFile = null;
+    }
+
+    public String getLogLocationHint() {
+        if (mLogUri != null) return mLogUri.toString();
+        if (mFile != null) return mFile.getAbsolutePath();
+        return "";
     }
 }

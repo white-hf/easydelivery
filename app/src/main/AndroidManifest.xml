@@ -36,7 +36,7 @@
 
         <!-- 主页/Tab容器，唯一入口 -->
         <activity
-            android:name=".view.MainActivity"
+            android:name=".view.LoginActivity"
             android:exported="true"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"
             android:windowSoftInputMode="adjustNothing">
@@ -48,8 +48,15 @@
 
         <!-- 登录页面，弹出登录/返回主页 -->
         <activity
-            android:name=".view.LoginActivity"
+            android:name=".view.MainActivity"
             android:exported="true"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
+        <activity
+            android:name=".view.CameraActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
         <!-- 设置等辅助页可保留 -->

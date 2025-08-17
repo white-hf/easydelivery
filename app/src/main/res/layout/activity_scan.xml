@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".ScanActivity">
+
+    <!-- AppBarLayout + Toolbar -->
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:elevation="8dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/scantoolbar"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@color/primaryDark"
+            app:title="包裹扫描"
+            app:titleTextAppearance="@style/ScanToolbar.Title"
+            app:popupTheme="@style/ThemeOverlay.AppCompat.Dark"
+            app:menu="@menu/scan_actions"/>
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <!-- 扫描进度，要在 Toolbar 下面 -->
+    <TextView
+        android:id="@+id/tvProgress"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:padding="8dp"
+        android:background="#80000000"
+        android:text="已扫描 0 / 0"
+        android:textColor="@android:color/white"
+        android:textSize="16sp"
+        android:elevation="6dp"
+        android:translationZ="8dp"
+        app:layout_constraintTop_toBottomOf="@id/appBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
+
+    <!-- CameraX 预览 -->
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:implementationMode="compatible"
+        app:layout_constraintTop_toBottomOf="@id/tvProgress"
+        app:layout_constraintBottom_toTopOf="@id/guideline50"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:background="@android:color/darker_gray"/>
+
+    <!-- 横向条码取景框遮罩 -->
+    <View
+        android:id="@+id/viewFinderOverlay"
+        android:layout_width="0dp"
+        android:layout_height="80dp"
+        android:background="@drawable/overlay_barcode_finder"
+        android:elevation="2dp"
+        android:clickable="false"
+        android:focusable="false"
+        app:layout_constraintTop_toTopOf="@id/previewView"
+        app:layout_constraintBottom_toBottomOf="@id/previewView"
+        app:layout_constraintStart_toStartOf="@id/previewView"
+        app:layout_constraintEnd_toEndOf="@id/previewView"
+        tools:visibility="visible"/>
+
+    <!-- 扫描红线 -->
+    <View
+        android:id="@+id/scanLine"
+        android:layout_width="0dp"
+        android:layout_height="2dp"
+        android:background="#FF0000"
+        app:layout_constraintTop_toTopOf="@id/viewFinderOverlay"
+        app:layout_constraintStart_toStartOf="@id/viewFinderOverlay"
+        app:layout_constraintEnd_toEndOf="@id/viewFinderOverlay"
+        tools:visibility="visible"/>
+
+    <!-- 实时高亮包裹号 -->
+    <TextView
+        android:id="@+id/tvPackageNumber"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:background="#80000000"
+        android:text="包裹号：—"
+        android:textColor="@android:color/white"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:elevation="4dp"
+        android:translationZ="8dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/previewView"
+        app:layout_constraintBottom_toBottomOf="@id/previewView"
+        app:layout_constraintVertical_bias="1.0"
+        android:layout_marginBottom="8dp"/>
+
+    <!-- 分段切换：未扫描 / 已扫描 -->
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/segmented"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:elevation="4dp"
+        android:translationZ="6dp"
+        app:selectionRequired="true"
+        app:singleSelection="true"
+        app:layout_constraintTop_toTopOf="@id/guideline50"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="8dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnUnscanned"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:text="未扫描(0)"
+            app:cornerRadius="16dp"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnScanned"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:text="已扫描(0)"
+            app:cornerRadius="16dp"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"/>
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+
+    <!-- 最近扫描列表 -->
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/guideline50"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintGuide_percent="0.5" />
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvRecentScans"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:translationZ="6dp"
+        app:layout_constraintTop_toBottomOf="@id/segmented"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:padding="8dp"
+        android:background="#CCFFFFFF"/>
+
+    <!-- 提示文本：只扫框内，并尽量靠近 -->
+    <TextView
+        android:id="@+id/tvHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="请将条码放入框内并尽量靠近"
+        android:textColor="@android:color/white"
+        android:textSize="12sp"
+        android:background="#66000000"
+        android:padding="6dp"
+        app:layout_constraintTop_toBottomOf="@id/viewFinderOverlay"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_margin="8dp"
+        android:layout_marginEnd="16dp"/>
+
+    <!-- 全屏进度遮罩，默认隐藏 -->
+    <FrameLayout
+        android:id="@+id/flProgressOverlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        android:background="#80000000"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:orientation="vertical"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="24dp"
+            android:background="@drawable/bg_round_white"
+            android:layout_gravity="center">
+
+            <ProgressBar
+                android:id="@+id/pbSubmitting"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="200dp"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="0"/>
+
+            <TextView
+                android:id="@+id/tvSubmitting"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="提交中 0/0"
+                android:textColor="@android:color/black"
+                android:textSize="16sp"/>
+        </LinearLayout>
+    </FrameLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,14 @@
+<!-- res/menu/map_menu.xml -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 顶部统计项，不可点击 -->
+
+    <item android:id="@+id/menu_unscanned"
+        android:title="未扫描"
+        android:icon="@drawable/ic_filter_unscanned"/>
+    <item android:id="@+id/menu_search"
+        android:title="包裹搜索"
+        android:icon="@drawable/ic_search"/>
+    <item android:id="@+id/menu_refresh"
+        android:title="刷新"
+        android:icon="@drawable/ic_refresh"/>
+</menu>

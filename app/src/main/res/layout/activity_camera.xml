@@ -1,11 +1,6 @@
-<!--
-    Drawable resources to create in res/drawable:
-    - bg_circle_dark.xml: 56 dp circle, fill #222222, alpha 0.75, <corners android:radius="28dp" />.
-    - bg_circle_primary.xml: 72 dp circle, fill @color/colorPrimary, <corners android:radius="36dp" />.
--->
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/camera_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@android:color/black"
@@ -17,15 +12,14 @@
         android:layout_width="40dp"
         android:layout_height="40dp"
         android:background="@drawable/bg_circle_translucent"
+        android:contentDescription="@android:string/cancel"
         android:src="@android:drawable/ic_menu_close_clear_cancel"
         android:tint="@android:color/white"
-        android:contentDescription="@android:string/cancel"
-        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
         android:layout_marginStart="12dp"
-        android:layout_marginTop="12dp"/>
+        android:layout_marginTop="12dp" />
 
-    <!-- 1. 顶部 infoBar -->
     <androidx.cardview.widget.CardView
         android:id="@+id/info_bar"
         android:layout_width="0dp"
@@ -97,7 +91,6 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- 2. Camera preview -->
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="0dp"
@@ -110,9 +103,8 @@
         android:layout_marginBottom="8dp"
         android:background="@android:color/black"
         app:implementationMode="performance"
-        app:scaleType="fillCenter"/>
+        app:scaleType="fillCenter" />
 
-    <!-- 3. 缩略图条 thumbBar -->
     <androidx.cardview.widget.CardView
         android:id="@+id/thumb_bar"
         android:layout_width="0dp"
@@ -137,11 +129,10 @@
                 android:id="@+id/thumbnail_container"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
-                android:orientation="horizontal"/>
+                android:orientation="horizontal" />
         </HorizontalScrollView>
     </androidx.cardview.widget.CardView>
 
-    <!-- 4. 快门栏 -->
     <androidx.cardview.widget.CardView
         android:id="@+id/shutter_bar"
         android:layout_width="0dp"
@@ -199,7 +190,6 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- 5. 底部操作栏：浅灰 + 阴影 -->
     <androidx.cardview.widget.CardView
         android:id="@+id/action_bar2"
         android:layout_width="0dp"
@@ -210,7 +200,9 @@
         android:backgroundTint="#1E1E1E"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginStart="18dp"
+        android:layout_marginEnd="18dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -218,7 +210,6 @@
             android:orientation="horizontal"
             android:gravity="center">
 
-            <!-- 短信 -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/sms_button"
                 style="@style/Widget.Material3.Button.TextButton"
@@ -232,7 +223,6 @@
                 app:iconTint="@android:color/white"
                 app:backgroundTint="@android:color/transparent"/>
 
-            <!-- 拨号 -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/phone_button"
                 style="@style/Widget.Material3.Button.TextButton"
@@ -246,7 +236,6 @@
                 app:iconTint="@android:color/white"
                 app:backgroundTint="@android:color/transparent"/>
 
-            <!-- 失败 -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/fail_button"
                 style="@style/Widget.Material3.Button.TextButton"
@@ -260,7 +249,6 @@
                 app:iconTint="@android:color/white"
                 app:backgroundTint="@android:color/transparent"/>
 
-            <!-- 完成 -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/ok_button"
                 style="@style/Widget.Material3.Button.TextButton"

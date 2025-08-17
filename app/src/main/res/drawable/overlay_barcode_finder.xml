@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 整体半透明遮罩 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#80000000"/>
+        </shape>
+    </item>
+
+    <!-- 中心横向透明窗 + 白色细边框，高度固定 80dp，宽度由布局撑满 -->
+    <item
+        android:height="80dp"
+        android:gravity="center">
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent"/>
+            <stroke
+                android:width="1dp"
+                android:color="#FFFFFF"/>
+        </shape>
+    </item>
+
+</layer-list>

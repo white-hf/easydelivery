@@ -15,12 +15,14 @@ import com.hf.easydelivery.dao.PackageEntity;
 
 import java.io.IOException;
 
+import androidx.annotation.NonNull;
+
 public class UploadedDeliveryDataRspCb extends ResponseCallBackBase<Void>{
 
     private final PendingPackagesMgr mgr;
     private final PackageEntity deliveryInfo;
 
-    public UploadedDeliveryDataRspCb(PendingPackagesMgr mgr, PackageEntity deliveryInfo)
+    public UploadedDeliveryDataRspCb(@NonNull PendingPackagesMgr mgr, @NonNull PackageEntity deliveryInfo)
     {
         this.mgr = mgr;
         this.deliveryInfo = deliveryInfo;
@@ -28,64 +30,48 @@ public class UploadedDeliveryDataRspCb extends ResponseCallBackBase<Void>{
 
     @Override
     public void onComplete(Result<Void> result) {
-        FileLog.getInstance().writeLog("Upload successful:" + deliveryInfo.trackingId);
-
-        mgr.update(deliveryInfo.trackingId, PendingPackagesMgr.PackageStatus.UPLOADED.getStatus());
-        notifyUiUploadResult(true,  deliveryInfo);
+        FileLog.getInstance().writeLog("[Upload] success trackingId=" + deliveryInfo.trackingId +
+                ", orderId=" + deliveryInfo.orderId +
+                ", lat=" + deliveryInfo.latitude + ", lng=" + deliveryInfo.longitude);
+        // 统一交给 PendingPackagesMgr 做状态更新、事件分发、去重管理
+        mgr.onUploadSuccess(deliveryInfo);
     }
 
     @Override
     public void onFail(Exception result) {
-        if (result instanceof UnAuthorizedException)
-        {
-            //need to login again
-            ResourceMgr.getInstance().getMainHandler().post(() -> {
-                ResourceMgr.getInstance().getPublisher().notify(EventConstant.EVENT_TO_LOGIN, new Event<Void>(null));
-            });
+        final String base = "[Upload] fail trackingId=" + deliveryInfo.trackingId +
+                ", orderId=" + deliveryInfo.orderId +
+                ", lat=" + deliveryInfo.latitude + ", lng=" + deliveryInfo.longitude +
+                ", err=" + (result == null ? "<null>" : result.getClass().getSimpleName()) +
+                ": " + (result == null ? "" : result.getMessage());
+        FileLog.getInstance().writeLog(base);
 
-            ResourceMgr.getInstance().getLoginInfo().bIsLoggedIn = false;
-            mgr.addQueue(deliveryInfo , false);
-        }else if (result instanceof ForbiddenException)
-        {
-            //already uploaded, because of local cache, there might be a temporary data inconsistency, but it doesn't matter.
-            mgr.update(deliveryInfo.trackingId, PendingPackagesMgr.PackageStatus.UPLOADED.getStatus());
-            ResourceMgr.getInstance().getMainHandler().post(() -> {
-                ResourceMgr.getInstance().getPublisher().notify(EventConstant.EVENT_UPLOAD_SUCCESS, new Event<com.hf.easydelivery.dao.PackageEntity>(deliveryInfo));
-            });
-        }else if (result instanceof TooMuchRequestException)
-        {
-            //too many requests, we need to wait a while.
-            mgr.addQueue(deliveryInfo , false);
-            try {
-                sleep(5000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }else if (result instanceof IOException)
-        {
-            //This is network error, we need to retry.
-            mgr.addQueue(deliveryInfo , false);
-            FileLog.getInstance().writeLog("MultipartUploader Upload failed for network error:" + deliveryInfo.trackingId + " " + result.getMessage());
-        }
-        else
-        {
-            notifyUiUploadResult(false, deliveryInfo);
-            mgr.update(deliveryInfo.trackingId, PendingPackagesMgr.PackageStatus.FAILED.getStatus());
+        if (result instanceof UnAuthorizedException) {
+            // 401：不在此处直接重入队，统一交给管理类处理（发布登录事件 + 延后重试）
+            mgr.onUnauthorized(deliveryInfo);
+            return;
         }
 
-        FileLog.getInstance().writeLog("MultipartUploader Upload failed:" + deliveryInfo.trackingId + " " + result.getMessage());
-    }
-
-    private void notifyUiUploadResult (boolean bSuccess, PackageEntity  deliveryInfo)
-    {
-        if (!bSuccess) {
-            ResourceMgr.getInstance().getMainHandler().post(() -> {
-                ResourceMgr.getInstance().getPublisher().notify(EventConstant.EVENT_UPLOAD_FAILURE, new Event<com.hf.easydelivery.dao.PackageEntity>(deliveryInfo));
-            });
-        } else {
-            ResourceMgr.getInstance().getMainHandler().post(() -> {
-                ResourceMgr.getInstance().getPublisher().notify(EventConstant.EVENT_UPLOAD_SUCCESS, new Event<com.hf.easydelivery.dao.PackageEntity>(deliveryInfo));
-            });
+        if (result instanceof ForbiddenException) {
+            // 403（已上传或被业务拒绝但视为完成）：直接视为成功，防止重复
+            FileLog.getInstance().writeLog("[Upload] forbidden -> treat as success (dedupe) trackingId=" + deliveryInfo.trackingId);
+            mgr.onUploadSuccess(deliveryInfo);
+            return;
         }
+
+        if (result instanceof TooMuchRequestException) {
+            // 429：可重试错误，交由管理类做指数回退与延时重入队
+            mgr.onUploadRetriableFailure(deliveryInfo, 429, result.getMessage());
+            return;
+        }
+
+        if (result instanceof IOException) {
+            // 网络类异常：可重试
+            mgr.onUploadRetriableFailure(deliveryInfo, -1, result.getMessage());
+            return;
+        }
+
+        // 其它 4xx 等不可重试错误：标记失败，由管理类发失败通知（不立即重试）
+        mgr.onUploadUnrecoverableFailure(deliveryInfo, 400, result == null ? null : result.getMessage());
     }
 }

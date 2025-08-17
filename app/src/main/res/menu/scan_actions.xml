@@ -1,0 +1,15 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_query_unscanned"
+        android:icon="@drawable/ic_search_unscanned"
+        android:title="未扫包裹"
+        app:showAsAction="always"/>
+
+    <item
+        android:id="@+id/action_submit_offline"
+        android:icon="@drawable/ic_cloud_upload"
+        android:title="提交"
+        app:showAsAction="always"/>
+</menu>
