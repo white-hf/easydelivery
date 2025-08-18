@@ -13,6 +13,7 @@ import android.os.Handler;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Log;
+import com.hf.courierservice.apihelper.FileLog;
 import android.util.Size;
 import android.graphics.Rect;
 import android.view.LayoutInflater;
@@ -91,6 +92,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 
 public class ScanFragment extends Fragment implements Subscriber {
 
+    private static final String TAG = "ScanFragment";
     //
     // First‑time display & camera binding guards
     private boolean firstShown = false;
@@ -145,12 +147,14 @@ public class ScanFragment extends Fragment implements Subscriber {
     // Fragment菜单支持
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
+        FileLog.i(TAG, "onCreate");
         super.onCreate(savedInstanceState);
         // setHasOptionsMenu(true); // 允许Fragment使用菜单
     }
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        FileLog.i(TAG, "onCreateView");
         View view = inflater.inflate(R.layout.activity_scan, container, false);
 
         // 由于Fragment无setSupportActionBar, 如需Toolbar请放在MainActivity控制
@@ -241,7 +245,7 @@ public class ScanFragment extends Fragment implements Subscriber {
         menuHost.addMenuProvider(new MenuProvider() {
             @Override
             public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
-                Log.d("ScanFragment", "MenuProvider.onCreateMenu invoked");
+                FileLog.d(TAG, "MenuProvider.onCreateMenu invoked");
                 menuInflater.inflate(R.menu.scan_actions, menu);
             }
 
@@ -265,6 +269,7 @@ public class ScanFragment extends Fragment implements Subscriber {
         return view;
     }
 
+
     // Start camera only when needed, and only after user confirmation if unscannedList has items
     private void startCameraIfNeeded() {
         if (unscannedList == null || unscannedList.isEmpty()) {
@@ -272,10 +277,17 @@ public class ScanFragment extends Fragment implements Subscriber {
             Toast.makeText(requireContext(), "您当前没有需要扫描的包裹", Toast.LENGTH_SHORT).show();
             return;
         }
+        // 检查相机权限
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            FileLog.w(TAG, "startCameraIfNeeded: CAMERA permission not granted, requesting permission");
+            requestPermissionLauncher.launch(Manifest.permission.CAMERA);
+            return;
+        }
         // 有未扫描包裹 → 询问是否开启相机
         new AlertDialog.Builder(requireContext())
                 .setTitle("提示")
-                .setMessage("检测到有未扫描包裹，是否开始扫描？")
+                .setMessage("您有未扫描包裹，是否开始扫描？")
                 .setPositiveButton("是", (dialog, which) -> bindCameraNow())
                 .setNegativeButton("否", (dialog, which) -> {
                     Log.d("ScanFragment", "用户选择暂不启动相机扫描");
@@ -286,8 +298,17 @@ public class ScanFragment extends Fragment implements Subscriber {
 
     /**
      * Actually bind the camera if needed, used after user confirms.
+     * Checks CAMERA permission before proceeding.
      */
     private void bindCameraNow() {
+        // 检查相机权限
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            FileLog.w(TAG, "bindCameraNow: CAMERA permission not granted, requesting permission");
+            requestPermissionLauncher.launch(Manifest.permission.CAMERA);
+            return;
+        }
+        FileLog.i(TAG, "bindCameraNow: CAMERA permission granted, attempting to bind camera");
         if (previewView == null) return;
         cameraWasBound = true;
         ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
@@ -318,7 +339,7 @@ public class ScanFragment extends Fragment implements Subscriber {
                                         }
                                     }
                                 })
-                                .addOnFailureListener(e -> Log.e("ScanFragment", "Barcode analysis failed", e))
+                                .addOnFailureListener(e -> FileLog.e(TAG, "Barcode analysis failed", e))
                                 .addOnCompleteListener(task -> image.close());
                     } catch (Exception e) {
                         image.close();
@@ -331,8 +352,9 @@ public class ScanFragment extends Fragment implements Subscriber {
 
                 cameraProvider.unbindAll();
                 cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
+                FileLog.i(TAG, "bindCameraNow: CameraX bound successfully");
             } catch (Exception e) {
-                Log.e("ScanFragment", "CameraX binding failed", e);
+                FileLog.e(TAG, "CameraX binding failed", e);
             }
         }, ContextCompat.getMainExecutor(requireContext()));
     }
@@ -349,7 +371,7 @@ public class ScanFragment extends Fragment implements Subscriber {
             }
             toolbar.setOnMenuItemClickListener(item -> {
                 int id = item.getItemId();
-                Log.d("ScanFragment", "Toolbar menu click: " + item.getTitle());
+                FileLog.d(TAG, "Toolbar menu click: " + item.getTitle());
                 if (id == R.id.action_query_unscanned) {
                     queryUnscanned();
                     return true;
@@ -360,7 +382,7 @@ public class ScanFragment extends Fragment implements Subscriber {
                 return false;
             });
         } else {
-            Log.w("ScanFragment", "Toolbar not found; menu clicks won't be handled here.");
+            FileLog.w(TAG, "Toolbar not found; menu clicks won't be handled here.");
         }
     }
 
@@ -368,8 +390,12 @@ public class ScanFragment extends Fragment implements Subscriber {
     private final ActivityResultLauncher<String> requestPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
+                    FileLog.i(TAG, "requestPermissionLauncher: CAMERA permission granted by user");
+                    // 用户同意权限，根据调用来源，通常是 startCameraIfNeeded 或 bindCameraNow
+                    // 这里直接调用 startCameraIfNeeded，用户流程会继续
                     startCameraIfNeeded();
                 } else {
+                    FileLog.w(TAG, "requestPermissionLauncher: CAMERA permission denied by user");
                     Toast.makeText(getContext(), "需要相机权限", Toast.LENGTH_SHORT).show();
                 }
             });
@@ -382,6 +408,7 @@ public class ScanFragment extends Fragment implements Subscriber {
 
 
     private void queryUnscanned() {
+        FileLog.i(TAG, "queryUnscanned: start");
         preloadOfflineData();
 
         flProgressOverlay.setVisibility(View.VISIBLE);
@@ -391,6 +418,7 @@ public class ScanFragment extends Fragment implements Subscriber {
         new Handler().postDelayed(() -> {
             flProgressOverlay.setVisibility(View.GONE);
             Utils.showOnUi(requireContext(), "未扫描包裹：" + unscannedList.size() + " 件");
+            FileLog.i(TAG, "queryUnscanned: end, unscannedList.size()=" + unscannedList.size());
         }, 1500);
     }
 
@@ -474,12 +502,13 @@ public class ScanFragment extends Fragment implements Subscriber {
     }
 
     private void handleResult(String waybillNo, String packageNo) {
+        FileLog.i(TAG, "handleResult: scanned successfully, waybillNo=" + waybillNo + ", packageNo=" + packageNo);
         // 顶部展示（大号包裹号）
         tvPackageNumber.setText("包裹号：" + (packageNo != null ? packageNo : "—") + "\n" + "运单号：" + (waybillNo != null ? waybillNo : ""));
 
         // 已扫描：加入头部
         scannedWaybills.add(waybillNo);
-        ScanItem item = new ScanItem(packageNo, waybillNo);
+        ScanItem item = new ScanItem(packageNo, waybillNo, false , true); // Not uploaded yet
         // Persist mapping for future duplicate detection UI
         waybillToPackageMap.put(waybillNo, packageNo);
         scannedList.add(0, item);
@@ -515,6 +544,7 @@ public class ScanFragment extends Fragment implements Subscriber {
     // Only bind camera if needed, and run "first shown" logic once
     @Override
     public void onResume() {
+        FileLog.i(TAG, "onResume");
         super.onResume();
         bindToolbarMenu();
         if (scanViewModel.shouldDoFirstEnter()) {
@@ -531,18 +561,20 @@ public class ScanFragment extends Fragment implements Subscriber {
 
     @Override
     public void onPause() {
+        FileLog.i(TAG, "onPause");
         super.onPause();
         // Unbind CameraX to release the camera
         try {
             ProcessCameraProvider cameraProvider = ProcessCameraProvider.getInstance(requireContext()).get();
             cameraProvider.unbindAll();
         } catch (Exception e) {
-            Log.e("ScanFragment", "Failed to unbind camera onPause", e);
+            FileLog.e(TAG, "Failed to unbind camera onPause", e);
         }
     }
 
     @Override
     public void onDestroyView() {
+        FileLog.i(TAG, "onDestroyView");
         if (tokenRefresher != null) {
             tokenRefresher.stop();
         }
@@ -555,13 +587,14 @@ public class ScanFragment extends Fragment implements Subscriber {
             ProcessCameraProvider cameraProvider = ProcessCameraProvider.getInstance(requireContext()).get();
             cameraProvider.unbindAll();
         } catch (Exception e) {
-            Log.e("ScanFragment", "Failed to unbind camera onDestroyView", e);
+            FileLog.e(TAG, "Failed to unbind camera onDestroyView", e);
         }
         super.onDestroyView();
     }
 
     private void saveScanRecord(String waybillNo, Short packageNo , Long scanBatchId)
     {
+        FileLog.d(TAG, "saveScanRecord: inserting waybillNo=" + waybillNo + ", packageNo=" + packageNo + ", scanBatchId=" + scanBatchId);
         long now = System.currentTimeMillis();
         ScanRecord rec = new ScanRecord(
                 now,
@@ -581,14 +614,17 @@ public class ScanFragment extends Fragment implements Subscriber {
     }
 
     private void submitScansOffline() {
+        FileLog.i(TAG, "submitScansOffline: start");
         // 扫描报告状态校验：未打开则阻止提交（与 iOS 一致）
         Long scanBatchIdCheck = ResourceMgr.getInstance().getDeliveryinfoMgr().getScanBatchId();
         if (scanBatchIdCheck == null || scanBatchIdCheck < 1) {
+            FileLog.w(TAG, "submitScansOffline: scanBatchIdCheck invalid: " + scanBatchIdCheck);
             Utils.showOnUi(requireContext(), "扫描报告已关闭，请使用总部App扫描任意包裹打开报告，然后点击右上角“查询”。");
             return;
         }
 
         if (ResourceMgr.getInstance().getDeliveryinfoMgr().getScanBatchStatus() != 0 ) {
+            FileLog.w(TAG, "submitScansOffline: scanBatchStatus invalid");
             Utils.showOnUi(requireContext(), "扫描报告已关闭或批次无效，请使用总部App扫描任意包裹打开报告，然后点击右上角“查询”。");
             return;
         }
@@ -618,6 +654,7 @@ public class ScanFragment extends Fragment implements Subscriber {
     }
 
     private void batchSubmit(List<ScanRecord> list) {
+        FileLog.i(TAG, "batchSubmit: start, list.size()=" + (list == null ? 0 : list.size()));
         requireActivity().runOnUiThread(() -> {
             pbSubmitting.setMax(list.size());
             pbSubmitting.setProgress(0);
@@ -628,6 +665,7 @@ public class ScanFragment extends Fragment implements Subscriber {
         submitHelper.submit(list, new BatchSubmitCallback() {
             @Override
             public void onProgress(int done, int total, int success, int fail) {
+                FileLog.d(TAG, "batchSubmit: progress " + done + "/" + total + ", success=" + success + ", fail=" + fail);
                 requireActivity().runOnUiThread(() -> {
                     pbSubmitting.setProgress(done);
                     tvSubmitting.setText(
@@ -637,6 +675,7 @@ public class ScanFragment extends Fragment implements Subscriber {
             }
             @Override
             public void onComplete(int successCount, int failCount) {
+                FileLog.i(TAG, "batchSubmit: complete, success=" + successCount + ", fail=" + failCount);
                 requireActivity().runOnUiThread(() -> {
                     flProgressOverlay.setVisibility(View.GONE);
                     Utils.showOnUi(requireContext() , "提交完成，成功：" + successCount
@@ -647,6 +686,7 @@ public class ScanFragment extends Fragment implements Subscriber {
 
             @Override
             public void onFail(Exception e) {
+                FileLog.e(TAG, "batchSubmit: failed", e);
                 // showLoginDialog();
                 Toast.makeText(requireContext(), "登录失效，请重新登录", Toast.LENGTH_SHORT).show();
             }
@@ -655,6 +695,7 @@ public class ScanFragment extends Fragment implements Subscriber {
 
     @Override
     public void receive(Event event) {
+        FileLog.i(TAG, "receive: event=" + (event == null ? "null" : event.getEventType()));
         totalCount = ResourceMgr.getInstance().getDeliveryinfoMgr().size();
         tvProgress.setText("已扫描 " + scannedCount + " / " + totalCount);
         // 用已扫描集合过滤未扫描列表，并刷新分段计数
@@ -670,11 +711,11 @@ public class ScanFragment extends Fragment implements Subscriber {
             firstShown = true;
             startCameraIfNeeded();
         }
-        Utils.showOnUi(requireContext(), "未扫描包裹：" + unscannedList.size() + " 件（已根据本机已扫记录过滤）");
     }
 
 
     private void loadOfflineRecordsForToday() {
+        FileLog.i(TAG, "loadOfflineRecordsForToday: begin DB load");
         final String dateStr = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new java.util.Date());
         final ScanRecordDao scanRecordDao = ResourceMgr.getInstance().getmMydb().getScanRecordDao();
         final Integer driverId = ResourceMgr.getInstance().getLoginInfo().loginId;
@@ -699,10 +740,17 @@ public class ScanFragment extends Fragment implements Subscriber {
             // 构建“已扫描”数据与集合
             final ArrayList<ScanItem> items = new ArrayList<>(all.size());
             final HashSet<String> waybills = new HashSet<>();
-            for (ScanRecord r : all) {
+            for (ScanRecord r : pending) {
                 String w = r.trackingNo;
                 String p = r.packageNo == null ? "" : String.valueOf(r.packageNo);
-                items.add(new ScanItem(p, w));
+                items.add(new ScanItem(p, w, false , true));
+                waybills.add(w);
+                waybillToPackageMap.put(w, p);
+            }
+            for (ScanRecord r : uploaded) {
+                String w = r.trackingNo;
+                String p = r.packageNo == null ? "" : String.valueOf(r.packageNo);
+                items.add(new ScanItem(p, w, true , true));
                 waybills.add(w);
                 waybillToPackageMap.put(w, p);
             }
@@ -729,10 +777,10 @@ public class ScanFragment extends Fragment implements Subscriber {
                 tvProgress.setText("已扫描 " + scannedCount + " / " + totalCount);
                 refreshSegmentCounts();
                 applySegment(segmented != null && segmented.getCheckedButtonId() == R.id.btnUnscanned ? 0 : 1);
+                FileLog.i(TAG, "loadOfflineRecordsForToday: DB load complete, scanned=" + scannedList.size() + ", unscanned=" + unscannedList.size());
             });
         });
     }
-
     private void refreshSegmentCounts() {
         if (btnUnscanned != null) btnUnscanned.setText("未扫描(" + unscannedList.size() + ")");
         if (btnScanned   != null) btnScanned.setText("已扫描(" + scannedList.size() + ")");
@@ -742,9 +790,9 @@ public class ScanFragment extends Fragment implements Subscriber {
     private void applySegment(int segmentIndex) {
         recentScans.clear();
         if (segmentIndex == 0) {
-            // 未扫描：DeliveryInfo -> ScanItem
+            // 未扫描：DeliveryInfo -> ScanItem, not uploaded
             for (DeliveryInfo d : unscannedList) {
-                recentScans.add(new ScanItem(d.getRouteNumber(), d.getOrderSn()));
+                recentScans.add(new ScanItem(d.getRouteNumber(), d.getOrderSn(), false,false));
             }
         } else {
             // 已扫描

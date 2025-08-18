@@ -18,7 +18,7 @@ import com.hf.courierservice.ICourierService;
 import com.hf.easydelivery.event.Publisher;
 import com.hf.easydelivery.api.CourierServiceFactory;
 import com.hf.easydelivery.common.ConfigurationManager;
-import com.hf.easydelivery.common.FileLog;
+import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.common.Utils;
 
 import com.hf.easydelivery.core.PendingPackagesMgr;

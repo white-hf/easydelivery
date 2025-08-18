@@ -3,7 +3,9 @@ package com.hf.courierservice.apihelper;
 import static com.android.volley.Request.Method;
 
 import android.content.Context;
-import android.util.Log;
+
+import com.hf.courierservice.Result;
+import com.hf.courierservice.apihelper.FileLog;
 
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
@@ -15,6 +17,7 @@ import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
 
 import java.net.HttpURLConnection;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * This is a base class for all api request. To make a api request, you need to extends this class and set url, request and response class.
@@ -76,7 +79,7 @@ public class ApiRequestBase<RE , RS> {
                            TaskBase taskBase = (TaskBase)response;
                            taskBase.doIt(cb);
                         } catch (Exception e) {
-                            Log.e(TAG , e.getMessage());
+                            FileLog.e(TAG, "Exception in response handling", e);
                         }
                     };
                 }, new Response.ErrorListener() {
@@ -98,5 +101,39 @@ public class ApiRequestBase<RE , RS> {
 
         geneticReq.setHeader(mHeader);
         requestQueue.add(geneticReq);
+    }
+
+    /**
+     * Static helper to call API and handle success/error with lambdas.
+     */
+    public static <REQ, RESP> void callApi(
+            ApiRequestBase<REQ, RESP> api,
+            Consumer<RESP> onSuccess,
+            Consumer<Exception> onError
+    ) {
+        FileLog.d(TAG, "callApi: invoking " + api.mUrl);
+        api.doApi(new IResponseCallBack<RESP>() {
+            public void onComplete(Result<RESP> result) {
+                if (result instanceof Result.Success) {
+                    RESP data = ((Result.Success<RESP>) result).data;  // ✅ 拿到真正的 data
+                    try {
+                        onSuccess.accept(data);
+                    } catch (Exception e) {
+                        FileLog.e(TAG, "callApi: exception in success consumer for " + api.mUrl, e);
+                        onError.accept(e);
+                    }
+                } else if (result instanceof Result.Error) {
+                    Exception e = ((Result.Error<RESP>) result).exception;
+                    FileLog.e(TAG, "callApi: Result.Error for " + api.mUrl, e);
+                    onError.accept(e);
+                }
+            }
+
+            @Override
+            public void onFail(Exception e) {
+                FileLog.e(TAG, "callApi: error for " + api.mUrl, e);
+                onError.accept(e);
+            }
+        });
     }
 }

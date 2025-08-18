@@ -97,10 +97,14 @@ public class LoginActivity extends AppCompatActivity {
 
                        @Override
                        public void onFail(Exception result) {
-                            if ( result instanceof UnAuthorizedException)
-                                Utils.showOnUi(LoginActivity.this, getString(R.string.str_login_user_failure));
-                            else
-                                Utils.showOnUi(LoginActivity.this, getString(R.string.str_login_failure));
+                           loading.setVisibility(View.GONE);
+                           btnLogin.setEnabled(true);
+
+                           if (result instanceof UnAuthorizedException) {
+                               Utils.showOnUi(LoginActivity.this, getString(R.string.str_login_user_failure));
+                           } else {
+                               Utils.showOnUi(LoginActivity.this, getString(R.string.str_login_failure));
+                           }
                        }
                    });
 

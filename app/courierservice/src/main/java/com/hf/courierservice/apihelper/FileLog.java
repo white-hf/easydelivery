@@ -1,4 +1,4 @@
-package com.hf.easydelivery.common;
+package com.hf.courierservice.apihelper;
 
 import android.content.Context;
 import android.util.Log;
@@ -321,6 +321,24 @@ public class FileLog {
      */
     public void error(String format, Object... args) {
         error(DEFAULT_TAG, format, args);
+    }
+
+    // ======================= 静态便捷方法 =========================
+
+    public static void d(String tag, String msg) {
+        getInstance().debug(tag, msg);
+    }
+    public static void i(String tag, String msg) {
+        getInstance().info(tag, msg);
+    }
+    public static void w(String tag, String msg) {
+        getInstance().warning(tag, msg);
+    }
+    public static void e(String tag, String msg) {
+        getInstance().error(tag, msg);
+    }
+    public static void e(String tag, String msg, Throwable tr) {
+        getInstance().error(tag, msg + "\n" + Log.getStackTraceString(tr));
     }
 
     // ======================= 写入日志文件 =========================

@@ -1,25 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<RelativeLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical"
-    android:padding="4dp"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:padding="4dp">
 
-    <TextView
-        android:id="@+id/tvItemPackageNo"
+    <LinearLayout
+        android:id="@+id/text_container"
+        android:orientation="vertical"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="包裹：—"
-        android:textSize="14sp"
-        android:textColor="@android:color/black"/>
+        android:layout_alignParentStart="true"
+        android:layout_centerVertical="true">
 
-    <TextView
-        android:id="@+id/tvItemWaybillNo"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="运单：—"
-        android:textSize="14sp"
-        android:textColor="@android:color/darker_gray"/>
+        <TextView
+            android:id="@+id/tvItemPackageNo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="包裹：—"
+            android:textSize="14sp"
+            android:textColor="@android:color/black"/>
 
-</LinearLayout>
+        <TextView
+            android:id="@+id/tvItemWaybillNo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="运单：—"
+            android:textSize="14sp"
+            android:textColor="@android:color/darker_gray"/>
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/ivUnsynced"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:src="@android:drawable/stat_notify_error"
+        android:layout_alignParentEnd="true"
+        android:layout_centerVertical="true"
+        android:contentDescription="未同步标记"
+        android:visibility="gone"/>
+
+</RelativeLayout>

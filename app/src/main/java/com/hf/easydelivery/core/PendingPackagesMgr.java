@@ -1,7 +1,6 @@
 package com.hf.easydelivery.core;
 
 import android.os.Handler;
-import android.util.Log;
 
 import com.hf.courierservice.ICourierService;
 import com.hf.easydelivery.event.Event;
@@ -10,7 +9,7 @@ import com.hf.easydelivery.event.Subscriber;
 import com.hf.courierservice.bean.DeliveredUploadParams;
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.api.UploadedDeliveryDataRspCb;
-import com.hf.easydelivery.common.FileLog;
+import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.dao.DeliveredPackagesDao;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.dao.PackageEntity;

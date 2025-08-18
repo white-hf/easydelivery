@@ -2,7 +2,7 @@ package com.hf.easydelivery;
 
 import android.content.Context;
 
-import com.hf.easydelivery.common.FileLog;
+import com.hf.courierservice.apihelper.FileLog;
 
 import java.util.Date;
 

@@ -59,7 +59,7 @@ import com.google.maps.android.clustering.ClusterItem;
 import com.google.maps.android.clustering.ClusterManager;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
-import com.hf.easydelivery.common.FileLog;
+import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.common.Utils;
 import com.hf.easydelivery.core.DeliveryinfoMgr;
 import com.hf.easydelivery.core.SmartLocationManager;
@@ -71,7 +71,6 @@ import com.hf.easydelivery.event.Subscriber;
 import com.hf.easydelivery.view.CameraActivity;
 
 import android.content.Intent;
-import android.content.Context;
 
 import java.util.ArrayList;
 
@@ -965,6 +964,8 @@ public class MapInnerFragment extends Fragment implements Subscriber, OnMapReady
         Menu menu = mToolbar.getMenu();
         if (menu != null) menu.clear();
         mToolbar.inflateMenu(R.menu.map_menu);
+        mToolbar.setNavigationIcon(null);
+
 
         mToolbar.setOnMenuItemClickListener(item -> {
             int id = item.getItemId();

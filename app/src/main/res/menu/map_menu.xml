@@ -3,7 +3,7 @@
     <!-- 顶部统计项，不可点击 -->
 
     <item android:id="@+id/menu_unscanned"
-        android:title="未扫描"
+        android:title="包裹预览"
         android:icon="@drawable/ic_filter_unscanned"/>
     <item android:id="@+id/menu_search"
         android:title="包裹搜索"

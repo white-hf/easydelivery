@@ -6,7 +6,7 @@ import android.util.Log;
 
 import com.hf.courierservice.ICourierService;
 import com.hf.courierservice.bean.ScanBatchReportData;
-import com.hf.easydelivery.common.FileLog;
+import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.common.Utils;
 import com.hf.easydelivery.event.Event;
 import com.hf.easydelivery.event.EventConstant;

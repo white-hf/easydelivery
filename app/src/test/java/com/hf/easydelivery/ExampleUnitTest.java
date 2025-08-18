@@ -2,11 +2,9 @@ package com.hf.easydelivery;
 
 import org.junit.Test;
 
-import static org.junit.Assert.*;
-
 import android.content.Context;
 
-import com.hf.easydelivery.common.FileLog;
+import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.common.Utils;
 
 /**

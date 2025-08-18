@@ -14,7 +14,6 @@ import androidx.viewpager2.widget.ViewPager2;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
-import com.hf.easydelivery.common.FileLog;
 import com.hf.easydelivery.map.MapHostFragment;
 
 public class MainActivity extends AppCompatActivity {

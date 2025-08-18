@@ -5,7 +5,7 @@ import com.hf.courierservice.bean.DeliveringListData;
 import com.hf.easydelivery.event.Event;
 import com.hf.easydelivery.event.EventConstant;
 import com.hf.easydelivery.ResourceMgr;
-import com.hf.easydelivery.common.FileLog;
+import com.hf.courierservice.apihelper.FileLog;
 
 import java.util.List;
 import java.util.ListIterator;

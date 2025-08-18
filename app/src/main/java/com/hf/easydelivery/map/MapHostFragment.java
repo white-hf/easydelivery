@@ -70,8 +70,6 @@ public class MapHostFragment extends Fragment {
         }
 
         FloatingActionButton fabSwitchView = root.findViewById(R.id.fabSwitchView);
-        FloatingActionButton fabMyLocation = root.findViewById(R.id.fabMyLocation);
-        FloatingActionButton fabToggleMapType = root.findViewById(R.id.fabToggleMapType);
 
         fabSwitchView.setOnClickListener(v -> {
             FragmentManager fm = getChildFragmentManager();
@@ -90,26 +88,14 @@ public class MapHostFragment extends Fragment {
                 if (mapFrag != null) tx.hide(mapFrag);
                 if (listFrag != null) tx.show(listFrag);
                 if (mapSwitchListener != null) mapSwitchListener.onMapSwitched(false);
+                fabSwitchView.setSelected(true);
             } else if (listVisible) {
+                fabSwitchView.setSelected(false);
                 if (listFrag != null) tx.hide(listFrag);
                 if (mapFrag != null) tx.show(mapFrag);
                 if (mapSwitchListener != null) mapSwitchListener.onMapSwitched(true);
             }
             tx.commitAllowingStateLoss();
-        });
-
-        fabMyLocation.setOnClickListener(v -> {
-            Fragment currentFragment = getChildFragmentManager().findFragmentById(R.id.home_container);
-            if (currentFragment instanceof MapInnerFragment) {
-                ((MapInnerFragment) currentFragment).centerOnMyLocation();
-            }
-        });
-
-        fabToggleMapType.setOnClickListener(v -> {
-            Fragment currentFragment = getChildFragmentManager().findFragmentById(R.id.home_container);
-            if (currentFragment instanceof MapInnerFragment) {
-                ((MapInnerFragment) currentFragment).toggleMapType(fabToggleMapType);
-            }
         });
 
         return root;

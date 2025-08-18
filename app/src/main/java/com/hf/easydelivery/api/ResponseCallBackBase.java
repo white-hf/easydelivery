@@ -6,7 +6,7 @@ import com.hf.courierservice.IResponseCallBack;
 import com.hf.courierservice.Result;
 import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
 import com.hf.easydelivery.ResourceMgr;
-import com.hf.easydelivery.common.FileLog;
+import com.hf.courierservice.apihelper.FileLog;
 
 public class ResponseCallBackBase<T> implements IResponseCallBack<T> {
 

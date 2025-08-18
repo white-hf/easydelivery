@@ -8,7 +8,7 @@ import com.hf.easydelivery.event.Event;
 import com.hf.easydelivery.event.EventConstant;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
-import com.hf.easydelivery.common.FileLog;
+import com.hf.courierservice.apihelper.FileLog;
 
 public class LoginResponseCb implements IResponseCallBack<String> {
     @Override
