@@ -102,7 +102,7 @@ public class DeliveryinfoMgr implements Subscriber {
         return new Pair<>(nearest, nearestDistance);
     }
 
-    private ArrayList<DeliveryInfo> listDeliveryInfo;
+    protected ArrayList<DeliveryInfo> listDeliveryInfo;
 
     public DeliveryinfoMgr() {
         batchId = ResourceMgr.getInstance().getProperty(ITEM_CURRENT_BATCH_ID);
@@ -177,21 +177,13 @@ public class DeliveryinfoMgr implements Subscriber {
         courierService.getPackageList(String.valueOf(driverId) , bDeliveryTask , new GetPackageListRspCb());
     }
 
+
     /**
-     * Save the delivery info to the database, and app always load the delivery info from the database,
-     * therefore, app can use without the network. But we need another interface to sync the delivery info
-     * with server.
-     * @param d
+     * Map server DeliveringListData to DeliveryInfo (no side effects).
+     * Subclasses (e.g., ScanPackagesMgr) can reuse this without touching DB.
      */
-    public void saveDeliveringListData(DeliveringListData d)
-    {
+    protected DeliveryInfo mapFromDeliveringListData(DeliveringListData d) {
         Short driverId = ResourceMgr.getInstance().getLoginInfo().loginId.shortValue();
-        if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
-            return;
-        }
-
-       DeliveryInfoDao deliveryInfoDao = ResourceMgr.getInstance().getmMydb().getDeliveryInfoDao();
-
         DeliveryInfo info = new DeliveryInfo();
         info.setRouteNumber(String.valueOf(d.getRoute_no()));
         info.setLatitude(Double.parseDouble(d.getLat()));
@@ -205,14 +197,31 @@ public class DeliveryinfoMgr implements Subscriber {
         info.setOrderSn(d.getTracking_no());
         info.setOrderId(d.getOrder_id());
         info.setState(d.getState());
+        return info;
+    }
 
+    /**
+     * Save the delivery info to the database, and app always load the delivery info from the database,
+     * therefore, app can use without the network. But we need another interface to sync the delivery info
+     * with server.
+     * @param d
+     */
+    public void saveDeliveringListData(DeliveringListData d)
+    {
+        Short driverId = ResourceMgr.getInstance().getLoginInfo().loginId.shortValue();
+        if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
+            return;
+        }
+
+        DeliveryInfoDao deliveryInfoDao = ResourceMgr.getInstance().getmMydb().getDeliveryInfoDao();
+        DeliveryInfo info = mapFromDeliveringListData(d);
         listDeliveryInfo.add(info);
         ResourceMgr.getInstance().getDbHandler().post(() -> {
             try {
-                    deliveryInfoDao.insert(info);
-                } catch (Exception e) {
-                    Log.e(ResourceMgr.TAG, "save delivery info failed " + e.getMessage());
-                }
+                deliveryInfoDao.insert(info);
+            } catch (Exception e) {
+                Log.e(ResourceMgr.TAG, "save delivery info failed " + e.getMessage());
+            }
         });
     }
 
@@ -247,7 +256,7 @@ public class DeliveryinfoMgr implements Subscriber {
         });
     }
 
-    private void addDeliveryInfo(DeliveryInfo p)
+    protected void addDeliveryInfo(DeliveryInfo p)
     {
         listDeliveryInfo.add(p);
     }
@@ -314,5 +323,54 @@ public class DeliveryinfoMgr implements Subscriber {
         fechScanBatchId();
         String userId = (String)event.getMessage();
         getDeliveryInfo(Integer.parseInt(userId) , true);
+    }
+
+    /**
+     * Minimal-change scanning manager: reuse DeliveryinfoMgr networking & memory, skip DB.
+     * 用于“未扫描包裹”列表管理：仅内存，不持久化。
+     */
+    public static class ScanPackagesMgr extends DeliveryinfoMgr {
+
+        public ScanPackagesMgr() {
+            super();
+        }
+
+        /** 清空仅影响内存，不触碰本地 DB */
+        @Override
+        public void clearAll() {
+            if (listDeliveryInfo != null) {
+                listDeliveryInfo.clear();
+            }
+        }
+
+        /** 保存一条服务器数据到内存（不写 DB） */
+        @Override
+        public void saveDeliveringListData(DeliveringListData d) {
+            // reuse mapper, then only add to cache
+            DeliveryInfo info = mapFromDeliveringListData(d);
+            addDeliveryInfo(info);
+        }
+
+        /** 扫描页不需要从 DB 预加载，直接回传当前内存快照 */
+        @Override
+        public void loadDeliveryInfo(IResponseCallBack<List<DeliveryInfo>> callBack) {
+            if (callBack != null) {
+                callBack.onComplete(new Result.Success<List<DeliveryInfo>>(new ArrayList<>(listDeliveryInfo)));
+            }
+        }
+
+        /** 强制走未扫描数据接口：忽略调用端传入的 bDeliveryTask */
+        @Override
+        public void getDeliveryInfo(Integer driverId, Boolean bDeliveryTask) {
+            super.getDeliveryInfo(driverId, /*bDeliveryTask=*/false);
+        }
+
+        /** 登录事件到来时：只拉未扫描数据与扫描批次信息 */
+        @Override
+        public void receive(Event event) {
+            fechScanBatchId();
+            String userId = (String) event.getMessage();
+            getDeliveryInfo(Integer.parseInt(userId), false);
+        }
     }
 }

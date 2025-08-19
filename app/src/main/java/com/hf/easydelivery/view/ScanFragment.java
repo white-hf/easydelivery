@@ -52,6 +52,7 @@ import com.hf.easydelivery.MyDb;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.bean.ScanItem;
+import com.hf.easydelivery.common.PermissionUtils;
 import com.hf.easydelivery.common.TokenRefresher;
 import com.hf.easydelivery.common.Utils;
 import com.hf.easydelivery.component.BatchSubmitCallback;
@@ -93,6 +94,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 public class ScanFragment extends Fragment implements Subscriber {
 
     private static final String TAG = "ScanFragment";
+
     //
     // First‑time display & camera binding guards
     private boolean firstShown = false;
@@ -273,17 +275,15 @@ public class ScanFragment extends Fragment implements Subscriber {
     // Start camera only when needed, and only after user confirmation if unscannedList has items
     private void startCameraIfNeeded() {
         if (unscannedList == null || unscannedList.isEmpty()) {
-            // 用户不关心技术细节，这里只提示业务含义
-            Toast.makeText(requireContext(), "您当前没有需要扫描的包裹", Toast.LENGTH_SHORT).show();
+
             return;
         }
         // 检查相机权限
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
-            FileLog.w(TAG, "startCameraIfNeeded: CAMERA permission not granted, requesting permission");
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA);
+        if (!PermissionUtils.hasCameraPermission(requireContext())) {
+            requestCameraPermission();
             return;
         }
+
         // 有未扫描包裹 → 询问是否开启相机
         new AlertDialog.Builder(requireContext())
                 .setTitle("提示")
@@ -302,12 +302,11 @@ public class ScanFragment extends Fragment implements Subscriber {
      */
     private void bindCameraNow() {
         // 检查相机权限
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
-            FileLog.w(TAG, "bindCameraNow: CAMERA permission not granted, requesting permission");
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA);
+        if (!PermissionUtils.hasCameraPermission(requireContext())) {
+            requestCameraPermission();
             return;
         }
+
         FileLog.i(TAG, "bindCameraNow: CAMERA permission granted, attempting to bind camera");
         if (previewView == null) return;
         cameraWasBound = true;
@@ -399,6 +398,15 @@ public class ScanFragment extends Fragment implements Subscriber {
                     Toast.makeText(getContext(), "需要相机权限", Toast.LENGTH_SHORT).show();
                 }
             });
+
+    private void requestCameraPermission() {
+        if (PermissionUtils.hasCameraPermission(requireContext())) {
+            FileLog.i(TAG, "Already has CAMERA permission");
+            startCameraIfNeeded();
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.CAMERA);
+        }
+    }
 
     private void preloadOfflineData() {
         ResourceMgr.getInstance().getDeliveryinfoMgr().getDeliveryInfo(ResourceMgr.getInstance().getLoginInfo().loginId, false);
@@ -673,6 +681,20 @@ public class ScanFragment extends Fragment implements Subscriber {
                     );
                 });
             }
+
+            @Override
+            public void onSingleComplete(String trackingNo) {
+                requireActivity().runOnUiThread(() -> {
+
+                        for (ScanItem item : scannedList) {
+                            if (item.getWaybillNo().equals(trackingNo)) {
+                                item.setUploaded(true);
+                            }
+                        }
+                    adapter.notifyDataSetChanged();
+                });
+            }
+
             @Override
             public void onComplete(int successCount, int failCount) {
                 FileLog.i(TAG, "batchSubmit: complete, success=" + successCount + ", fail=" + failCount);
@@ -710,6 +732,8 @@ public class ScanFragment extends Fragment implements Subscriber {
         if (!firstShown) {
             firstShown = true;
             startCameraIfNeeded();
+
+            showUnscannedHintOnce();
         }
     }
 

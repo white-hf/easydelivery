@@ -8,6 +8,7 @@ import java.util.List;
 
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.dao.DeliveryInfo;
+import com.hf.easydelivery.dao.PackageEntity;
 import com.hf.easydelivery.event.Event;
 import com.hf.easydelivery.event.EventConstant;
 import com.hf.easydelivery.event.Subscriber;
@@ -66,8 +67,8 @@ public class MapViewModel extends ViewModel implements Subscriber {
     @Override
     public void receive(Event event) {
         if (EventConstant.EVENT_UPLOAD_SUCCESS.equals(event.getEventType())) {
-            String trackingNo = (String) event.getMessage();
-            removePackageById(trackingNo);
+            PackageEntity packageEntity = (PackageEntity) event.getMessage();
+            removePackageById(packageEntity.trackingId);
         } else if (EventConstant.EVENT_DELIVERY_DATA_READY.equals(event.getEventType())) {
             refreshPackagesFromResourceMgr();
         }

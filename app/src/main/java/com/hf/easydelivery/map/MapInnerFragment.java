@@ -361,14 +361,21 @@ public class MapInnerFragment extends Fragment implements Subscriber, OnMapReady
 
     private void initMarker() {
         FileLog.getInstance().writeLog("[TRACE] initMarker: enter");
+
         // Always clear existing markers when rebuilding from data-ready (keeps old markers if network fails)
         try {
             if (clusterManager != null) {
                 clusterManager.clearItems();
             }
+            else
+                return;
+
             if (googleMap != null) {
                 googleMap.clear();
             }
+            else
+                return;
+
         } catch (Throwable ignore) {}
 
         ArrayList<DeliveryInfo> lst = loadData();
@@ -509,9 +516,7 @@ public class MapInnerFragment extends Fragment implements Subscriber, OnMapReady
             FileLog.getInstance().writeLog("[ERROR] onMapReady: setMyLocationEnabled failed: " + e.getMessage());
         }
         initClusterManager();
-        FileLog.getInstance().writeLog("[TRACE] onMapReady: initClusterManager called, clusterManager item count=" +
-                (clusterManager != null ? clusterManager.getAlgorithm().getItems().size() : "null"));
-
+        FileLog.getInstance().writeLog("[TRACE] onMapReady: initClusterManager called, clusterManager item count=" + (clusterManager != null ? clusterManager.getAlgorithm().getItems().size() : "null"));
         if (googleMap != null && savedPosition != null) {
             CameraPosition cameraPosition = googleMap.getCameraPosition();
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, cameraPosition.zoom));
@@ -641,8 +646,8 @@ public class MapInnerFragment extends Fragment implements Subscriber, OnMapReady
                 } else {
                     FileLog.getInstance().writeLog("[ERROR] receive: failed to get DeliveryInfo for orderId=" + packageEntity.orderId);
                 }
-                // 入队上传：上传中+1，派送中-1
-                updateStatusCounts(+1, -1, 0, 0);
+                // 入队上传：上传中+1，派送中不-1，管理类已经更新pending
+                updateStatusCounts(+1, 0, 0, 0);
                 break;
             }
             case EventConstant.EVENT_UPLOAD_SUCCESS: {

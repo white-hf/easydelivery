@@ -45,6 +45,7 @@ import com.hf.easydelivery.core.PendingPackagesMgr;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.dao.PackageEntity;
 
+
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -65,6 +66,7 @@ import java.text.SimpleDateFormat;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import com.hf.easydelivery.common.PermissionUtils;
 
 /**
  * CameraActivity（从 Fragment 完整改造为 Activity）
@@ -414,27 +416,19 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     // ---------- 权限/相机绑定（CameraServie） ----------
     private void initCamera() {
-        if (checkCameraPermission()) {
+        if (PermissionUtils.hasCameraPermission(this)) {
             startCamera();
         } else {
-            requestCameraPermission();
+            PermissionUtils.requestCameraPermission(this, CAMERA_PERMISSION_REQUEST_CODE);
         }
-    }
-
-    private boolean checkCameraPermission() {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
-    }
-
-    private void requestCameraPermission() {
-        ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST_CODE);
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                initCamera();
+            if (PermissionUtils.isPermissionGranted(grantResults)) {
+                startCamera();
             } else {
                 Toast.makeText(this, "Camera permission is required to use this feature", Toast.LENGTH_SHORT).show();
             }

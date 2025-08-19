@@ -5,7 +5,7 @@ public class ScanItem {
     private final String packageNo;
     private final String waybillNo;
 
-    private final boolean uploaded;
+    private  boolean uploaded;
     private final boolean isScanned;
 
     public boolean isScanned() {
@@ -21,6 +21,10 @@ public class ScanItem {
     public String getPackageNo() { return packageNo; }
     public String getWaybillNo() { return waybillNo; }
 
+    public void setUploaded(boolean b)
+    {
+        this.uploaded = b;
+    }
     public boolean isUploaded() {
         return uploaded;
     }

@@ -27,7 +27,7 @@ public class ResponseCallBackBase<T> implements IResponseCallBack<T> {
         else
         {
             Toast.makeText(ResourceMgr.getInstance().getCtx(), com.hf.easydelivery.R.string.action_req_failure, Toast.LENGTH_SHORT).show();
-            FileLog.getInstance().writeLog("error:" + result.getMessage());
+            FileLog.getInstance().error("error:" + result.getMessage());
         }
     }
 }
