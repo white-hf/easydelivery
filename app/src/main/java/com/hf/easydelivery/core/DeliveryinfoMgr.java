@@ -174,7 +174,7 @@ public class DeliveryinfoMgr implements Subscriber {
         ICourierService courierService = ResourceMgr.getInstance().getCourierService();
         assert courierService != null;
 
-        courierService.getPackageList(String.valueOf(driverId) , bDeliveryTask , new GetPackageListRspCb());
+        courierService.getPackageList(String.valueOf(driverId) , bDeliveryTask , new GetPackageListRspCb(this));
     }
 
 
@@ -362,15 +362,22 @@ public class DeliveryinfoMgr implements Subscriber {
         /** 强制走未扫描数据接口：忽略调用端传入的 bDeliveryTask */
         @Override
         public void getDeliveryInfo(Integer driverId, Boolean bDeliveryTask) {
-            super.getDeliveryInfo(driverId, /*bDeliveryTask=*/false);
+            ICourierService courierService = ResourceMgr.getInstance().getCourierService();
+            assert courierService != null;
+
+            courierService.getPackageList(String.valueOf(driverId) , bDeliveryTask , new GetPackageListRspCb(this));
         }
 
         /** 登录事件到来时：只拉未扫描数据与扫描批次信息 */
         @Override
         public void receive(Event event) {
+          // do nothing when receiving login event
+        }
+
+        public void fetch(Integer userId)
+        {
             fechScanBatchId();
-            String userId = (String) event.getMessage();
-            getDeliveryInfo(Integer.parseInt(userId), false);
+            getDeliveryInfo(userId, false);
         }
     }
 }

@@ -1,271 +1,461 @@
 package com.hf.easydelivery.view.model;
 
+import android.os.Handler;
+import android.util.Pair;
+
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MediatorLiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
-
-import com.hf.easydelivery.core.DeliveryinfoMgr;
-import com.hf.easydelivery.dao.DeliveryInfo;
-import com.hf.easydelivery.ResourceMgr;
 import com.hf.courierservice.apihelper.FileLog;
+import com.hf.easydelivery.ResourceMgr;
+import com.hf.easydelivery.bean.ScanItem;
+import com.hf.easydelivery.core.DeliveryinfoMgr;
+import com.hf.easydelivery.event.Event;
+import com.hf.easydelivery.component.BatchSubmitCallback;
+import com.hf.easydelivery.component.BatchSubmitHelper;
+import com.hf.easydelivery.dao.DeliveryInfo;
+import com.hf.easydelivery.dao.ScanRecord;
+import com.hf.easydelivery.dao.ScanRecordDao;
+import com.hf.easydelivery.common.Utils;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.Set;
+
+import com.hf.easydelivery.event.Subscriber;
+import com.hf.easydelivery.event.EventConstant;
 
 /**
  * 管理 Scan 页的业务状态（B 档：Fragment 仅负责渲染）
  * - ViewModel 负责：
- *   1) 通过 ScanPackagesMgr 拉取【未扫描】列表（仅内存，不落库）
- *   2) 维护【今日已扫】waybill 集合
- *   3) 根据“未扫描原始列表 - 已扫集合”计算出【未扫描可派发列表】（过滤去重）
- *   4) 暴露 batch 信息（scanBatchId / scanBatchStatus）
+ * 1) 通过 ScanPackagesMgr 拉取【未扫描】列表（仅内存，不落库）
+ * 2) 维护【今日已扫】waybill 集合
+ * 3) 根据“未扫描原始列表 - 已扫集合”计算出【未扫描可派发列表】（过滤去重）
+ * 4) 暴露 batch 信息（scanBatchId / scanBatchStatus）
+ * 5) (新) 管理【已扫描】列表 (ScanItem)
+ * 6) (新) 处理条码扫描、数据提交等所有业务逻辑
  *
  * 说明：
  * - 为降低耦合，事件订阅交由外层视图决定；当网络回包（或收到 EVENT_DELIVERY_DATA_READY）后，调用
- *   {@link #refreshFromRepo()} 即可推动 LiveData 更新。
+ * {@link #refreshFromRepo()} 即可推动 LiveData 更新。
  */
-public class ScanViewModel extends ViewModel {
+public class ScanViewModel extends ViewModel implements Subscriber {
 
     private static final String TAG = "ScanViewModel";
 
-    // --- 数据仓库：未扫描（仅内存） ---
-    private final DeliveryinfoMgr.ScanPackagesMgr scanMgr = new DeliveryinfoMgr.ScanPackagesMgr();
+    // --- 新增：用于提交状态的枚举 ---
+    public enum SubmissionState { IDLE, SUBMITTING, COMPLETE, FAILED }
+
+    // --- 数据仓库与助手类 ---
+    private final ResourceMgr resourceMgr = ResourceMgr.getInstance();
+    private final DeliveryinfoMgr.ScanPackagesMgr scanPackagesMgr = new DeliveryinfoMgr.ScanPackagesMgr();
+    private final BatchSubmitHelper submitHelper;
 
     // --- LiveData：原始未扫描列表（来自仓库） ---
     private final MutableLiveData<List<DeliveryInfo>> unscannedRawLive = new MutableLiveData<>(Collections.emptyList());
-
-    // --- LiveData：今日已扫的 waybill 集合（来自本地 DB 加载后 setScannedWaybills 传入） ---
+    // --- LiveData：今日已扫的 waybill 集合 ---
     private final MutableLiveData<Set<String>> scannedWaybillsLive = new MutableLiveData<>(new HashSet<>());
-
     // --- LiveData：过滤后的未扫描列表（= 原始未扫描 - 今日已扫） ---
     private final MediatorLiveData<List<DeliveryInfo>> unscannedFilteredLive = new MediatorLiveData<>();
 
+    // --- 新增：管理已扫描列表和计数的 LiveData ---
+    private final MutableLiveData<List<ScanItem>> scannedListLive = new MutableLiveData<>(new ArrayList<>());
+    private final MutableLiveData<Integer> scannedCountLive = new MutableLiveData<>(0);
+
     // --- LiveData：计数与批次信息 ---
     private final MutableLiveData<Integer> totalCountLive = new MutableLiveData<>(0);
-    private final MutableLiveData<Integer> filteredCountLive = new MutableLiveData<>(0);
     private final MutableLiveData<Long> scanBatchIdLive = new MutableLiveData<>(0L);
     private final MutableLiveData<Integer> scanBatchStatusLive = new MutableLiveData<>(0);
 
+    // --- 新增：用于驱动 UI 一次性事件的 LiveData (例如 Toast) ---
+    private final MutableLiveData<Event<String>> toastMessage = new MutableLiveData<>();
+    private final MutableLiveData<Event<Pair<String, String>>> duplicateScanEvent = new MutableLiveData<>(); // <运单号, 包裹号>
+
+    // --- 新增：用于驱动提交流程 UI 的 LiveData ---
+    private final MutableLiveData<SubmissionState> submissionState = new MutableLiveData<>(SubmissionState.IDLE);
+    private final MutableLiveData<Pair<Integer, Integer>> submissionProgress = new MutableLiveData<>(); // <已完成, 总数>
+
+    private final MutableLiveData<Event<Boolean>> showCameraPromptEvent = new MutableLiveData<>();
+
     // --- 首次进入标记（供 Fragment 控制首次 UI 行为，如：开相机提示） ---
-    private boolean firstShown = true;
+    private boolean firstEnter = true;
 
-    /**
-     * 可选：由外部注入“今日已扫运单号”加载器，避免在 VM 里直接依赖具体 Dao。
-     */
-    public interface TodayScannedLoader {
-        @NonNull Collection<String> loadTodayWaybills();
-    }
-
-    @Nullable private TodayScannedLoader todayScannedLoader;
-
-    public void setTodayScannedLoader(@NonNull TodayScannedLoader loader) {
-        this.todayScannedLoader = loader;
-        FileLog.getInstance().debug(TAG, "TodayScannedLoader injected: %s", loader.getClass().getSimpleName());
-    }
-
+    public LiveData<Event<Boolean>> getShowCameraPromptEvent() { return showCameraPromptEvent; }
     public ScanViewModel() {
+        submitHelper = new BatchSubmitHelper(
+                resourceMgr.getmMydb().getScanRecordDao(),
+                resourceMgr.getCourierService(),
+                resourceMgr.getDbHandler()
+        );
+
         // 组合源：当原始未扫或已扫集合变化时，重算过滤列表
-        unscannedFilteredLive.addSource(unscannedRawLive, ignored -> recomputeFiltered());
-        unscannedFilteredLive.addSource(scannedWaybillsLive, ignored -> recomputeFiltered());
+        unscannedFilteredLive.addSource(unscannedRawLive, rawList -> recomputeFiltered());
+        unscannedFilteredLive.addSource(scannedWaybillsLive, scannedSet -> recomputeFiltered());
+
+        // 订阅未扫描数据变化事件（EVENT_DELIVERY_DATA_READY）
+        try {
+            ResourceMgr.getInstance().getPublisher().subscribe(EventConstant.EVENT_DELIVERY_DATA_READY, this);
+        } catch (Throwable ignore) {}
     }
 
     // region ★ 对外暴露 LiveData ★
-    public LiveData<List<DeliveryInfo>> getUnscannedRawLive() { return unscannedRawLive; }
     public LiveData<List<DeliveryInfo>> getUnscannedFilteredLive() { return unscannedFilteredLive; }
+    public LiveData<List<ScanItem>> getScannedListLive() { return scannedListLive; }
     public LiveData<Integer> getTotalCountLive() { return totalCountLive; }
-    public LiveData<Integer> getFilteredCountLive() { return filteredCountLive; }
-    public LiveData<Long> getScanBatchIdLive() { return scanBatchIdLive; }
-    public LiveData<Integer> getScanBatchStatusLive() { return scanBatchStatusLive; }
-    public LiveData<Set<String>> getScannedWaybillsLive() { return scannedWaybillsLive; }
+    public LiveData<Integer> getScannedCountLive() { return scannedCountLive; }
+    public LiveData<Event<String>> getToastMessage() { return toastMessage; }
+    public LiveData<Event<Pair<String, String>>> getDuplicateScanEvent() { return duplicateScanEvent; }
+    public LiveData<SubmissionState> getSubmissionState() { return submissionState; }
+    public LiveData<Pair<Integer, Integer>> getSubmissionProgress() { return submissionProgress; }
     // endregion
 
-    // region ★ 外部触发：加载/刷新 ★
+    // region ★ 业务逻辑处理 ★
+
     /**
-     * 预加载未扫描列表 & 扫描批次信息（通常在页面创建 / 下拉刷新时调用）。
-     * 注意：仓库为异步拉取；当网络回包（或事件）到达时，请调用 {@link #refreshFromRepo()}。
+     * 新增：从 Fragment 接收从数据库加载的今日扫描记录，并初始化相关 LiveData
+     * @param todayRecords 从数据库查出的今日所有扫描记录 (包括已上传和未上传)
      */
     @MainThread
-    public void preloadUnscanned() {
-        Integer driverId = ResourceMgr.getInstance().getLoginInfo() != null
-                ? ResourceMgr.getInstance().getLoginInfo().loginId
-                : null;
-        if (driverId == null || driverId <= 0) {
-            FileLog.getInstance().warning(TAG, "preloadUnscanned ignored: invalid driverId=%s", String.valueOf(driverId));
-            return;
+    public void loadInitialData(List<ScanItem> todayRecords) {
+        final ArrayList<ScanItem> items = new ArrayList<>(todayRecords.size());
+        final HashSet<String> waybills = new HashSet<>();
+        for (ScanItem r : todayRecords) {
+            String w = r.getWaybillNo();
+            String p = r.getPackageNo() == null ? "" : String.valueOf(r.getPackageNo());
+            items.add(new ScanItem(p, w, r.isUploaded(), true)); // isScanned = true
+            waybills.add(w);
         }
-        FileLog.getInstance().debug(TAG, "preloadUnscanned: driverId=%d", driverId);
-        // 触发网络拉取（未扫描）
-        try {
-            scanMgr.getDeliveryInfo(driverId, /*bDeliveryTask=*/false);
-        } catch (Throwable t) {
-            FileLog.getInstance().error(TAG, "scanMgr.getDeliveryInfo failed: %s", t.getMessage());
-        }
-        // 同步批次信息（如果仓库内部已维护）
-        try {
-            scanMgr.fechScanBatchId();
-        } catch (Throwable t) {
-            FileLog.getInstance().warning(TAG, "fechScanBatchId failed: %s", t.getMessage());
-        }
-        pushBatchFields();
-    }
 
-    /** 同上，但用于“查询”按钮/重复刷新 */
-    @MainThread
-    public void queryUnscanned() {
-        FileLog.getInstance().debug(TAG, "queryUnscanned triggered");
-        preloadUnscanned();
+        // 在主线程更新 LiveData
+        scannedListLive.postValue(items);
+        scannedWaybillsLive.postValue(waybills);
+        scannedCountLive.postValue(items.size());
+
+        FileLog.i(TAG, "loadInitialData: DB load complete, scanned=" + items.size());
+        refreshFromRepo(); // 确保总数和未扫描列表也随之刷新
     }
 
     /**
+     * 加载今日已扫描数据
+     *  - 如果提供 TodayScannedLoader，则使用 Loader
+     *  - 否则走内置 DB 查询
+     */
+    public void loadTodayScannedFromDb() {
+
+        // 内置 DB 查询
+        try {
+            final String dateStr = Utils.getCurrentDate();
+            final Integer driverId = ResourceMgr.getInstance().getLoginInfo() == null
+                    ? null
+                    : ResourceMgr.getInstance().getLoginInfo().loginId;
+            if (driverId == null) {
+                FileLog.getInstance().warning(TAG, "loadTodayScannedFromDb: driverId null, skip");
+                return;
+            }
+            final ScanRecordDao scanRecordDao = ResourceMgr.getInstance().getmMydb().getScanRecordDao();
+
+            ResourceMgr.getInstance().getDbHandler().post(() -> {
+                List<ScanRecord> pending;
+                List<ScanRecord> uploaded;
+                try { pending = scanRecordDao.loadByDate(dateStr, false, driverId); }
+                catch (Exception e) { pending = new ArrayList<>(); }
+
+                try { uploaded = scanRecordDao.loadByDate(dateStr, true, driverId); }
+                catch (Exception e) { uploaded = new ArrayList<>(); }
+
+                final ArrayList<ScanItem> items = new ArrayList<>();
+                final HashSet<String> waybills = new HashSet<>();
+
+                for (ScanRecord r : pending) {
+                    String w = r.trackingNo;
+                    String p = r.packageNo == null ? "" : String.valueOf(r.packageNo);
+                    items.add(new ScanItem(p, w, false, true));
+                    waybills.add(w);
+                }
+                for (ScanRecord r : uploaded) {
+                    String w = r.trackingNo;
+                    String p = r.packageNo == null ? "" : String.valueOf(r.packageNo);
+                    items.add(new ScanItem(p, w, true, true));
+                    waybills.add(w);
+                }
+
+                // 更新 LiveData
+                loadInitialData(items);
+
+                // 检查是否有未扫描数据并触发弹窗事件
+                boolean hasUnscanned = !resourceMgr.getDeliveryinfoMgr().getListDeliveryInfo().isEmpty() &&
+                        resourceMgr.getDeliveryinfoMgr().getListDeliveryInfo().size() > items.size();
+
+                if (shouldDoFirstEnter() && hasUnscanned) {
+                    // 使用 postValue，因为这个代码块在 DbHandler 线程上
+                    showCameraPromptEvent.postValue(new Event<>(true));
+                }
+                FileLog.i(TAG, "loadTodayScannedFromDb: hasUnscanned=" + hasUnscanned);
+
+                FileLog.getInstance().debug(TAG,
+                        "loadTodayScannedFromDb(internal): items=%d, waybills=%d",
+                        items.size(), waybills.size());
+            });
+        } catch (Throwable t) {
+            FileLog.getInstance().error(TAG,
+                    "loadTodayScannedFromDb(internal) failed: %s", t.getMessage());
+        }
+    }
+
+
+    /**
+     * 新增：处理从相机扫到的条码的核心逻辑
+     * @param waybillNo 运单号
+     */
+    public void processBarcode(String waybillNo) {
+        // 检查是否重复扫描
+        if (scannedWaybillsLive.getValue() != null && scannedWaybillsLive.getValue().contains(waybillNo)) {
+            String pkgNo = findPackageNoInScannedList(waybillNo);
+            duplicateScanEvent.postValue(new Event<>(new Pair<>(waybillNo, pkgNo)));
+            return;
+        }
+
+        // 检查扫描批次是否开启 (status == 0)
+        if (scanBatchIdLive.getValue() == null || scanBatchIdLive.getValue() < 1 || scanBatchStatusLive.getValue() != 0) {
+            toastMessage.postValue(new Event<>("扫描报告已关闭或批次无效。"));
+            return;
+        }
+
+        final DeliveryInfo deliveryInfo = getByTrackingNo(waybillNo);
+        if (deliveryInfo != null) {
+            // 扫描成功，是自己的包裹
+            handleSuccessfulScan(waybillNo, deliveryInfo.getRouteNumber());
+        } else {
+            // 扫描失败
+            if (resourceMgr.getDeliveryinfoMgr().size() == 0) {
+                toastMessage.postValue(new Event<>("数据加载中，请稍后重扫"));
+            } else {
+                toastMessage.postValue(new Event<>("不是您的包裹"));
+            }
+        }
+    }
+
+    /**
+     * 新增：处理一次成功扫描的内部方法
+     */
+    private void handleSuccessfulScan(String waybillNo, String packageNo) {
+        FileLog.i(TAG, "handleSuccessfulScan: waybillNo=" + waybillNo + ", packageNo=" + packageNo);
+
+        // 创建新的 ScanItem 并更新 LiveData
+        ScanItem newItem = new ScanItem(packageNo, waybillNo, false, true); // uploaded=false, isScanned=true
+
+        List<ScanItem> currentScanned = new ArrayList<>(scannedListLive.getValue());
+        currentScanned.add(0, newItem);
+        scannedListLive.postValue(currentScanned);
+
+        Set<String> currentWaybills = new HashSet<>(scannedWaybillsLive.getValue());
+        currentWaybills.add(waybillNo);
+        scannedWaybillsLive.postValue(currentWaybills);
+
+        scannedCountLive.postValue(currentScanned.size());
+
+        // 存入数据库
+        saveScanRecord(waybillNo, packageNo, scanBatchIdLive.getValue());
+    }
+
+    /**
+     * 新增：提交所有未上传的扫描记录
+     */
+    public void submitOfflineScans() {
+        if (scanBatchIdLive.getValue() == null || scanBatchIdLive.getValue() < 1 || scanBatchStatusLive.getValue() != 0) {
+            toastMessage.postValue(new Event<>("扫描报告已关闭，无法提交。"));
+            return;
+        }
+
+        // 异步从数据库查询
+        resourceMgr.getDbHandler().post(() -> {
+            String strToday = Utils.getCurrentDate();
+            Integer driverId = resourceMgr.getLoginInfo().loginId;
+            List<ScanRecord> list = resourceMgr.getmMydb().getScanRecordDao().loadByDate(strToday, false, driverId);
+
+            if (list.isEmpty()) {
+                toastMessage.postValue(new Event<>("您没有需要提交的已扫包裹数据"));
+                return;
+            }
+            // 回到主线程（或任何有 Looper 的线程）启动提交
+            new Handler(resourceMgr.getDbHandler().getLooper()).post(() -> batchSubmit(list));
+        });
+    }
+
+    /**
+     * 新增：内部方法，执行批量提交
+     */
+    private void batchSubmit(List<ScanRecord> list) {
+        submissionState.postValue(SubmissionState.SUBMITTING);
+        submissionProgress.postValue(new Pair<>(0, list.size()));
+
+        submitHelper.submit(list, new BatchSubmitCallback() {
+            @Override
+            public void onProgress(int done, int total, int success, int fail) {
+                submissionProgress.postValue(new Pair<>(done, total));
+            }
+
+            @Override
+            public void onSingleComplete(String trackingNo) {
+                // 在已扫描列表中，将被成功上传的条目标记为 uploaded
+                List<ScanItem> currentScanned = new ArrayList<>(scannedListLive.getValue());
+                for (ScanItem item : currentScanned) {
+                    if (item.getWaybillNo().equals(trackingNo)) {
+                        item.setUploaded(true);
+                    }
+                }
+                scannedListLive.postValue(currentScanned);
+            }
+
+            @Override
+            public void onComplete(int successCount, int failCount) {
+                toastMessage.postValue(new Event<>("提交完成，成功：" + successCount + "，失败：" + failCount));
+                submissionState.postValue(SubmissionState.COMPLETE);
+            }
+
+            @Override
+            public void onFail(Exception e) {
+                toastMessage.postValue(new Event<>("登录失效，请重新登录"));
+                submissionState.postValue(SubmissionState.FAILED);
+            }
+        });
+    }
+
+    // endregion
+
+    // region ★ 数据加载/刷新 ★
+    /**
      * 网络/事件回包后，调用此方法把仓库内存刷新到 LiveData。
-     *（将原来 Fragment 中的 EVENT_DELIVERY_DATA_READY 响应改为调用本方法）
      */
     @MainThread
     public void refreshFromRepo() {
-        List<DeliveryInfo> snapshot = null;
-        try {
-            snapshot = scanMgr.getListDeliveryInfo();
-        } catch (Throwable t) {
-            FileLog.getInstance().error(TAG, "getListDeliveryInfo failed: %s", t.getMessage());
-        }
+        List<DeliveryInfo> snapshot = scanPackagesMgr.getListDeliveryInfo();
         if (snapshot == null) snapshot = Collections.emptyList();
-        FileLog.getInstance().debug(TAG, "refreshFromRepo: got=%d items", snapshot.size());
-        unscannedRawLive.setValue(new ArrayList<>(snapshot));
-        totalCountLive.setValue(snapshot.size());
+
+        if (!snapshot.isEmpty())
+            showCameraPromptEvent.postValue(new Event<>(true));
+
+        unscannedRawLive.postValue(new ArrayList<>(snapshot));
+        totalCountLive.postValue(snapshot.size());
         pushBatchFields();
+        FileLog.i(TAG, "refreshFromRepo: got=" + snapshot.size() + " items");
     }
 
-    /** 从 DB 加载今日已扫（通过注入的 TodayScannedLoader），并更新过滤 */
-    @MainThread
-    public void loadTodayScannedFromDb() {
-        if (todayScannedLoader == null) {
-            FileLog.getInstance().warning(TAG, "loadTodayScannedFromDb skipped: TodayScannedLoader not set");
-            return;
-        }
-        try {
-            Collection<String> wb = todayScannedLoader.loadTodayWaybills();
-            FileLog.getInstance().debug(TAG, "loadTodayScannedFromDb: loaded %d waybills", wb == null ? 0 : wb.size());
-            setScannedWaybills(wb);
-        } catch (Throwable t) {
-            FileLog.getInstance().error(TAG, "loadTodayScannedFromDb failed: %s", t.getMessage());
-        }
+    /** “查询”按钮/重复刷新 */
+    public void queryUnscanned() {
+        FileLog.i(TAG, "queryUnscanned: start");
+        Integer driverId = resourceMgr.getLoginInfo() != null ? resourceMgr.getLoginInfo().loginId : null;
+        if (driverId == null || driverId <= 0) return;
+
+        scanPackagesMgr.fetch(driverId);
     }
 
-    /**
-     * （进阶）由 ViewModel 负责加载“今日已扫记录”，则在本方法里自行访问 DB 并 setScannedWaybills。
-     * 如果你当前已在 Fragment 里完成 DB 加载，也可以直接调用 {@link #setScannedWaybills(Collection)}。
-     */
-    @MainThread
-    public void loadTodayScannedFromDb(Collection<String> waybillsFromDb) {
-        if (waybillsFromDb == null) {
-            FileLog.getInstance().warning(TAG, "loadTodayScannedFromDb(Collection) with null -> treat as empty");
-            setScannedWaybills(Collections.emptySet());
-            return;
-        }
-        FileLog.getInstance().debug(TAG, "loadTodayScannedFromDb(Collection): size=%d", waybillsFromDb.size());
-        setScannedWaybills(waybillsFromDb);
-    }
-
-    /** 供外部把“今日已扫的运单号集合”喂给 VM（然后触发未扫过滤重算） */
-    @MainThread
-    public void setScannedWaybills(Collection<String> waybills) {
-        if (waybills == null) {
-            FileLog.getInstance().warning(TAG, "setScannedWaybills(null) -> empty");
-            scannedWaybillsLive.setValue(new HashSet<>());
-        } else {
-            HashSet<String> set = new HashSet<>(waybills);
-            scannedWaybillsLive.setValue(set);
-            FileLog.getInstance().debug(TAG, "setScannedWaybills: size=%d", set.size());
-        }
-    }
-
-    /** 扫描批次变更时（如 TokenRefresher），调用以便 UI 获取最新批次状态 */
-    @MainThread
+    /** 扫描批次变更时，调用以便 UI 获取最新批次状态 */
     public void refreshBatchId() {
-        scanMgr.fechScanBatchId();
+        resourceMgr.getDeliveryinfoMgr().fechScanBatchId();
         pushBatchFields();
     }
 
     // endregion
 
-    // region ★ 查询/判断 ★
-    /** 当前扫描批次是否开放（具体规则可按你项目中 scanBatchStatus 定义调整） */
-    public boolean isScanBatchOpen() {
-        Integer st = scanBatchStatusLive.getValue();
-        boolean open = st != null && st == 1; // 1 表示开放（按现有约定）
-        FileLog.getInstance().debug(TAG, "isScanBatchOpen=%s (status=%s)", String.valueOf(open), String.valueOf(st));
-        return open;
-    }
+    // region ★ 内部工具方法 ★
 
-    /** 按运单号在“原始未扫列表”中查询（用于扫码命中校验） */
-    public DeliveryInfo getByTrackingNo(@NonNull String waybill) {
-        if (waybill == null || waybill.isEmpty()) {
-            FileLog.getInstance().warning(TAG, "getByTrackingNo: empty input");
-            return null;
-        }
-        List<DeliveryInfo> src = unscannedRawLive.getValue();
-        if (src == null || src.isEmpty()) return null;
-        for (DeliveryInfo d : src) {
-            if (d == null) continue;
-            if (waybill.equalsIgnoreCase(String.valueOf(d.getOrderSn()))) {
-                return d;
+    private String findPackageNoInScannedList(String waybillNo) {
+        List<ScanItem> scanned = scannedListLive.getValue();
+        if (scanned == null) return null;
+        for (ScanItem si : scanned) {
+            if (waybillNo.equals(si.getWaybillNo())) {
+                return si.getPackageNo();
             }
         }
         return null;
     }
 
-    /** 是否首次进入 Scan 页（供 Fragment 做一次性 UI 行为） */
-    public boolean shouldDoFirstEnter() {
-        if (firstShown) { firstShown = false; return true; }
-        return false;
+    /** 按运单号在“原始未扫列表”中查询（用于扫码命中校验） */
+    private DeliveryInfo getByTrackingNo(@NonNull String waybill) {
+        return resourceMgr.getDeliveryinfoMgr().getByTrackingNo(waybill);
     }
-    // endregion
 
-    // region ★ 内部工具 ★
+    /**
+     * 新增：将扫描记录存入数据库
+     */
+    private void saveScanRecord(String waybillNo, String packageNo, Long scanBatchId) {
+        Short packageNoShort = null;
+        try {
+            if (packageNo != null) packageNoShort = Short.parseShort(packageNo);
+        } catch (NumberFormatException e) { /* ignore */ }
+
+        ScanRecord rec = new ScanRecord(
+                System.currentTimeMillis(),
+                resourceMgr.getLoginInfo().loginId,
+                waybillNo,
+                packageNoShort,
+                scanBatchId,
+                false // uploaded = false
+        );
+
+        resourceMgr.getDbHandler().post(() -> {
+            resourceMgr.getmMydb().getScanRecordDao().insert(rec);
+            FileLog.d(TAG, "saveScanRecord: inserted waybillNo=" + waybillNo);
+        });
+    }
+
     private void recomputeFiltered() {
         List<DeliveryInfo> raw = unscannedRawLive.getValue();
         Set<String> scanned = scannedWaybillsLive.getValue();
         if (raw == null) raw = Collections.emptyList();
         if (scanned == null) scanned = Collections.emptySet();
 
-        if (raw.isEmpty()) {
-            unscannedFilteredLive.setValue(Collections.emptyList());
-            filteredCountLive.setValue(0);
-            return;
-        }
-
-        List<DeliveryInfo> filtered = new ArrayList<>(raw.size());
-        for (DeliveryInfo d : raw) {
-            if (d == null) continue;
-            String waybill = String.valueOf(d.getOrderSn());
-            if (!scanned.contains(waybill)) {
-                filtered.add(d);
+        List<DeliveryInfo> filtered = new ArrayList<>();
+        if (!raw.isEmpty()) {
+            for (DeliveryInfo d : raw) {
+                if (d != null && d.getOrderSn() != null && !scanned.contains(d.getOrderSn())) {
+                    filtered.add(d);
+                }
             }
         }
-        FileLog.getInstance().debug(TAG, "recomputeFiltered: raw=%d, scanned=%d, filtered=%d", raw.size(), scanned.size(), filtered.size());
-        unscannedFilteredLive.setValue(filtered);
-        filteredCountLive.setValue(filtered.size());
+        unscannedFilteredLive.postValue(filtered);
     }
 
     private void pushBatchFields() {
+        scanBatchIdLive.postValue(resourceMgr.getDeliveryinfoMgr().getScanBatchId());
+        scanBatchStatusLive.postValue(resourceMgr.getDeliveryinfoMgr().getScanBatchStatus());
+    }
+
+    /** 是否首次进入 Scan 页（供 Fragment 做一次性 UI 行为） */
+    public boolean shouldDoFirstEnter() {
+        if (firstEnter) {
+            firstEnter = false;
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    protected void onCleared() {
+        super.onCleared();
+        submitHelper.shutdown();
         try {
-            long id = scanMgr.getScanBatchId();
-            int st = scanMgr.getScanBatchStatus();
-            scanBatchIdLive.setValue(id);
-            scanBatchStatusLive.setValue(st);
-            FileLog.getInstance().debug(TAG, "pushBatchFields: id=%d, status=%d", id, st);
-        } catch (Throwable t) {
-            FileLog.getInstance().warning(TAG, "pushBatchFields failed: %s", t.getMessage());
+            ResourceMgr.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_DELIVERY_DATA_READY, this);
+        } catch (Throwable ignore) {}
+    }
+    /**
+     * 订阅回调：收到 EVENT_DELIVERY_DATA_READY 时刷新未扫描数据
+     */
+    @Override
+    public void receive(Event event) {
+        if (event == null || event.getEventType() == null) return;
+        if (EventConstant.EVENT_DELIVERY_DATA_READY.equals(event.getEventType())) {
+            // 未扫描数据加载完成（来自 ScanPackagesMgr/DeliveryinfoMgr）→ 刷新 LiveData
+            refreshFromRepo();
         }
     }
     // endregion

@@ -3,14 +3,6 @@ package com.hf.easydelivery.view;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatDelegate;
-import androidx.fragment.app.Fragment;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-
-import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,34 +10,38 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SearchView;
+import androidx.fragment.app.Fragment;
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.Observer;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.hf.easydelivery.R;
-import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.map.MapHostFragment;
-import androidx.lifecycle.ViewModelProvider;
-import androidx.lifecycle.Observer;
 import com.hf.easydelivery.view.model.MapViewModel;
+import com.hf.easydelivery.view.model.ScanViewModel;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
- * iOS 风格的“包裹列表”实现：
- * - 顶部 SearchView：支持按“包裹号/运单号后缀”过滤
- * - 中部 RecyclerView：展示过滤后的结果
- * - 右下角 FAB：返回地图
- *
- * 注意：Android 的数据源与 iOS 不同。本实现定义了一个最小的数据适配模型（ParcelItem），
- * 以及 DataSource 接口。请在 DefaultDataSource 中接入你的真实数据源并转换为 ParcelItem 列表。
+ * MVVM 优化版:
+ * - 不使用独立的 ListViewModel，直接使用 MapViewModel 或 ScanViewModel 作为数据源。
+ * - 过滤逻辑由 Fragment 管理。
  */
 public class PackageListFragment extends Fragment {
 
     public enum Status {
-        IN_TRANSIT(202),           // 派送中
-        GATEWAY_TRANSIT(199),      // 分拣/在途中（如需放开拍照，也算可操作）
+        IN_TRANSIT(202),
+        GATEWAY_TRANSIT(199),
         OTHER(0);
         public final int code;
         Status(int c) { this.code = c; }
@@ -56,9 +52,13 @@ public class PackageListFragment extends Fragment {
             return OTHER;
         }
         public boolean isDeliverable() {
-            return this == IN_TRANSIT ; // 可根据业务只保留 IN_TRANSIT
+            return this == IN_TRANSIT;
         }
     }
+
+    /** 列表模式：由哪个 ViewModel 提供数据 */
+    public enum ListMode { IN_TRANSIT_FROM_MAP, UNSCANNED_FROM_SCAN }
+    private static final String ARG_LIST_MODE = "arg_list_mode";
 
     private RecyclerView recyclerView;
     private ProgressBar progressBar;
@@ -66,11 +66,20 @@ public class PackageListFragment extends Fragment {
     private SearchView searchView;
     private FloatingActionButton fabBackToMap;
 
-    private final List<DeliveryInfo> allParcels = new ArrayList<>();
-    private final List<DeliveryInfo> filteredParcels = new ArrayList<>();
     private ParcelListAdapter adapter;
-
     private MapViewModel mapViewModel;
+    private ScanViewModel scanViewModel;
+    private ListMode currentMode = ListMode.IN_TRANSIT_FROM_MAP;
+
+    /** 当前监听的数据源（随模式切换） */
+    private LiveData<List<DeliveryInfo>> currentDataSource;
+    private List<DeliveryInfo> currentFullList = new ArrayList<>();
+    private final Observer<List<DeliveryInfo>> dataObserver = this::updateList;
+
+    // 新增：用于观察 MapViewModel 的加载状态
+    private LiveData<Boolean> mapLoadingState;
+    // 新增：用于观察 ScanViewModel 的加载状态
+    private LiveData<Boolean> scanLoadingState;
 
     @Nullable
     @Override
@@ -84,10 +93,19 @@ public class PackageListFragment extends Fragment {
         fabBackToMap = view.findViewById(R.id.fab_back_to_map);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-        adapter = new ParcelListAdapter(requireContext(), new ParcelListAdapter.OnItemClickListener() {
-            @Override public void onItemClick(@NonNull DeliveryInfo item) { onItemClicked(item); }
-        });
+        adapter = new ParcelListAdapter(requireContext(), this::onItemClicked);
         recyclerView.setAdapter(adapter);
+
+        // 初始化 ViewModel
+        mapViewModel = new ViewModelProvider(requireActivity()).get(MapViewModel.class);
+        scanViewModel = new ViewModelProvider(requireActivity()).get(ScanViewModel.class);
+
+        // 读取外部传入的列表模式（如果有）
+        Bundle args = getArguments();
+        if (args != null) {
+            String m = args.getString(ARG_LIST_MODE, ListMode.IN_TRANSIT_FROM_MAP.name());
+            try { currentMode = ListMode.valueOf(m); } catch (Throwable ignored) { currentMode = ListMode.IN_TRANSIT_FROM_MAP; }
+        }
 
         // 搜索：后缀匹配（包裹号/运单号）
         if (searchView != null) {
@@ -108,95 +126,146 @@ public class PackageListFragment extends Fragment {
         // 右下角返回地图
         if (fabBackToMap != null) {
             fabBackToMap.setOnClickListener(v -> {
-                // 直接通知宿主 Activity 或 MapHostFragment 切换到地图视图
-               if (getParentFragment() instanceof MapHostFragment) {
+                if (getParentFragment() instanceof MapHostFragment) {
                     ((MapHostFragment) getParentFragment()).switchToMap();
                 }
             });
         }
 
-        mapViewModel = new ViewModelProvider(requireActivity()).get(MapViewModel.class);
-        mapViewModel.getPackages().observe(getViewLifecycleOwner(), new Observer<List<DeliveryInfo>>() {
-            @Override
-            public void onChanged(List<DeliveryInfo> items) {
-                progressBar.setVisibility(View.GONE);
-                allParcels.clear();
-                allParcels.addAll(items);
-                applyFilter("");
-            }
-        });
+        // 根据当前模式加载对应数据
+        if (currentMode == ListMode.UNSCANNED_FROM_SCAN) {
+            loadUnscannedParcels();
+        } else {
+            loadInDeliveryParcels();
+        }
 
         return view;
     }
 
-    private void applyFilter(String query) {
-        String q = query == null ? "" : query.trim().toLowerCase();
-        filteredParcels.clear();
-        if (TextUtils.isEmpty(q)) {
-            filteredParcels.addAll(allParcels);
-        } else {
-            for (DeliveryInfo it : allParcels) {
-                String rn = safeLower(it.getRouteNumber());
-                String sn = safeLower(it.getOrderSn());
-                if ((rn != null && rn.endsWith(q)) || (sn != null && sn.endsWith(q))) {
-                    filteredParcels.add(it);
-                }
-            }
+    /**
+     * 切换监听的数据源，避免重复注册导致内存泄漏
+     * @param newSource 要开始观察的新 LiveData
+     */
+    private void switchDataSource(@NonNull LiveData<List<DeliveryInfo>> newSource) {
+        if (currentDataSource != null) {
+            currentDataSource.removeObserver(dataObserver);
         }
-        adapter.submit(filteredParcels);
-        boolean empty = filteredParcels.isEmpty();
-        recyclerView.setVisibility(empty ? View.GONE : View.VISIBLE);
-        emptyView.setVisibility(empty ? View.VISIBLE : View.GONE);
+        currentDataSource = newSource;
+        currentDataSource.observe(getViewLifecycleOwner(), dataObserver);
     }
 
-    private String safeLower(String s) { return s == null ? null : s.toLowerCase(); }
+    /**
+     * 加载派送中包裹列表
+     */
+    public void loadInDeliveryParcels() {
+        currentMode = ListMode.IN_TRANSIT_FROM_MAP;
+        switchDataSource(mapViewModel.getMapItemsLive());
+        // 通知 MapViewModel 主动刷新
+        mapViewModel.requestAndRefreshMarkers(true);
+        if (searchView != null) {
+            searchView.setQuery("", false);
+            searchView.clearFocus();
+        }
+    }
+
+    /**
+     * 加载未扫描包裹列表
+     */
+    public void loadUnscannedParcels() {
+        currentMode = ListMode.UNSCANNED_FROM_SCAN;
+        switchDataSource(scanViewModel.getUnscannedFilteredLive());
+        // 优化点：明确调用 ScanViewModel 的查询方法，而不是被动等待事件
+        scanViewModel.queryUnscanned();
+        if (searchView != null) {
+            searchView.setQuery("", false);
+            searchView.clearFocus();
+        }
+    }
+
+    /**
+     * 更新列表数据，此方法由 LiveData 的观察者自动调用
+     * @param fullList 完整的、未过滤的包裹列表
+     */
+    private void updateList(List<DeliveryInfo> fullList) {
+        currentFullList = (fullList != null) ? fullList : new ArrayList<>();
+        applyFilter(searchView != null ? searchView.getQuery().toString() : "");
+    }
+
+    /**
+     * 过滤当前列表数据
+     * @param query 搜索关键字
+     */
+    private void applyFilter(String query) {
+        String q = query == null ? "" : query.trim().toLowerCase();
+        List<DeliveryInfo> filteredList;
+
+        if (q.isEmpty()) {
+            filteredList = new ArrayList<>(currentFullList);
+        } else {
+            filteredList = currentFullList.stream()
+                    .filter(it -> {
+                        String rn = safeLower(it.getRouteNumber());
+                        String sn = safeLower(it.getOrderSn());
+                        return (rn != null && rn.endsWith(q)) || (sn != null && sn.endsWith(q));
+                    })
+                    .collect(Collectors.toList());
+        }
+
+        adapter.submit(filteredList);
+        boolean empty = filteredList.isEmpty();
+        recyclerView.setVisibility(empty ? View.GONE : View.VISIBLE);
+        emptyView.setVisibility(empty ? View.VISIBLE : View.GONE);
+
+        if (empty) {
+            if (currentMode == ListMode.UNSCANNED_FROM_SCAN) {
+                emptyView.setText("暂无【未扫描】包裹");
+            } else {
+                emptyView.setText("暂无【派送中】包裹");
+            }
+        }
+    }
+
+    private String safeLower(String s) {
+        return s == null ? null : s.toLowerCase();
+    }
 
     private void onItemClicked(@NonNull DeliveryInfo item) {
-        // 仅允许派送中/在途进入拍照
+        if (currentMode == ListMode.UNSCANNED_FROM_SCAN) {
+            Toast.makeText(requireContext(), "该列表为【未扫描】包裹，请先在扫描页完成扫描。", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         Status status = Status.fromState(item.getState());
         if (!status.isDeliverable()) {
             Toast.makeText(requireContext(), "该包裹不在派送中状态，无法操作。", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // 从资源管理中查找 DeliveryInfo（按运单号优先，找不到再按包裹号）
-        DeliveryInfo di = findDeliveryInfo(item);
-        if (di == null) {
-            Toast.makeText(requireContext(), "未找到包裹详情，无法进入拍照", Toast.LENGTH_SHORT).show();
+        if (item.getOrderId() == null) {
+            Toast.makeText(requireContext(), "包裹详情不完整，无法进入拍照", Toast.LENGTH_SHORT).show();
             return;
         }
 
         Intent intent = new Intent(requireContext(), CameraActivity.class);
-        intent.putExtra("order_id", di.getOrderId() == null ? -1L : di.getOrderId());
-        try { intent.putExtra("latitude",  di.getLatitude()); } catch (Throwable ignore) { intent.putExtra("latitude",  -1); }
-        try { intent.putExtra("longitude", di.getLongitude()); } catch (Throwable ignore) { intent.putExtra("longitude", -1); }
+        intent.putExtra("order_id", item.getOrderId());
+        try { intent.putExtra("latitude",  item.getLatitude()); } catch (Throwable ignore) { intent.putExtra("latitude",  -1); }
+        try { intent.putExtra("longitude", item.getLongitude()); } catch (Throwable ignore) { intent.putExtra("longitude", -1); }
         startActivity(intent);
     }
 
-    @Nullable
-    private DeliveryInfo findDeliveryInfo(@NonNull DeliveryInfo item) {
-        List<DeliveryInfo> list = ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
-        if (list == null) return null;
-        // 1) 先按运单号精确匹配
-        if (item.getOrderSn() != null) {
-            for (DeliveryInfo e : list) {
-                if (item.getOrderSn().equals(e.getOrderSn())) return e;
-            }
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        // 移除所有观察者以避免内存泄漏
+        if (currentDataSource != null) {
+            currentDataSource.removeObserver(dataObserver);
         }
-        // 2) 再按包裹号匹配
-        if (item.getRouteNumber() != null) {
-            for (DeliveryInfo e : list) {
-                if (item.getRouteNumber().equals(String.valueOf(e.getRouteNumber()))) return e;
-            }
-        }
-        return null;
     }
 
-    // ============================
-    // 数据模型与适配器（与 iOS 对齐）
-    // ============================
+    // 移除这两个冗余的公共方法，因为 loadInDeliveryParcels/loadUnscannedParcels 已经足够
+    // public void showInTransitList() { loadInDeliveryParcels(); }
+    // public void showUnscannedList() { loadUnscannedParcels(); }
 
-    /** RecyclerView 适配器（两行：包裹号/运单号） */
     public static final class ParcelListAdapter extends RecyclerView.Adapter<ParcelListAdapter.VH> {
         public interface OnItemClickListener { void onItemClick(@NonNull DeliveryInfo item); }
         private final Context ctx;

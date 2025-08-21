@@ -173,7 +173,7 @@ public class Utils {
     }
 
     public static String getCurrentDate() {
-        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd");
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd" , Locale.US);
         return df.format(new Date());
     }
 

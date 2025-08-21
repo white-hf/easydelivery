@@ -1,76 +1,240 @@
 package com.hf.easydelivery.view.model;
 
+import android.location.Location;
+import android.util.Log;
+
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
-import java.util.ArrayList;
-import java.util.List;
 
+import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.ResourceMgr;
+import com.hf.easydelivery.core.DeliveryinfoMgr;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.dao.PackageEntity;
 import com.hf.easydelivery.event.Event;
 import com.hf.easydelivery.event.EventConstant;
+import com.hf.easydelivery.event.Publisher;
 import com.hf.easydelivery.event.Subscriber;
 
-/**
- * 管理 Map 页的业务状态
- */
+import java.util.ArrayList;
+import java.util.List;
+
 public class MapViewModel extends ViewModel implements Subscriber {
 
-    private boolean firstShown = true;
+    private static final String TAG = "MapViewModel";
 
-    private final MutableLiveData<List<DeliveryInfo>> packages = new MutableLiveData<>(new ArrayList<>());
+    // LiveData 用于向 Fragment 暴露数据和状态
+    private final MutableLiveData<List<DeliveryInfo>> mapItemsLive = new MutableLiveData<>();
+    private final MutableLiveData<MapStatus> statusLive = new MutableLiveData<>();
+    private final MutableLiveData<Location> myLocationLive = new MutableLiveData<>();
+    private final MutableLiveData<Event<String>> toastMessageLive = new MutableLiveData<>();
+
+    // 内部状态计数
+    private int deliveredCount = 0;
+    private int pendingCount = 0;
+    private int uploadingCount = 0;
+    private int failedCount = 0;
+
+    // 标志：是否首次进入
+    private boolean firstEnter = true;
+
+    // 内部类：聚合所有状态数据，方便一次性更新
+    public static class MapStatus {
+        public int deliveredCount;
+        public int pendingCount;
+        public int uploadingCount;
+        public int failedCount;
+        public boolean isLoading = true;
+    }
 
     public MapViewModel() {
-        ResourceMgr.getInstance().getPublisher().subscribe(EventConstant.EVENT_UPLOAD_SUCCESS, this);
-        ResourceMgr.getInstance().getPublisher().subscribe(EventConstant.EVENT_DELIVERY_DATA_READY, this);
+        // 订阅所有相关的事件
+        Publisher publisher = ResourceMgr.getInstance().getPublisher();
+        publisher.subscribe(EventConstant.EVENT_UPLOAD_FAILURE, this);
+        publisher.subscribe(EventConstant.EVENT_UPLOAD_SUCCESS, this);
+        publisher.subscribe(EventConstant.EVENT_SAVE_DELIVERY_SUCCESS, this);
+        publisher.subscribe(EventConstant.EVENT_DELIVERY_DATA_READY, this);
+
+        // 初始化状态
+        MapStatus status = new MapStatus();
+        status.isLoading = true;
+        statusLive.setValue(status);
+        FileLog.i(TAG, "MapViewModel created, subscribing to events.");
+    }
+
+    // region ★ 向 Fragment 暴露的 LiveData ★
+    public LiveData<List<DeliveryInfo>> getMapItemsLive() {
+        return mapItemsLive;
+    }
+
+    public LiveData<MapStatus> getStatusLive() {
+        return statusLive;
+    }
+
+    public LiveData<Location> getMyLocationLive() {
+        return myLocationLive;
+    }
+
+    public LiveData<Event<String>> getToastMessageLive() {
+        return toastMessageLive;
+    }
+    // endregion
+
+    // region ★ 公共方法：供 Fragment 调用 ★
+
+    /**
+     * 触发数据加载和状态初始化。
+     * 仅在 Fragment 首次进入时调用一次。
+     */
+    public void init() {
+        if (firstEnter) {
+            firstEnter = false;
+            initStatusBarCounts();
+            requestAndRefreshMarkers(true); // 默认加载派送中包裹
+        }
     }
 
     /**
-     * 是否首次进入 Map 页
+     * 更新当前定位，供 Fragment 调用。
      */
-    public boolean shouldDoFirstEnter() {
-        if (firstShown) {
-            firstShown = false;
-            return true;
-        }
-        return false;
-    }
-
-    public LiveData<List<DeliveryInfo>> getPackages() {
-        return packages;
-    }
-
-    public void setPackages(List<DeliveryInfo> newList) {
-        packages.setValue(newList);
-    }
-
-    public void removePackageById(String id) {
-        List<DeliveryInfo> list = packages.getValue();
-        if (list != null) {
-            List<DeliveryInfo> updated = new ArrayList<>(list);
-            updated.removeIf(p -> p.getOrderSn().equals(id));
-            packages.postValue(updated);
-        }
+    public void updateMyLocation(Location location) {
+        myLocationLive.setValue(location);
     }
 
     /**
-     * Refresh the package list directly from ResourceMgr and update LiveData.
+     * 刷新派送中或未扫描包裹数据
+     *
+     * @param bDeliveryTask true = 派送中, false = 未扫描
      */
-    public void refreshPackagesFromResourceMgr() {
-        List<DeliveryInfo> deliveryInfos = ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
-
-        packages.postValue(deliveryInfos);
+    public void requestAndRefreshMarkers(Boolean bDeliveryTask) {
+        FileLog.i(TAG, "requestAndRefreshMarkers: loading data, bDeliveryTask=" + bDeliveryTask);
+        MapStatus currentStatus = statusLive.getValue();
+        if (currentStatus != null) {
+            currentStatus.isLoading = true;
+            statusLive.setValue(currentStatus);
+        }
+        try {
+            ResourceMgr.getInstance().getDeliveryinfoMgr().getDeliveryInfo(
+                    ResourceMgr.getInstance().getLoginInfo().loginId, bDeliveryTask);
+        } catch (Throwable t) {
+            toastMessageLive.setValue(new Event<>("请求失败"));
+            if (currentStatus != null) {
+                currentStatus.isLoading = false;
+                statusLive.setValue(currentStatus);
+            }
+        }
     }
 
+    // endregion
+
+    // region ★ 事件处理：响应 Event Bus ★
+
+    /**
+     * 事件回调，所有业务逻辑都在这里处理，然后通过 LiveData 通知 UI
+     */
     @Override
     public void receive(Event event) {
-        if (EventConstant.EVENT_UPLOAD_SUCCESS.equals(event.getEventType())) {
-            PackageEntity packageEntity = (PackageEntity) event.getMessage();
-            removePackageById(packageEntity.trackingId);
-        } else if (EventConstant.EVENT_DELIVERY_DATA_READY.equals(event.getEventType())) {
-            refreshPackagesFromResourceMgr();
+        DeliveryinfoMgr deliveryinfoMgr = ResourceMgr.getInstance().getDeliveryinfoMgr();
+        switch (event.getEventType()) {
+            case EventConstant.EVENT_UPLOAD_FAILURE:
+                FileLog.e(TAG, "receive: EVENT_UPLOAD_FAILURE");
+                toastMessageLive.setValue(new Event<>("上传包裹数据失败"));
+                updateStatusCounts(0, 0, 0, 1);
+                break;
+
+            case EventConstant.EVENT_SAVE_DELIVERY_SUCCESS:
+                FileLog.i(TAG, "receive: EVENT_SAVE_DELIVERY_SUCCESS");
+                PackageEntity packageEntity = (PackageEntity) event.getMessage();
+                if (packageEntity == null) return;
+                toastMessageLive.setValue(new Event<>("包裹数据保存成功"));
+                // 从内存列表移除包裹，并更新 UI
+                DeliveryInfo info = deliveryinfoMgr.get(packageEntity.orderId);
+                if (info != null)
+                    deliveryinfoMgr.getListDeliveryInfo().remove(info);
+
+                refreshMapItemsFromRepo();
+                updateStatusCounts(1, -1, 0, 0); // 计入“上传中”，pending-1
+                break;
+
+            case EventConstant.EVENT_UPLOAD_SUCCESS:
+                FileLog.i(TAG, "receive: EVENT_UPLOAD_SUCCESS");
+                PackageEntity pkg = (PackageEntity) event.getMessage();
+                if (pkg == null) return;
+                toastMessageLive.setValue(new Event<>("包裹上传成功"));
+                updateStatusCounts(-1, 0, 1, 0); // 上传中-1，已送达+1
+                break;
+
+            case EventConstant.EVENT_DELIVERY_DATA_READY:
+                FileLog.i(TAG, "receive: EVENT_DELIVERY_DATA_READY");
+                refreshMapItemsFromRepo();
+                updateStatusCounts(0, 0, 0, 0); // 触发一次状态更新
+                break;
         }
+    }
+
+    // endregion
+
+    // region ★ 内部工具方法 ★
+
+    /**
+     * 从 ResourceMgr 仓库加载数据到 LiveData
+     */
+    private void refreshMapItemsFromRepo() {
+        List<DeliveryInfo> lst = ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
+        mapItemsLive.postValue(lst); // postValue 确保在主线程更新
+        FileLog.i(TAG, "refreshMapItemsFromRepo: updated list size=" + (lst != null ? lst.size() : 0));
+    }
+
+    /**
+     * 初始化状态计数，仅在第一次加载时调用
+     */
+    private void initStatusBarCounts() {
+        try {
+            pendingCount = ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo().size();
+            // 尝试从 PendingPackagesMgr 统计“上传中/失败”，若不可用则保持 0
+            int up = ResourceMgr.getInstance().getPendingPackagesMgr().size();
+            uploadingCount = up;
+        } catch (Throwable ignore) {
+            // 保持默认值
+        }
+        updateStatusCounts(0, 0, 0, 0);
+        FileLog.i(TAG, "initStatusBarCounts: initial counts - pending=" + pendingCount);
+    }
+
+    /**
+     * 统一的状态计数更新
+     */
+    private void updateStatusCounts(int uploadingDelta, int pendingDelta, int deliveredDelta, int failedDelta) {
+        uploadingCount += uploadingDelta;
+        pendingCount += pendingDelta;
+        deliveredCount += deliveredDelta;
+        failedCount += failedDelta;
+        if (uploadingCount < 0) uploadingCount = 0;
+        if (pendingCount   < 0) pendingCount   = 0;
+        if (deliveredCount < 0) deliveredCount = 0;
+        if (failedCount    < 0) failedCount    = 0;
+
+        MapStatus newStatus = new MapStatus();
+        newStatus.deliveredCount = deliveredCount;
+        newStatus.pendingCount = pendingCount;
+        newStatus.uploadingCount = uploadingCount;
+        newStatus.failedCount = failedCount;
+        newStatus.isLoading = false;
+        statusLive.setValue(newStatus);
+        FileLog.i(TAG, String.format("updateStatusCounts: delivered=%d, pending=%d, uploading=%d, failed=%d", deliveredCount, pendingCount, uploadingCount, failedCount));
+    }
+    // endregion
+
+    @Override
+    protected void onCleared() {
+        super.onCleared();
+        // 取消事件订阅，避免内存泄漏
+        Publisher publisher = ResourceMgr.getInstance().getPublisher();
+        publisher.unsubscribe(EventConstant.EVENT_UPLOAD_FAILURE, this);
+        publisher.unsubscribe(EventConstant.EVENT_UPLOAD_SUCCESS, this);
+        publisher.unsubscribe(EventConstant.EVENT_SAVE_DELIVERY_SUCCESS, this);
+        publisher.unsubscribe(EventConstant.EVENT_DELIVERY_DATA_READY, this);
+        FileLog.i(TAG, "MapViewModel cleared.");
     }
 }

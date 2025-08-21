@@ -34,6 +34,10 @@ public class MapHostFragment extends Fragment {
     }
 
     private MapSwitchListener mapSwitchListener;
+    private FloatingActionButton fabSwitchView;
+
+    private MapInnerFragment mapFrag;
+    private PackageListFragment listFrag;
 
     /**
      * Sets the listener for map/list switch events.
@@ -69,35 +73,84 @@ public class MapHostFragment extends Fragment {
                     .commitNow();
         }
 
-        FloatingActionButton fabSwitchView = root.findViewById(R.id.fabSwitchView);
+        fabSwitchView = root.findViewById(R.id.fabSwitchView);
+
+// 初始化两个子 Fragment，但仅显示地图 Fragment
+        FragmentManager fm = getChildFragmentManager();
+        mapFrag = (MapInnerFragment) fm.findFragmentByTag("map");
+        listFrag = (PackageListFragment) fm.findFragmentByTag("list");
+
+        if (mapFrag == null) {
+            mapFrag = new MapInnerFragment();
+            fm.beginTransaction()
+                    .add(R.id.home_container, mapFrag, "map")
+                    .commit();
+        }
 
         fabSwitchView.setOnClickListener(v -> {
-            FragmentManager fm = getChildFragmentManager();
-            Fragment mapFrag = fm.findFragmentByTag("map");
-            Fragment listFrag = fm.findFragmentByTag("list");
-            FragmentTransaction tx = fm.beginTransaction();
-
-            boolean mapVisible = mapFrag != null && mapFrag.isVisible();
-            boolean listVisible = listFrag != null && listFrag.isVisible();
-
-            if (mapVisible) {
-                if (listFrag == null) {
-                    listFrag = new PackageListFragment();
-                    tx.add(R.id.home_container, listFrag, "list");
-                }
-                if (mapFrag != null) tx.hide(mapFrag);
-                if (listFrag != null) tx.show(listFrag);
-                if (mapSwitchListener != null) mapSwitchListener.onMapSwitched(false);
-                fabSwitchView.setSelected(true);
-            } else if (listVisible) {
-                fabSwitchView.setSelected(false);
-                if (listFrag != null) tx.hide(listFrag);
-                if (mapFrag != null) tx.show(mapFrag);
-                if (mapSwitchListener != null) mapSwitchListener.onMapSwitched(true);
+            // 仅仅负责视图切换，不涉及数据加载
+            if (mapFrag.isVisible()) {
+                switchToListView();
+            } else {
+                switchToMapView();
             }
-            tx.commitAllowingStateLoss();
         });
 
+
         return root;
+    }
+
+
+    /**
+     * 切换到地图视图
+     */
+    public void switchToMapView() {
+        if (mapFrag != null && listFrag != null) {
+            getChildFragmentManager().beginTransaction()
+                    .hide(listFrag)
+                    .show(mapFrag)
+                    .commit();
+            fabSwitchView.setSelected(false);
+        }
+    }
+
+    /**
+     * 切换到列表视图
+     */
+    public void switchToListView() {
+        // 如果列表 Fragment 尚未创建，则创建它
+        if (listFrag == null) {
+            listFrag = new PackageListFragment();
+            getChildFragmentManager().beginTransaction()
+                    .add(R.id.home_container, listFrag, "list")
+                    .hide(mapFrag)
+                    .commit();
+        } else {
+            getChildFragmentManager().beginTransaction()
+                    .hide(mapFrag)
+                    .show(listFrag)
+                    .commit();
+        }
+        fabSwitchView.setSelected(true);
+    }
+
+    /**
+     * 接收来自 MapInnerFragment 的请求并处理
+     */
+    public void onRequestInTransitList() {
+
+        if (listFrag != null) {
+            listFrag.loadInDeliveryParcels();
+        }
+    }
+
+    /**
+     * 接收来自 MapInnerFragment 的请求并处理
+     */
+    public void onRequestUnscannedList() {
+
+        if (listFrag != null) {
+            listFrag.loadUnscannedParcels();
+        }
     }
 }

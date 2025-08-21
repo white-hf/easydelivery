@@ -5,9 +5,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
     tools:context=".ScanActivity">
 
-    <!-- AppBarLayout + Toolbar -->
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBar"
         android:layout_width="0dp"
@@ -16,6 +16,7 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
+
 
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/scantoolbar"
@@ -28,7 +29,6 @@
             app:menu="@menu/scan_actions"/>
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- 扫描进度，要在 Toolbar 下面 -->
     <TextView
         android:id="@+id/tvProgress"
         android:layout_width="0dp"
@@ -44,7 +44,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- CameraX 预览 -->
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="0dp"
@@ -56,7 +55,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         tools:background="@android:color/darker_gray"/>
 
-    <!-- 横向条码取景框遮罩 -->
     <View
         android:id="@+id/viewFinderOverlay"
         android:layout_width="0dp"
@@ -71,7 +69,6 @@
         app:layout_constraintEnd_toEndOf="@id/previewView"
         tools:visibility="visible"/>
 
-    <!-- 扫描红线 -->
     <View
         android:id="@+id/scanLine"
         android:layout_width="0dp"
@@ -82,7 +79,6 @@
         app:layout_constraintEnd_toEndOf="@id/viewFinderOverlay"
         tools:visibility="visible"/>
 
-    <!-- 实时高亮包裹号 -->
     <TextView
         android:id="@+id/tvPackageNumber"
         android:layout_width="0dp"
@@ -102,7 +98,6 @@
         app:layout_constraintVertical_bias="1.0"
         android:layout_marginBottom="8dp"/>
 
-    <!-- 分段切换：未扫描 / 已扫描 -->
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/segmented"
         android:layout_width="0dp"
@@ -138,7 +133,6 @@
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
 
-    <!-- 最近扫描列表 -->
     <androidx.constraintlayout.widget.Guideline
         android:id="@+id/guideline50"
         android:layout_width="wrap_content"
@@ -154,10 +148,13 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:padding="8dp"
-        android:background="#CCFFFFFF"/>
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="96dp"
+        android:clipToPadding="false"
+        android:background="@android:color/transparent"/>
 
-    <!-- 提示文本：只扫框内，并尽量靠近 -->
     <TextView
         android:id="@+id/tvHint"
         android:layout_width="wrap_content"
@@ -172,7 +169,6 @@
         android:layout_margin="8dp"
         android:layout_marginEnd="16dp"/>
 
-    <!-- 全屏进度遮罩，默认隐藏 -->
     <FrameLayout
         android:id="@+id/flProgressOverlay"
         android:layout_width="0dp"

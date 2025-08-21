@@ -3,7 +3,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white">
+    android:background="@android:color/white"
+    android:fitsSystemWindows="true">
 
     <!-- 搜索栏：输入包裹号或运单号后几位 -->
     <androidx.appcompat.widget.SearchView
@@ -27,7 +28,9 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
-        android:padding="8dp"/>
+        android:padding="8dp"
+        android:paddingBottom="96dp"
+        android:clipToPadding="false"/>
 
     <!-- 空视图 -->
     <TextView
