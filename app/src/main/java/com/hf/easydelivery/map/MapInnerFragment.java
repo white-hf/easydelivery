@@ -250,10 +250,43 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         }
         clusterManager.cluster();
 
+        if (items != null && !items.isEmpty()) {
+            if (savedPosition == null) {
+                // 如果列表不为空，构建边界以包含所有包裹
+                LatLngBounds.Builder builder = new LatLngBounds.Builder();
+
+                for (DeliveryInfo info : items) {
+                    if (info != null) {
+                        builder.include(new LatLng(info.getLatitude(), info.getLongitude()));
+                    }
+                }
+
+                // 移动相机以适应所有包裹，并设置 150px 的内边距
+                LatLngBounds bounds = builder.build();
+                // 计算边界的跨度（经度和纬度之差）
+                double latSpan = bounds.northeast.latitude - bounds.southwest.latitude;
+                double lngSpan = bounds.northeast.longitude - bounds.southwest.longitude;
+
+                // 如果所有包裹都在一个非常小的范围内（例如，跨度小于 0.005 度，约 500 米）
+                if (latSpan < 0.005 && lngSpan < 0.005) {
+                    // 回退到固定缩放级别，并聚焦到第一个有效包裹的位置
+                    googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                            new LatLng(firstItem.getLatitude(), firstItem.getLongitude()), 15));
+                } else {
+                    // 如果包裹分布广泛，使用fitBounds来显示所有包裹
+                    int padding = 150;
+                    googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, padding));
+                }
+            }
+        }
+
         // 首次加载后定位到第一个包裹
         if (firstItem != null && savedPosition == null) {
             LatLng firstPosition = new LatLng(firstItem.getLatitude(), firstItem.getLongitude());
-            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstPosition, 16));
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstPosition, 14));
+        }else if ((items ==null || items.isEmpty()) && savedPosition == null) {
+            // 如果包裹列表为空，则移动到当前位置
+            centerOnMyLocation();
         }
     }
 
@@ -379,7 +412,7 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         }
         LatLng me = new LatLng(loc.getLatitude(), loc.getLongitude());
         CameraPosition current = googleMap.getCameraPosition();
-        googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(me, current.zoom <= 0 ? 16 : current.zoom));
+        googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(me, current.zoom <= 6 ? 15 : current.zoom));
     }
 
     private void toggleMapType(ImageButton btn) {

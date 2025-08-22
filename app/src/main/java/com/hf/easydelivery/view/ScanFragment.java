@@ -238,7 +238,12 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                     } else if (id == R.id.action_submit_offline) {
                         scanViewModel.submitOfflineScans();
                         return true;
+                    } else if (id == R.id.action_begin_scan) {
+                        startCameraIfNeeded();
+                        return true;
                     }
+
+
                     return false;
                 });
                 return; // 使用 Fragment 自己的 Toolbar 时，无需再向 Activity 注册菜单

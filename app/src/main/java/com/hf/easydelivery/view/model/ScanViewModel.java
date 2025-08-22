@@ -191,8 +191,8 @@ public class ScanViewModel extends ViewModel implements Subscriber {
                 loadInitialData(items);
 
                 // 检查是否有未扫描数据并触发弹窗事件
-                boolean hasUnscanned = !resourceMgr.getDeliveryinfoMgr().getListDeliveryInfo().isEmpty() &&
-                        resourceMgr.getDeliveryinfoMgr().getListDeliveryInfo().size() > items.size();
+                boolean hasUnscanned = !scanPackagesMgr.getListDeliveryInfo().isEmpty() &&
+                        scanPackagesMgr.getListDeliveryInfo().size() > items.size();
 
                 if (shouldDoFirstEnter() && hasUnscanned) {
                     // 使用 postValue，因为这个代码块在 DbHandler 线程上
@@ -235,7 +235,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
             handleSuccessfulScan(waybillNo, deliveryInfo.getRouteNumber());
         } else {
             // 扫描失败
-            if (resourceMgr.getDeliveryinfoMgr().size() == 0) {
+            if (scanPackagesMgr.size() == 0) {
                 toastMessage.postValue(new Event<>("数据加载中，请稍后重扫"));
             } else {
                 toastMessage.postValue(new Event<>("不是您的包裹"));
@@ -381,7 +381,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
 
     /** 按运单号在“原始未扫列表”中查询（用于扫码命中校验） */
     private DeliveryInfo getByTrackingNo(@NonNull String waybill) {
-        return resourceMgr.getDeliveryinfoMgr().getByTrackingNo(waybill);
+        return scanPackagesMgr.getByTrackingNo(waybill);
     }
 
     /**

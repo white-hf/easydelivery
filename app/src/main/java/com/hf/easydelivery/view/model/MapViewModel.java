@@ -115,8 +115,7 @@ public class MapViewModel extends ViewModel implements Subscriber {
             statusLive.setValue(currentStatus);
         }
         try {
-            ResourceMgr.getInstance().getDeliveryinfoMgr().getDeliveryInfo(
-                    ResourceMgr.getInstance().getLoginInfo().loginId, bDeliveryTask);
+            ResourceMgr.getInstance().getDeliveryinfoMgr().getDeliveryInfo(ResourceMgr.getInstance().getLoginInfo().loginId, bDeliveryTask);
         } catch (Throwable t) {
             toastMessageLive.setValue(new Event<>("请求失败"));
             if (currentStatus != null) {

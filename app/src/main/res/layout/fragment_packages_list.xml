@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@android:color/white"
     android:fitsSystemWindows="true">
 
-    <!-- 搜索栏：输入包裹号或运单号后几位 -->
     <androidx.appcompat.widget.SearchView
         android:id="@+id/search_view"
         android:layout_width="0dp"
@@ -19,7 +19,6 @@
         android:layout_marginEnd="16dp"
         android:layout_marginTop="8dp"/>
 
-    <!-- 列表 -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_view"
         android:layout_width="0dp"
@@ -27,12 +26,13 @@
         app:layout_constraintTop_toBottomOf="@id/search_view"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        android:padding="8dp"
-        android:paddingBottom="96dp"
-        android:clipToPadding="false"/>
+        app:layout_constraintBottom_toTopOf="@id/bottom_spacer"
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp"
+        android:paddingTop="8dp"
+        android:clipToPadding="false"
+        android:background="@android:color/transparent"/>
 
-    <!-- 空视图 -->
     <TextView
         android:id="@+id/empty_view"
         android:layout_width="wrap_content"
@@ -45,7 +45,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- 进度条（居中） -->
     <ProgressBar
         android:id="@+id/progress_bar"
         android:layout_width="wrap_content"
@@ -56,7 +55,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- 右下角 FAB：切回地图 -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab_back_to_map"
         android:layout_width="wrap_content"
@@ -69,5 +67,14 @@
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginEnd="20dp"
         android:layout_marginBottom="20dp"/>
+
+    <View
+        android:id="@+id/bottom_spacer"
+        android:layout_width="0dp"
+        android:layout_height="80dp"
+        android:background="@android:color/transparent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

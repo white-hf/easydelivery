@@ -5,7 +5,7 @@
     <string name="action_load_orders">Uploading scan data</string>
     <string name="action_success">Operation succeed</string>
     <string name="action_failure">Operation failed</string>
-    <string name="action_req_failure">Requesting failed</string>
+    <string name="action_req_failure">请求失败，请检查网络后重试。</string>
     <string name="action_svr_failure">Server returned a failure</string>
     <string name="action_need_login">Login, please</string>
     <string name="default_scanned_location">Halifax Warehouse</string>

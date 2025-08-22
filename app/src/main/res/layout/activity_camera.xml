@@ -38,6 +38,7 @@
             android:orientation="horizontal"
             android:padding="12dp"
             android:gravity="center_vertical"
+            android:baselineAligned="false"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@drawable/bg_scrim_light">
@@ -47,8 +48,6 @@
                 android:textSize="22sp"
                 android:textStyle="bold"
                 android:textColor="@android:color/white"
-                android:maxLines="1"
-                android:ellipsize="end"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
 
@@ -61,36 +60,35 @@
 
                 <TextView
                     android:id="@+id/tv_tracking_number"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
                     android:maxLines="1"
-                    android:ellipsize="end" />
+                    android:ellipsize="end"
+                    android:textColor="@android:color/white" />
                 <TextView
                     android:id="@+id/tv_customer_name"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
                     android:maxLines="1"
-                    android:ellipsize="end" />
+                    android:ellipsize="end"
+                    android:textColor="@android:color/white" />
                 <TextView
                     android:id="@+id/tv_unit_number"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
                     android:maxLines="1"
-                    android:ellipsize="end" />
+                    android:ellipsize="end"
+                    android:textColor="@android:color/white" />
                 <TextView
                     android:id="@+id/tv_address"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:maxLines="1"
-                    android:ellipsize="end" />
+                    android:maxLines="2"
+                    android:ellipsize="end"
+                    android:textColor="@android:color/white" />
             </LinearLayout>
         </LinearLayout>
     </androidx.cardview.widget.CardView>
-
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="0dp"

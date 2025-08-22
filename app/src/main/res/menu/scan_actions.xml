@@ -2,6 +2,12 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/action_begin_scan"
+        android:icon="@drawable/ic_begin_scan"
+        android:title="开启扫描"
+        app:showAsAction="always"/>
+
+    <item
         android:id="@+id/action_query_unscanned"
         android:icon="@drawable/ic_search_unscanned"
         android:title="未扫包裹"

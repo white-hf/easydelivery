@@ -150,13 +150,14 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         tvUnitNumber = findViewById(R.id.tv_unit_number);
         tvAddress = findViewById(R.id.tv_address);
 
+
         final DeliveryInfo deliveryInfo = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
         if (deliveryInfo != null) {
             tvRouteNumber.setText(String.valueOf(deliveryInfo.getRouteNumber()));
             tvOrderSn.setText(deliveryInfo.getOrderSn());
-            tvCustomerName.setText(ellipsis(deliveryInfo.getName(), 8));
+            tvCustomerName.setText(deliveryInfo.getName());
             tvUnitNumber.setText(deliveryInfo.getUnitNumber());
-            tvAddress.setText(ellipsis(deliveryInfo.getAddress(), 15));
+            tvAddress.setText(deliveryInfo.getAddress());
         }
 
         // 3) 缩略图栏

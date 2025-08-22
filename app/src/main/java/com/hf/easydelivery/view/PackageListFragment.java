@@ -14,6 +14,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SearchView;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
@@ -139,7 +141,36 @@ public class PackageListFragment extends Fragment {
             loadInDeliveryParcels();
         }
 
+        // ... (在您的 onViewCreated 方法中)
+
+        recyclerView.setClipToPadding(false);
+
+// 动态设置内边距
+        ViewCompat.setOnApplyWindowInsetsListener(recyclerView, (v, insets) -> {
+            // 获取系统导航栏的高度
+            int sysBottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
+
+            // 获取您应用底部 FAB 的总高度（高度 + 底部外边距）
+            int navExtra = 0;
+            View fab = requireActivity().findViewById(R.id.fab_back_to_map);
+            if (fab != null) {
+                navExtra = fab.getHeight() + ((ViewGroup.MarginLayoutParams) fab.getLayoutParams()).bottomMargin;
+            }
+
+            // 最终的底部内边距取系统导航栏和 FAB 区域的最大值
+            int desiredBottom = Math.max(sysBottom, navExtra);
+
+            // 设置所有方向的内边距，这里为列表内容左右和顶部留出 8dp 间距
+            v.setPadding(dp2px(8), dp2px(8), dp2px(8), desiredBottom);
+
+            return insets;
+        });
+
         return view;
+    }
+
+    private int dp2px(int dp) {
+        return (int) (dp * getResources().getDisplayMetrics().density);
     }
 
     /**
