@@ -12,7 +12,9 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -51,6 +53,19 @@ public class Utils {
     private static final Pattern POSTAL_CODE_PATTERN = Pattern.compile("\\b\\d{1,3}\\s?\\w{1,2}\\s?\\d{1,3}\\b");
     private static final Pattern WORD_PATTERN = Pattern.compile("\\b[a-zA-Z]+\\b");
 
+    private static final Pattern LEADING_UNIT_HYPHEN = Pattern.compile("^\\s*(\\w{1,6})\\s*-\\s*(\\d{1,5})\\b");
+    private static final Pattern UNIT_PREFIX_PATTERN = Pattern.compile(
+            "^\\s*(?:apt|apartment|unit|suite|ste|rm|room|ph|buzzer|fl|floor|lvl|level|entrance|door|code|bldg|building|#)\\s*[:#-]?\\s*(\\w{1,6})\\s+(\\d{1,5})\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern DOUBLE_NUMBER_PREFIX = Pattern.compile("^\\s*(\\d{1,4})\\s+(\\d{1,5})\\b");
+    private static final Pattern HASH_ONLY_PREFIX = Pattern.compile("^\\s*#\\s*(\\w{1,6})\\b");
+    private static final Pattern GENERIC_NUMBER_PATTERN = Pattern.compile("\\b(\\d{1,5}[A-Za-z]?)\\b");
+    private static final Pattern UNIT_KEYWORD_GLOBAL = Pattern.compile(
+            "(?i)(?:\\b(?:apt|apartment|unit|suite|ste|rm|room|ph|buzzer|fl|floor|lvl|level|entrance|door|code|bldg|building|locker|buzz)\\s*[:#-]?\\s*(\\w{1,6}))"
+    );
+    private static final Pattern TRAILING_UNIT_PATTERN = Pattern.compile("(?i)(?:#|no\\.?|unit)\\s*(\\w{1,6})\\s*$");
+
 
     public String getTodayString() {
         return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -58,46 +73,170 @@ public class Utils {
     }
 
     public static AddressInfo extractApartmentAndStreetNumber(String strAddress) {
-        if (strAddress == null || strAddress.isEmpty()) {
+        if (strAddress == null || strAddress.trim().isEmpty()) {
             return new AddressInfo("", "");
         }
 
-        String address = strAddress.trim();
+        String normalized = normalizeAddress(strAddress);
+        UnitExtractionResult leading = extractLeadingUnit(normalized);
+        String working = leading.remaining;
 
-        Matcher apartmentMatcher = APARTMENT_PATTERN.matcher(address);
-        if (apartmentMatcher.find()) {
-            return new AddressInfo(apartmentMatcher.group(1), apartmentMatcher.group(2));
+        String streetNumber = firstStreetNumber(working);
+        if (streetNumber.isEmpty()) {
+            streetNumber = firstStreetNumber(normalized);
         }
 
-
-        Matcher numberMatcher = NUMBER_PATTERN.matcher(address);
-        String[] numbers = new String[2];
-        int count = 0;
-        int[] positions = new int[2]; // Store positions of the found numbers
-
-        while (numberMatcher.find() && count < 2) {
-            positions[count] = numberMatcher.start();
-            numbers[count] = numberMatcher.group(1).trim();
-            count++;
+        String apartment = leading.unit;
+        if (apartment.isEmpty()) {
+            apartment = detectUnitFromKeywords(normalized, streetNumber);
+        }
+        if (apartment.isEmpty()) {
+            apartment = heuristicUnitFromNumbers(normalized, streetNumber);
         }
 
-        // Perform checks to ensure numbers are valid
-        for (int i = 0; i < count; i++) {
-            if (isAdjacentCharacterLetter(address, positions[i])) {
-                numbers[i] = "";
+        return new AddressInfo(apartment, streetNumber);
+    }
+
+    private static String normalizeAddress(String raw) {
+        String stripped = stripNonAddressPrefix(raw == null ? "" : raw);
+        stripped = stripped.replace(',', ' ');
+        stripped = stripped.replaceAll("\\s+", " ").trim();
+        return stripped;
+    }
+
+    private static String stripNonAddressPrefix(String raw) {
+        if (raw == null) return "";
+        Matcher digit = Pattern.compile("\\d").matcher(raw);
+        if (!digit.find()) {
+            return raw.trim();
+        }
+        int idx = digit.start();
+        String prefix = raw.substring(0, idx);
+        if (prefix.trim().isEmpty() || !prefix.contains(" ")) {
+            return raw.substring(idx).trim();
+        }
+        return raw.trim();
+    }
+
+    private static UnitExtractionResult extractLeadingUnit(String address) {
+        String working = address;
+
+        Matcher hyphen = LEADING_UNIT_HYPHEN.matcher(working);
+        if (hyphen.find()) {
+            return new UnitExtractionResult(hyphen.group(1), working.substring(hyphen.start(2)).trim());
+        }
+
+        Matcher prefix = UNIT_PREFIX_PATTERN.matcher(working);
+        if (prefix.find()) {
+            return new UnitExtractionResult(prefix.group(1), working.substring(prefix.start(2)).trim());
+        }
+
+        Matcher doubleNumbers = DOUBLE_NUMBER_PREFIX.matcher(working);
+        if (doubleNumbers.find()) {
+            return new UnitExtractionResult(doubleNumbers.group(1), working.substring(doubleNumbers.start(2)).trim());
+        }
+
+        Matcher hashOnly = HASH_ONLY_PREFIX.matcher(working);
+        if (hashOnly.find()) {
+            return new UnitExtractionResult(hashOnly.group(1), working.substring(hashOnly.end()).trim());
+        }
+
+        return new UnitExtractionResult("", working);
+    }
+
+    private static String firstStreetNumber(String text) {
+        if (text == null) return "";
+        Matcher matcher = GENERIC_NUMBER_PATTERN.matcher(text);
+        while (matcher.find()) {
+            String candidate = matcher.group(1);
+            if (candidate != null && !candidate.isEmpty()) {
+                return candidate;
+            }
+        }
+        return "";
+    }
+
+    private static String detectUnitFromKeywords(String text, String streetNumber) {
+        if (text == null) return "";
+        Matcher matcher = UNIT_KEYWORD_GLOBAL.matcher(text);
+        while (matcher.find()) {
+            String candidate = matcher.group(1);
+            if (candidate == null || candidate.isEmpty()) continue;
+            if (candidate.equalsIgnoreCase(streetNumber)) continue;
+            return candidate;
+        }
+
+        Matcher trailing = TRAILING_UNIT_PATTERN.matcher(text);
+        if (trailing.find()) {
+            String candidate = trailing.group(1);
+            if (!candidate.equalsIgnoreCase(streetNumber)) {
+                return candidate;
             }
         }
 
-        return new AddressInfo(numbers[1], numbers[0]);
+        Matcher hashTail = Pattern.compile("(?i)(\\d+[A-Za-z]?)\\s*$").matcher(text);
+        if (hashTail.find()) {
+            String candidate = hashTail.group(1);
+            if (!candidate.equalsIgnoreCase(streetNumber)) {
+                return candidate;
+            }
+        }
+        return "";
     }
 
-    private static boolean isAdjacentCharacterLetter(String address, int index) {
-
-        if (index + 1 < address.length()) {
-            char nextChar = address.charAt(index + 1);
-            return Character.isLetter(nextChar);
+    private static String heuristicUnitFromNumbers(String text, String streetNumber) {
+        if (text == null) return "";
+        List<String> numbers = new ArrayList<>();
+        Matcher matcher = GENERIC_NUMBER_PATTERN.matcher(text);
+        while (matcher.find()) {
+            numbers.add(matcher.group(1));
+            if (numbers.size() >= 3) break;
         }
-        return false;
+        if (numbers.size() < 2) {
+            return "";
+        }
+        String first = numbers.get(0);
+        String second = numbers.get(1);
+        int firstVal = numericHint(first);
+        int secondVal = numericHint(second);
+
+        if (streetNumber != null && !streetNumber.isEmpty()) {
+            if (streetNumber.equals(second) && firstVal > 0 && firstVal < secondVal && secondVal >= 1000) {
+                return first;
+            }
+            if (streetNumber.equals(first) && secondVal > 0 && secondVal < firstVal) {
+                return second;
+            }
+        }
+
+        if (streetNumber == null || streetNumber.isEmpty()) {
+            if (secondVal >= 1000 && firstVal > 0 && firstVal < secondVal) {
+                return first;
+            }
+        }
+
+        return "";
+    }
+
+    private static int numericHint(String token) {
+        if (token == null) return -1;
+        Matcher matcher = NUMBER_PATTERN.matcher(token);
+        if (matcher.find()) {
+            try {
+                return Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return -1;
+    }
+
+    private static class UnitExtractionResult {
+        final String unit;
+        final String remaining;
+        UnitExtractionResult(String unit, String remaining) {
+            this.unit = unit == null ? "" : unit;
+            this.remaining = remaining == null ? "" : remaining;
+        }
     }
 
     public static String extractFirstWord(String address) {

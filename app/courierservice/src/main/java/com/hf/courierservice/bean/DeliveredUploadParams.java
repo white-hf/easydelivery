@@ -9,11 +9,13 @@ public class DeliveredUploadParams {
     private String url;
     private String authorization;
     private Map<String, String> formFields;
+    private Map<String, String> trailingFields;
     private String imageFiles;
 
     private Long orderId;
     private Double longitude;
     private Double latitude;
+    private String recipientName;
 
 
     // Getters and Setters
@@ -42,6 +44,14 @@ public class DeliveredUploadParams {
         return latitude;
     }
 
+    public String getRecipientName() {
+        return recipientName;
+    }
+
+    public void setRecipientName(String recipientName) {
+        this.recipientName = recipientName;
+    }
+
     public String getUrl() {
         return url;
     }
@@ -64,6 +74,14 @@ public class DeliveredUploadParams {
 
     public void setFormFields(Map<String, String> formFields) {
         this.formFields = formFields;
+    }
+
+    public Map<String, String> getTrailingFields() {
+        return trailingFields;
+    }
+
+    public void setTrailingFields(Map<String, String> trailingFields) {
+        this.trailingFields = trailingFields;
     }
 
     public String getImageFiles() {

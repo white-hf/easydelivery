@@ -1,5 +1,7 @@
 package com.hf.easydelivery.view;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -306,25 +308,74 @@ public class PackageListFragment extends Fragment {
             this.ctx = ctx; this.listener = l;
         }
         @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View v = LayoutInflater.from(ctx).inflate(android.R.layout.simple_list_item_2, parent, false);
+            View v = LayoutInflater.from(ctx).inflate(R.layout.item_package_list, parent, false);
             return new VH(v);
         }
         @Override public void onBindViewHolder(@NonNull VH h, int pos) {
             DeliveryInfo it = items.get(pos);
-            h.title.setText("包裹号: " + (it.getRouteNumber() == null ? "—" : it.getRouteNumber()));
-            h.sub.setText("运单号: " + (it.getOrderSn() == null ? "" : it.getOrderSn()));
+            String routeText = "包裹号: " + valueOrDash(it.getRouteNumber());
+            String orderText = "运单号: " + valueOrDash(it.getOrderSn());
+            String customerText = "客户: " + valueOrDash(it.getName());
+            h.routeNumber.setText(routeText);
+            h.orderSn.setText(orderText);
+            h.customer.setText(customerText);
+
+            String unit = valueOrDash(it.getUnitNumber());
+            String streetNo = it.getCivilNumber() != null && it.getCivilNumber() > 0
+                    ? String.valueOf(it.getCivilNumber())
+                    : "—";
+            String addressLine = valueOrDash(it.getAddress());
+            StringBuilder addressBuilder = new StringBuilder("地址: ");
+            if (!"—".equals(streetNo)) {
+                addressBuilder.append(streetNo).append("号 ");
+            }
+            if (!"—".equals(unit)) {
+                addressBuilder.append(unit).append("单元 ");
+            }
+            addressBuilder.append(addressLine);
+            String addressText = addressBuilder.toString();
+            h.address.setText(addressText);
             h.itemView.setOnClickListener(v -> listener.onItemClick(it));
+
+            attachCopySupport(h.routeNumber, routeText);
+            attachCopySupport(h.orderSn, orderText);
+            attachCopySupport(h.customer, customerText);
+            attachCopySupport(h.address, addressText);
         }
         @Override public int getItemCount() { return items.size(); }
         public void submit(@NonNull List<DeliveryInfo> data) {
             items.clear(); items.addAll(data); notifyDataSetChanged();
         }
         static final class VH extends RecyclerView.ViewHolder {
-            final TextView title; final TextView sub;
+            final TextView routeNumber;
+            final TextView orderSn;
+            final TextView customer;
+            final TextView address;
             VH(@NonNull View itemView) { super(itemView);
-                title = itemView.findViewById(android.R.id.text1);
-                sub   = itemView.findViewById(android.R.id.text2);
+                routeNumber = itemView.findViewById(R.id.tv_route_number);
+                orderSn = itemView.findViewById(R.id.tv_order_sn);
+                customer = itemView.findViewById(R.id.tv_customer);
+                address = itemView.findViewById(R.id.tv_address);
             }
+        }
+
+        private String valueOrDash(String value) {
+            return value == null || value.trim().isEmpty() ? "—" : value;
+        }
+
+        private void attachCopySupport(@NonNull TextView view, @NonNull String text) {
+            view.setOnLongClickListener(v -> {
+                copyText(text);
+                return true;
+            });
+        }
+
+        private void copyText(@NonNull String text) {
+            ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard == null) return;
+            ClipData clip = ClipData.newPlainText("parcel_info", text);
+            clipboard.setPrimaryClip(clip);
+            Toast.makeText(ctx, ctx.getString(R.string.copy_success), Toast.LENGTH_SHORT).show();
         }
     }
 }

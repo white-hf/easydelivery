@@ -82,6 +82,7 @@ public class SmartLocationManager {
     private LocationCallback locationCallback;
     private Location lastLocation;
     private Location lastSmoothedLocation;
+    private Location lastPredictedLocation;
     private float speed;
     private long lastUpdateTime;
     private MovementState currentState = MovementState.STATIONARY;
@@ -94,6 +95,9 @@ public class SmartLocationManager {
     private int weakSignalCount = 0;
     private static final double SMOOTHING_FACTOR = 0.2;
     private static final float WEAK_SIGNAL_THRESHOLD = 100f;
+    private static final double EARTH_RADIUS_METERS = 6378137.0;
+    private static final float MIN_PREDICTION_SPEED_MPS = 0.8f;
+    private static final float PREDICTION_HORIZON_SEC = 0.8f;
 
     // === Adaptive boost (temporary high-frequency updates) ===
     private static final long BOOST_MIN_INTERVAL_MS = 10_000L; // 预留：降频节流
@@ -283,6 +287,8 @@ public class SmartLocationManager {
             outputLoc = newLocation;
         }
         lastSmoothedLocation = outputLoc;
+        float bearingInput = newLocation.hasBearing() ? newLocation.getBearing() : Float.NaN;
+        lastPredictedLocation = predictFutureLocation(outputLoc, speed, bearingInput);
 
         if (listener != null) {
             listener.onLocationUpdate(outputLoc, currentState);
@@ -643,4 +649,39 @@ public class SmartLocationManager {
     public Location getLastSmoothedLocation() {
         return lastSmoothedLocation;
     }
+
+    /** Returns last predicted location (may be null). */
+    public Location getPredictedLocation() {
+        if (lastPredictedLocation == null) return null;
+        return new Location(lastPredictedLocation);
+    }
+
+    private Location predictFutureLocation(Location base, float speedMps, float bearingDegrees) {
+        float heading = bearingDegrees;
+        if (Float.isNaN(heading)) {
+            heading = hasReliableHeading() ? currentHeadingDegrees : Float.NaN;
+        }
+        if (Float.isNaN(heading)) return null;
+        if (speedMps < MIN_PREDICTION_SPEED_MPS) return null;
+        double distance = speedMps * PREDICTION_HORIZON_SEC;
+        if (distance < 1.0) return null;
+        double headingRad = Math.toRadians(heading);
+        double latRad = Math.toRadians(base.getLatitude());
+        double lonRad = Math.toRadians(base.getLongitude());
+        double angularDistance = distance / EARTH_RADIUS_METERS;
+        double newLatRad = Math.asin(Math.sin(latRad) * Math.cos(angularDistance) +
+                Math.cos(latRad) * Math.sin(angularDistance) * Math.cos(headingRad));
+        double newLonRad = lonRad + Math.atan2(Math.sin(headingRad) * Math.sin(angularDistance) * Math.cos(latRad),
+                Math.cos(angularDistance) - Math.sin(latRad) * Math.sin(newLatRad));
+        double newLat = Math.toDegrees(newLatRad);
+        double newLon = Math.toDegrees(newLonRad);
+        Location predicted = new Location(base);
+        predicted.setLatitude(newLat);
+        predicted.setLongitude(newLon);
+        predicted.setTime(System.currentTimeMillis());
+        predicted.setBearing(heading);
+        predicted.setSpeed(speedMps);
+        return predicted;
+    }
+
 }

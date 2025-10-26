@@ -11,37 +11,41 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class MultipartUploader {
 
     private static final String TAG = "MultipartUploader";
-    private static final MediaType MEDIA_TYPE_JPEG = MediaType.parse("image/jpeg");
-    private static final String BOUNDARY = "Boundary-0EDAE93A-4CA4-40CE-87BC-CFB10948E044";
+    private static final MediaType MEDIA_TYPE_JPEG = MediaType.parse("image/jpg");
+    private static final String USER_AGENT = "DriverApp/1.25.3 Dalvik/2.1.0 (Linux; U; Android 15; LE2110 Build/BP1A.250505.005; OnePlus)";
+    private static final String CLIENT_IDENTIFIER = "android/com.uniuni.driver/1.25.3";
 
     @SuppressLint("DefaultLocale")
     public static boolean upload(DeliveredUploadParams params, Callback callback) {
         OkHttpClient client = new OkHttpClient();
 
-        MultipartBody.Builder builder = new MultipartBody.Builder(BOUNDARY)
+        MultipartBody.Builder builder = new MultipartBody.Builder(UUID.randomUUID().toString())
                 .setType(MultipartBody.FORM);
 
         // Add form fields from map
-        for (Map.Entry<String, String> entry : params.getFormFields().entrySet()) {
-            builder.addFormDataPart(entry.getKey(), entry.getValue());
+        if (params.getFormFields() != null) {
+            for (Map.Entry<String, String> entry : params.getFormFields().entrySet()) {
+                builder.addFormDataPart(entry.getKey(), entry.getValue());
+            }
         }
 
         // List of image files
-        final List<File> imageFiles = parseImagePath(params.getImageFiles());
+        final List<ImagePart> imageFiles = parseImagePath(params.getImageFiles());
 
         // Add image files (skip missing/unreadable safely)
-        int i = 0;
         if (imageFiles.isEmpty()) {
             Log.w(TAG, "upload: no valid image files parsed from imagePath");
         }
-        for (File file : imageFiles) {
+        for (ImagePart part : imageFiles) {
             try {
+                File file = part.file;
                 if (file != null && file.exists() && file.isFile() && file.length() > 0) {
-                    builder.addFormDataPart("pod_images[]", String.format("image%d.jpg", i++),
+                    builder.addFormDataPart("pod_images[]", part.uploadFileName(),
                             RequestBody.create(file, MEDIA_TYPE_JPEG));
                 } else {
                     Log.w(TAG, "upload: skip invalid image file -> " + (file == null ? "null" : file.getAbsolutePath()));
@@ -51,18 +55,23 @@ public class MultipartUploader {
             }
         }
 
+        if (params.getTrailingFields() != null) {
+            for (Map.Entry<String, String> entry : params.getTrailingFields().entrySet()) {
+                builder.addFormDataPart(entry.getKey(), entry.getValue());
+            }
+        }
+
         MultipartBody requestBody = builder.build();
 
         Request request = new Request.Builder()
                 .url(params.getUrl())
                 .post(requestBody)
-                .header("Authorization", params.getAuthorization())
-                .header("Content-Type", "multipart/form-data; boundary=" + BOUNDARY)
-                .header("User-Agent", "EasyDelivery%20Driver/1 CFNetwork/1496.0.7 Darwin/23.5.0")
-                .header("Accept", "application/json")
-                .header("Accept-Language", "en-CA,en-US;q=0.9,en;q=0.8")
-                .header("Connection", "keep-alive")
-                .header("Accept-Encoding", "gzip, deflate, br")
+                .header("Authorization", params.getAuthorization() == null ? "" : params.getAuthorization())
+                .header("Accept-Language", "en")
+                .header("User-Agent", USER_AGENT)
+                .header("Client-Identifier", CLIENT_IDENTIFIER)
+                .header("Accept-Encoding", "gzip")
+                .header("Connection", "Keep-Alive")
                 .build();
 
         Log.d(TAG, "Request : " + request.toString());
@@ -78,8 +87,8 @@ public class MultipartUploader {
     }
 
     // Convert string containing file paths to List<File>
-    static private List<File> parseImagePath(String imagePath) {
-        List<File> fileList = new ArrayList<>();
+    static private List<ImagePart> parseImagePath(String imagePath) {
+        List<ImagePart> fileList = new ArrayList<>();
 
         try {
             if (imagePath == null) {
@@ -107,9 +116,14 @@ public class MultipartUploader {
             for (String raw : paths) {
                 String p = raw.trim();
                 if (p.isEmpty()) continue;
-                File f = new File(p);
+                String originalLabel = p;
+                String resolvedPath = p;
+                if (resolvedPath.startsWith("file://")) {
+                    resolvedPath = resolvedPath.substring("file://".length());
+                }
+                File f = new File(resolvedPath);
                 if (!f.exists()) {
-                    Log.w(TAG, "parseImagePath: file not found -> " + p);
+                    Log.w(TAG, "parseImagePath: file not found -> " + resolvedPath);
                     continue;
                 }
                 if (!f.isFile()) {
@@ -117,16 +131,42 @@ public class MultipartUploader {
                     continue;
                 }
                 if (f.length() <= 0) {
-                    Log.w(TAG, "parseImagePath: zero length file -> " + p);
+                    Log.w(TAG, "parseImagePath: zero length file -> " + resolvedPath);
                     continue;
                 }
-                fileList.add(f);
+                fileList.add(new ImagePart(f, originalLabel));
             }
         } catch (Throwable t) {
             Log.e(TAG, "parseImagePath: unexpected error: " + t.getMessage());
         }
 
         return fileList;
+    }
+
+    private static final class ImagePart {
+        final File file;
+        final String originalName;
+
+        ImagePart(File file, String originalName) {
+            this.file = file;
+            this.originalName = originalName;
+        }
+
+        String uploadFileName() {
+            String candidate = originalName;
+            if (candidate == null || candidate.isEmpty()) {
+                candidate = file != null ? file.getName() : "image.jpg";
+            }
+            final String expectedPrefix = "file:///data/user/0/com.uniuni.driver/files/failed/";
+            if (candidate.startsWith(expectedPrefix)) {
+                return candidate;
+            }
+            String folder = "default";
+            if (file != null && file.getParentFile() != null) {
+                folder = file.getParentFile().getName();
+            }
+            return expectedPrefix + folder + "/" + (file != null ? file.getName() : candidate);
+        }
     }
 
 

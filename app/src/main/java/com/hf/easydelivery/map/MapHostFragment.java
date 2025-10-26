@@ -38,6 +38,7 @@ public class MapHostFragment extends Fragment {
 
     private MapInnerFragment mapFrag;
     private PackageListFragment listFrag;
+    private PackageListFragment.ListMode currentListMode = PackageListFragment.ListMode.IN_TRANSIT_FROM_MAP;
 
     /**
      * Sets the listener for map/list switch events.
@@ -56,6 +57,10 @@ public class MapHostFragment extends Fragment {
         if (mapFrag != null) tx.show(mapFrag);
         if (listFrag != null) tx.hide(listFrag);
         tx.commitAllowingStateLoss();
+
+        if (fabSwitchView != null) {
+            fabSwitchView.setSelected(false);
+        }
     }
 
     @Nullable
@@ -121,6 +126,9 @@ public class MapHostFragment extends Fragment {
         // 如果列表 Fragment 尚未创建，则创建它
         if (listFrag == null) {
             listFrag = new PackageListFragment();
+            Bundle args = new Bundle();
+            args.putString("arg_list_mode", currentListMode.name());
+            listFrag.setArguments(args);
             getChildFragmentManager().beginTransaction()
                     .add(R.id.home_container, listFrag, "list")
                     .hide(mapFrag)
@@ -131,7 +139,11 @@ public class MapHostFragment extends Fragment {
                     .show(listFrag)
                     .commit();
         }
-        fabSwitchView.setSelected(true);
+        if (fabSwitchView != null) {
+            fabSwitchView.setSelected(true);
+        }
+
+        applyCurrentListMode();
     }
 
     /**
@@ -139,6 +151,7 @@ public class MapHostFragment extends Fragment {
      */
     public void onRequestInTransitList() {
 
+        currentListMode = PackageListFragment.ListMode.IN_TRANSIT_FROM_MAP;
         if (listFrag != null) {
             listFrag.loadInDeliveryParcels();
         }
@@ -149,8 +162,20 @@ public class MapHostFragment extends Fragment {
      */
     public void onRequestUnscannedList() {
 
+        currentListMode = PackageListFragment.ListMode.UNSCANNED_FROM_SCAN;
         if (listFrag != null) {
             listFrag.loadUnscannedParcels();
+        }
+    }
+
+    private void applyCurrentListMode() {
+        if (listFrag == null || !listFrag.isAdded() || listFrag.getView() == null) {
+            return;
+        }
+        if (currentListMode == PackageListFragment.ListMode.UNSCANNED_FROM_SCAN) {
+            listFrag.loadUnscannedParcels();
+        } else {
+            listFrag.loadInDeliveryParcels();
         }
     }
 }

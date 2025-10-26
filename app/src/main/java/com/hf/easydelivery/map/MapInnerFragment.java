@@ -2,13 +2,14 @@ package com.hf.easydelivery.map;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
-import android.app.Activity;
+import android.animation.ValueAnimator;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -39,10 +40,10 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
-import com.google.android.gms.maps.model.Marker;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.button.MaterialButton;
 import com.google.maps.android.clustering.ClusterManager;
 import com.google.maps.android.clustering.ClusterItem;
 
@@ -57,10 +58,14 @@ import com.hf.easydelivery.view.Adapter.ClusterParcelAdapter;
 import com.hf.easydelivery.view.model.MapViewModel;
 import com.hf.easydelivery.view.model.ScanViewModel;
 
+import android.graphics.Point;
+import android.view.animation.DecelerateInterpolator;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 public class MapInnerFragment extends Fragment implements OnMapReadyCallback, SmartLocationManager.LocationUpdateListener {
 
@@ -75,6 +80,18 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     private TextView statusSummaryText;
     private FloatingActionButton btnToggle;
     private ProgressBar progressMap;
+    private View infoPill;
+    private TextView pillRouteText;
+    private TextView pillAddressText;
+    private TextView pillRecipientText;
+    private MaterialButton btnPillShowList;
+    private MaterialButton btnResumeFollow;
+    private DeliveryInfo currentFocusedDelivery = null;
+    private Long dismissedOrderId = null;
+    private boolean autoFollowEnabled = true;
+    private boolean approachingTarget = false;
+    private float preferredFollowZoom = DEFAULT_FOLLOW_ZOOM;
+    private final List<Long> currentFocusGroupIds = new ArrayList<>();
 
     private SmartLocationManager mSmartLocationManager;
     private Location mLastLocation = null;
@@ -88,6 +105,28 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     private DataMode currentMode = DataMode.DELIVERY; // 默认派送中
 
     private ActivityResultLauncher<String> requestLocationPermissionLauncher;
+    private SmartLocationManager.MovementState lastMovementState = SmartLocationManager.MovementState.STATIONARY;
+
+    // === 行驶跟踪相关 ===
+    private static final long AUTO_RESUME_DELAY_MS = 2_000L;
+    private static final long CAMERA_MIN_INTERVAL_MS = 800L;
+    private static final float CAMERA_MIN_DISTANCE_METERS = 5f;
+    private static final float CAMERA_MIN_HEADING_DELTA = 10f;
+    private static final float DRIVING_MIN_ZOOM = 16f;
+    private static final float DRIVING_TARGET_SCREEN_FRACTION_Y = 0.68f;
+    private static final float APPROACH_DISTANCE_METERS = 130f;
+    private static final float LEAVE_DISTANCE_METERS = 200f;
+    private static final float CLOSE_DISTANCE_METERS = 60f;
+    private static final float DEFAULT_FOLLOW_ZOOM = 15f;
+    private static final float APPROACH_ZOOM_LEVEL = 17f;
+    private static final float CLOSE_ZOOM_LEVEL = 18f;
+
+    private boolean isUserInteracting = false;
+    private boolean hasCenteredOnUser = false;
+    private long lastCameraUpdateUptime = 0L;
+    private LatLng lastCameraTargetLatLng = null;
+    private float lastCameraBearing = Float.NaN;
+    private ValueAnimator cameraAnimator;
 
     @Nullable
     @Override
@@ -122,6 +161,13 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         statusSummaryText = view.findViewById(R.id.tv_status_compact);
         btnToggle = view.findViewById(R.id.btn_toggle_mode);
         progressMap = view.findViewById(R.id.progress_map);
+        infoPill = view.findViewById(R.id.info_pill);
+        pillRouteText = view.findViewById(R.id.pill_route);
+        pillAddressText = view.findViewById(R.id.pill_address);
+        pillRecipientText = view.findViewById(R.id.pill_recipient);
+        btnPillShowList = view.findViewById(R.id.btn_pill_show_list);
+        btnResumeFollow = view.findViewById(R.id.btn_resume_follow);
+        ImageButton pillCloseButton = view.findViewById(R.id.btn_pill_close);
 
         if (statusSummaryText != null) {
             statusSummaryText.setOnLongClickListener(v -> {
@@ -130,6 +176,29 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
             });
         }
         if (btnToggle != null) btnToggle.setVisibility(View.GONE);
+
+        if (pillCloseButton != null) {
+            pillCloseButton.setOnClickListener(v -> hideInfoPill(true));
+        }
+        if (btnPillShowList != null) {
+            btnPillShowList.setOnClickListener(v -> {
+                if (currentFocusedDelivery != null) {
+                    ArrayList<DeliveryInfo> single = new ArrayList<>();
+                    single.add(currentFocusedDelivery);
+                    showClusterItemListBottomSheet(single);
+                }
+            });
+        }
+        if (btnResumeFollow != null) {
+            btnResumeFollow.setOnClickListener(v -> {
+                autoFollowEnabled = true;
+                isUserInteracting = false;
+                btnResumeFollow.setVisibility(View.GONE);
+                if (mLastLocation != null) {
+                    followLocation(mLastLocation, lastMovementState, true);
+                }
+            });
+        }
 
         View mini = view.findViewById(R.id.include_minibar);
         if (mini != null) {
@@ -343,14 +412,28 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         googleMap.setOnCameraIdleListener(clusterManager);
         googleMap.setOnCameraMoveStartedListener(reason -> {
             if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
-                // ... (手势交互逻辑保持不变)
+                isUserInteracting = true;
+                autoFollowEnabled = false;
+                if (btnResumeFollow != null) {
+                    btnResumeFollow.setVisibility(View.VISIBLE);
+                }
+                cancelCameraAnimator();
+                if (interactionResetRunnable != null) {
+                    interactionHandler.removeCallbacks(interactionResetRunnable);
+                }
+                interactionResetRunnable = () -> {
+                    isUserInteracting = false;
+                    if (mLastLocation != null) {
+                        followLocation(mLastLocation, lastMovementState, true);
+                    }
+                };
+                interactionHandler.postDelayed(interactionResetRunnable, AUTO_RESUME_DELAY_MS);
             }
         });
 
         googleMap.setOnCameraMoveListener(() -> {
             CameraPosition cameraPosition = googleMap.getCameraPosition();
             myClusterRenderer.setZoomLevel(cameraPosition.zoom);
-            // 聚合刷新由 OnCameraIdleListener 触发，这里不重复调用以降低卡顿
         });
 
         clusterManager.setOnClusterClickListener(cluster -> {
@@ -359,7 +442,9 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         });
 
         clusterManager.setOnClusterItemClickListener(item -> {
-            showCamera(item);
+            ArrayList<DeliveryInfo> arrayList = new ArrayList<>();
+            arrayList.add(item);
+            showClusterItemListBottomSheet(arrayList);
             return true;
         });
 
@@ -382,11 +467,213 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
 
         androidx.recyclerview.widget.RecyclerView rv = sheet.findViewById(R.id.rv_cluster);
         rv.setLayoutManager(new LinearLayoutManager(requireActivity()));
-        rv.setAdapter(new ClusterParcelAdapter(items, info -> {
+        List<DeliveryInfo> sorted = new ArrayList<>(items);
+        sorted.sort((a, b) -> {
+            int streetCompare = compareNumbersSafe(a.getCivilNumber(), b.getCivilNumber());
+            if (streetCompare != 0) return streetCompare;
+            String unitA = a.getUnitNumber() == null ? "" : a.getUnitNumber();
+            String unitB = b.getUnitNumber() == null ? "" : b.getUnitNumber();
+            if (unitA.isEmpty() && unitB.isEmpty()) return 0;
+            if (unitA.isEmpty()) return 1;
+            if (unitB.isEmpty()) return -1;
+            int unitNumCompare = compareNumericStrings(unitA, unitB);
+            if (unitNumCompare != 0) return unitNumCompare;
+            return unitA.compareToIgnoreCase(unitB);
+        });
+
+        rv.setAdapter(new ClusterParcelAdapter(sorted, info -> {
             dialog.dismiss();
             showCamera(info);
         }));
         dialog.show();
+    }
+
+    private int compareNumbersSafe(Integer a, Integer b) {
+        int valA = a == null ? Integer.MAX_VALUE : a;
+        int valB = b == null ? Integer.MAX_VALUE : b;
+        return Integer.compare(valA, valB);
+    }
+
+    private int compareNumericStrings(String a, String b) {
+        try {
+            int ai = Integer.parseInt(a.replaceAll("[^0-9]", ""));
+            int bi = Integer.parseInt(b.replaceAll("[^0-9]", ""));
+            return Integer.compare(ai, bi);
+        } catch (NumberFormatException ignored) {
+            return a.compareToIgnoreCase(b);
+        }
+    }
+
+    private void showInfoPill(DeliveryInfo info, boolean autoTriggered) {
+        if (infoPill == null) return;
+        if (autoTriggered && dismissedOrderId != null && info.getOrderId() != null && dismissedOrderId.equals(info.getOrderId())) {
+            return;
+        }
+        dismissedOrderId = null;
+        String streetLabel = info.getCivilNumber() > 0 ? info.getCivilNumber() + "号" : "街号未知";
+        String unitLabel = (info.getUnitNumber() == null || info.getUnitNumber().isEmpty()) ? "" : info.getUnitNumber() + "单元";
+        String parcelLabel = info.getRouteNumber() == null ? "包裹号未知" : "包裹号 " + info.getRouteNumber();
+        pillRouteText.setText(String.format(Locale.getDefault(), "%s  %s  %s", streetLabel, unitLabel, parcelLabel).trim());
+        String baseAddress = info.getAddress() == null ? "" : info.getAddress();
+        pillAddressText.setText(baseAddress);
+        pillRecipientText.setText("收件人: " + (info.getName() == null ? "—" : info.getName()));
+        infoPill.setVisibility(View.VISIBLE);
+    }
+
+    private void hideInfoPill(boolean rememberDismiss) {
+        if (infoPill == null || infoPill.getVisibility() != View.VISIBLE) return;
+        infoPill.setVisibility(View.GONE);
+        if (rememberDismiss && currentFocusedDelivery != null && currentFocusedDelivery.getOrderId() != null) {
+            dismissedOrderId = currentFocusedDelivery.getOrderId();
+        }
+        if (rememberDismiss) {
+            currentFocusedDelivery = null;
+        }
+    }
+
+    private boolean updateNearbyFocus(Location location) {
+        boolean wasApproaching = approachingTarget;
+        float previousZoom = preferredFollowZoom;
+        DeliveryInfo nearest = findNearestDelivery(location, false);
+        if (nearest == null) {
+            approachingTarget = false;
+            currentFocusedDelivery = null;
+            preferredFollowZoom = DEFAULT_FOLLOW_ZOOM;
+            hideInfoPill(false);
+            return wasApproaching || Math.abs(previousZoom - preferredFollowZoom) > 0.15f;
+        }
+        float distance = distanceTo(nearest, location);
+        boolean changed = false;
+        if (distance <= APPROACH_DISTANCE_METERS) {
+            approachingTarget = true;
+            preferredFollowZoom = computeZoomForDistance(distance);
+            boolean isDifferent = currentFocusedDelivery == null
+                    || currentFocusedDelivery.getOrderId() == null
+                    || nearest.getOrderId() == null
+                    || !currentFocusedDelivery.getOrderId().equals(nearest.getOrderId());
+            if (isDifferent) {
+                currentFocusedDelivery = nearest;
+                rebuildFocusGroup(location);
+                showInfoPill(nearest, true);
+                changed = true;
+            }
+            if (!wasApproaching) {
+                changed = true;
+            }
+        } else if (currentFocusedDelivery != null && distance > LEAVE_DISTANCE_METERS) {
+            approachingTarget = false;
+            preferredFollowZoom = DEFAULT_FOLLOW_ZOOM;
+            if (dismissedOrderId == null || currentFocusedDelivery.getOrderId() == null
+                    || !currentFocusedDelivery.getOrderId().equals(dismissedOrderId)) {
+                hideInfoPill(false);
+            }
+            currentFocusedDelivery = null;
+            currentFocusGroupIds.clear();
+            changed = wasApproaching;
+        } else {
+            approachingTarget = false;
+            preferredFollowZoom = DEFAULT_FOLLOW_ZOOM;
+        }
+        if (!changed) {
+            changed = Math.abs(previousZoom - preferredFollowZoom) > 0.15f;
+        }
+        return changed;
+    }
+
+    /** Distance between two delivery points in meters. */
+    private float distanceMeters(@NonNull DeliveryInfo a, @NonNull DeliveryInfo b) {
+        float[] results = new float[1];
+        Location.distanceBetween(a.getLatitude(), a.getLongitude(),
+                b.getLatitude(), b.getLongitude(),
+                results);
+        return results[0];
+    }
+    private void rebuildFocusGroup(@NonNull Location location) {
+        // === Focus group (neighbors / oscillation suppression) helpers ===
+        final float FOCUS_GROUP_NEARBY_METERS = 50f; // neighbor cluster radius
+
+        currentFocusGroupIds.clear();
+        if (currentFocusedDelivery == null || currentFocusedDelivery.getOrderId() == null) return;
+
+        List<DeliveryInfo> list;
+        try {
+            list = ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
+        } catch (Throwable t) {
+            return;
+        }
+        if (list == null || list.isEmpty()) return;
+
+        final long anchorId = currentFocusedDelivery.getOrderId();
+        currentFocusGroupIds.add(anchorId); // include anchor itself
+
+        for (DeliveryInfo info : list) {
+            if (info == null || info.getOrderId() == null) continue;
+            if (info.getOrderId().equals(anchorId)) continue;
+
+            // 仅按锚点距离筛选邻居
+            float dAnchor = distanceMeters(currentFocusedDelivery, info);
+            if (dAnchor <= FOCUS_GROUP_NEARBY_METERS) {
+                currentFocusGroupIds.add(info.getOrderId());
+            }
+        }
+    }
+
+    private float computeZoomForDistance(float distance) {
+        if (distance <= CLOSE_DISTANCE_METERS) return CLOSE_ZOOM_LEVEL;
+        if (distance <= APPROACH_DISTANCE_METERS) {
+            float ratio = (distance - CLOSE_DISTANCE_METERS) / (APPROACH_DISTANCE_METERS - CLOSE_DISTANCE_METERS);
+            ratio = Math.max(0f, Math.min(1f, ratio));
+            return CLOSE_ZOOM_LEVEL + ratio * (APPROACH_ZOOM_LEVEL - CLOSE_ZOOM_LEVEL);
+        }
+        if (distance <= LEAVE_DISTANCE_METERS) {
+            float ratio = (distance - APPROACH_DISTANCE_METERS) / (LEAVE_DISTANCE_METERS - APPROACH_DISTANCE_METERS);
+            ratio = Math.max(0f, Math.min(1f, ratio));
+            return APPROACH_ZOOM_LEVEL + ratio * (DEFAULT_FOLLOW_ZOOM - APPROACH_ZOOM_LEVEL);
+        }
+        return DEFAULT_FOLLOW_ZOOM;
+    }
+
+    private DeliveryInfo findNearestDelivery(Location location) {
+        return findNearestDelivery(location, false);
+    }
+
+    private DeliveryInfo findNearestDelivery(Location location, boolean ignoreCurrent) {
+        if (location == null) return null;
+        List<DeliveryInfo> list;
+        try {
+            list = ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
+        } catch (Throwable t) {
+            return null;
+        }
+        if (list == null || list.isEmpty()) return null;
+        float best = Float.MAX_VALUE;
+        DeliveryInfo bestInfo = null;
+        for (DeliveryInfo info : list) {
+            if (info == null) continue;
+            if (ignoreCurrent && currentFocusedDelivery != null
+                    && currentFocusedDelivery.getOrderId() != null
+                    && info.getOrderId() != null
+                    && currentFocusedDelivery.getOrderId().equals(info.getOrderId())) {
+                continue;
+            }
+            float dist = distanceMeters(location.getLatitude(), location.getLongitude(), info.getLatitude(), info.getLongitude());
+            if (dist < best) {
+                best = dist;
+                bestInfo = info;
+            }
+        }
+        return bestInfo;
+    }
+
+    private float distanceTo(DeliveryInfo info, Location location) {
+        if (info == null || location == null) return Float.MAX_VALUE;
+        return distanceMeters(location.getLatitude(), location.getLongitude(), info.getLatitude(), info.getLongitude());
+    }
+
+    private float distanceMeters(double lat1, double lon1, double lat2, double lon2) {
+        float[] results = new float[1];
+        Location.distanceBetween(lat1, lon1, lat2, lon2, results);
+        return results[0];
     }
 
     private void showCamera(DeliveryInfo info) {
@@ -410,9 +697,15 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
             Toast.makeText(requireContext(), "暂无定位", Toast.LENGTH_SHORT).show();
             return;
         }
-        LatLng me = new LatLng(loc.getLatitude(), loc.getLongitude());
-        CameraPosition current = googleMap.getCameraPosition();
-        googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(me, current.zoom <= 6 ? 15 : current.zoom));
+        isUserInteracting = false;
+        autoFollowEnabled = true;
+        if (btnResumeFollow != null) {
+            btnResumeFollow.setVisibility(View.GONE);
+        }
+        if (interactionResetRunnable != null) {
+            interactionHandler.removeCallbacks(interactionResetRunnable);
+        }
+        followLocation(loc, lastMovementState, true);
     }
 
     private void toggleMapType(ImageButton btn) {
@@ -425,11 +718,253 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         }
     }
 
+    private void followLocation(@NonNull Location location, SmartLocationManager.MovementState state, boolean force) {
+        if (googleMap == null) return;
+
+        boolean driving = isDrivingState(state);
+        boolean allowCameraMove = force || (autoFollowEnabled && !isUserInteracting);
+        boolean canUpdateCamera = force || shouldUpdateCamera(location, state);
+
+        if (!allowCameraMove && driving) {
+            return;
+        }
+        if (!canUpdateCamera && !force) {
+            return;
+        }
+
+        CameraPosition targetCamera;
+        if (driving) {
+            targetCamera = buildDrivingCamera(location);
+        } else if (!hasCenteredOnUser || force) {
+            targetCamera = buildCenteredCamera(location);
+        } else if (!isUserInteracting && shouldUpdateCamera(location, state)) {
+            targetCamera = buildCenteredCamera(location);
+        } else {
+            return;
+        }
+
+        if (targetCamera == null) return;
+
+        if (cameraAnimator != null && cameraAnimator.isRunning()) {
+            CameraPosition interim = googleMap.getCameraPosition();
+            CameraPosition mid = new CameraPosition.Builder(interim)
+                    .target(new LatLng((interim.target.latitude + targetCamera.target.latitude) / 2,
+                            (interim.target.longitude + targetCamera.target.longitude) / 2))
+                    .zoom(interim.zoom + (targetCamera.zoom - interim.zoom) * 0.5f)
+                    .bearing(interim.bearing + (targetCamera.bearing - interim.bearing) * 0.5f)
+                    .tilt(interim.tilt + (targetCamera.tilt - interim.tilt) * 0.5f)
+                    .build();
+            googleMap.moveCamera(CameraUpdateFactory.newCameraPosition(mid));
+        }
+        animateCameraTo(targetCamera);
+        lastCameraUpdateUptime = SystemClock.uptimeMillis();
+        lastCameraTargetLatLng = targetCamera.target;
+        lastCameraBearing = targetCamera.bearing;
+        hasCenteredOnUser = true;
+
+        if (mSmartLocationManager != null && driving) {
+            float offset = estimateEdgeOffsetMeters(location);
+            mSmartLocationManager.requestBoostIfEdgeRisk(offset, location.getSpeed());
+        }
+    }
+
+    private boolean isDrivingState(SmartLocationManager.MovementState state) {
+        return state == SmartLocationManager.MovementState.SLOW_DRIVING
+                || state == SmartLocationManager.MovementState.NORMAL_DRIVING;
+    }
+
+    private boolean shouldUpdateCamera(Location location, SmartLocationManager.MovementState state) {
+        if (googleMap == null) return false;
+
+        long now = SystemClock.uptimeMillis();
+        boolean timeOk = (now - lastCameraUpdateUptime) > CAMERA_MIN_INTERVAL_MS;
+
+        float distance = 0f;
+        if (lastCameraTargetLatLng != null) {
+            float[] results = new float[1];
+            Location.distanceBetween(
+                    lastCameraTargetLatLng.latitude, lastCameraTargetLatLng.longitude,
+                    location.getLatitude(), location.getLongitude(),
+                    results);
+            distance = results[0];
+        }
+        boolean distanceOk = distance > CAMERA_MIN_DISTANCE_METERS;
+
+        boolean headingOk = false;
+        if (location.hasBearing() && !Float.isNaN(lastCameraBearing)) {
+            float delta = Math.abs(location.getBearing() - lastCameraBearing);
+            if (delta > 180f) delta = 360f - delta;
+            headingOk = delta > CAMERA_MIN_HEADING_DELTA;
+        }
+
+        if (!timeOk && !distanceOk && !headingOk) {
+            return false;
+        }
+
+        if (isDrivingState(state)) {
+            return timeOk && (distanceOk || headingOk);
+        }
+        return distanceOk || headingOk || !hasCenteredOnUser;
+    }
+
+    private CameraPosition buildCenteredCamera(Location location) {
+        LatLng target = new LatLng(location.getLatitude(), location.getLongitude());
+        CameraPosition current = googleMap.getCameraPosition();
+        float zoom = current.zoom < 15f ? 15f : current.zoom;
+        return new CameraPosition.Builder(current)
+                .target(target)
+                .zoom(zoom)
+                .bearing(current.bearing)
+                .build();
+    }
+
+    private CameraPosition buildDrivingCamera(Location location) {
+        if (googleMap == null) return null;
+        LatLng driverLatLng = new LatLng(location.getLatitude(), location.getLongitude());
+        CameraPosition current = googleMap.getCameraPosition();
+        LatLng targetLatLng = driverLatLng;
+
+        if (mapView != null && mapView.getWidth() > 0 && mapView.getHeight() > 0) {
+            try {
+                Point point = googleMap.getProjection().toScreenLocation(driverLatLng);
+                int width = mapView.getWidth();
+                int height = mapView.getHeight();
+                int targetX = width / 2;
+                int targetY = (int) (height * DRIVING_TARGET_SCREEN_FRACTION_Y);
+                int dx = point.x - targetX;
+                int dy = point.y - targetY;
+                Point newCenter = new Point(width / 2 + dx, height / 2 + dy);
+                newCenter.x = Math.max(0, Math.min(width, newCenter.x));
+                newCenter.y = Math.max(0, Math.min(height, newCenter.y));
+                targetLatLng = googleMap.getProjection().fromScreenLocation(newCenter);
+            } catch (Exception ignore) {
+                targetLatLng = driverLatLng;
+            }
+        }
+
+        float zoom = Math.max(preferredFollowZoom, DRIVING_MIN_ZOOM);
+        float tilt = current.tilt < 45f ? 45f : current.tilt;
+        float bearing = current.bearing;
+
+        if (location.hasBearing() && location.getSpeed() > 0.5f) {
+            bearing = location.getBearing();
+        } else if (mSmartLocationManager != null) {
+            float heading = mSmartLocationManager.getCurrentHeading();
+            if (!Float.isNaN(heading)) {
+                bearing = heading;
+            }
+        }
+
+        if (bearing < 0f) bearing = 0f;
+        if (bearing > 360f) bearing = bearing % 360f;
+
+        return new CameraPosition.Builder(current)
+                .target(targetLatLng)
+                .zoom(zoom)
+                .tilt(tilt)
+                .bearing(bearing)
+                .build();
+    }
+
+    private float estimateEdgeOffsetMeters(Location location) {
+        if (googleMap == null || mapView == null || mapView.getWidth() == 0 || mapView.getHeight() == 0) {
+            return 0f;
+        }
+        try {
+            LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+            Point point = googleMap.getProjection().toScreenLocation(latLng);
+            int width = mapView.getWidth();
+            int height = mapView.getHeight();
+            Point targetPoint = new Point(width / 2, (int) (height * DRIVING_TARGET_SCREEN_FRACTION_Y));
+            float dx = point.x - targetPoint.x;
+            float dy = point.y - targetPoint.y;
+            float pixelDistance = (float) Math.hypot(dx, dy);
+            if (pixelDistance <= 0f) return 0f;
+
+            Point refA = new Point(targetPoint.x, targetPoint.y);
+            Point refB = new Point(targetPoint.x + 100, targetPoint.y);
+            LatLng llA = googleMap.getProjection().fromScreenLocation(refA);
+            LatLng llB = googleMap.getProjection().fromScreenLocation(refB);
+            float[] results = new float[1];
+            Location.distanceBetween(llA.latitude, llA.longitude, llB.latitude, llB.longitude, results);
+            float metersPerPx = (results[0] <= 0f) ? 0f : results[0] / 100f;
+            return metersPerPx * pixelDistance;
+        } catch (Exception ignore) {
+            return 0f;
+        }
+    }
+
+    private void animateCameraTo(CameraPosition targetCamera) {
+        if (googleMap == null || targetCamera == null) return;
+
+        CameraPosition start = googleMap.getCameraPosition();
+        if (cameraAnimator != null) {
+            cameraAnimator.cancel();
+        }
+        cameraAnimator = ValueAnimator.ofFloat(0f, 1f);
+        cameraAnimator.setDuration(350);
+        cameraAnimator.setInterpolator(new DecelerateInterpolator());
+        cameraAnimator.addUpdateListener(anim -> {
+            float t = (float) anim.getAnimatedValue();
+            CameraPosition interpolated = interpolateCamera(start, targetCamera, t);
+            googleMap.moveCamera(CameraUpdateFactory.newCameraPosition(interpolated));
+        });
+        cameraAnimator.start();
+    }
+
+    private CameraPosition interpolateCamera(CameraPosition start, CameraPosition end, float t) {
+        t = Math.max(0f, Math.min(1f, t));
+        double startLat = start.target.latitude;
+        double startLng = start.target.longitude;
+        double endLat = end.target.latitude;
+        double endLng = end.target.longitude;
+        double deltaLng = endLng - startLng;
+        if (Math.abs(deltaLng) > 180) {
+            deltaLng -= Math.signum(deltaLng) * 360;
+        }
+
+        double lat = startLat + (endLat - startLat) * t;
+        double lng = startLng + deltaLng * t;
+
+        float zoom = start.zoom + (end.zoom - start.zoom) * t;
+        float tilt = start.tilt + (end.tilt - start.tilt) * t;
+
+        float bearingStart = start.bearing;
+        float bearingEnd = end.bearing;
+        float deltaBearing = bearingEnd - bearingStart;
+        if (Math.abs(deltaBearing) > 180f) {
+            deltaBearing -= Math.signum(deltaBearing) * 360f;
+        }
+        float bearing = bearingStart + deltaBearing * t;
+        if (bearing < 0f) bearing += 360f;
+
+        return new CameraPosition(new LatLng(lat, lng), zoom, tilt, bearing);
+    }
+
+    private void cancelCameraAnimator() {
+        if (cameraAnimator != null) {
+            cameraAnimator.cancel();
+            cameraAnimator = null;
+        }
+    }
+
     @Override
     public void onLocationUpdate(Location location, SmartLocationManager.MovementState state) {
         // 通知 ViewModel 更新定位
         mapViewModel.updateMyLocation(location);
-        // ... (其他与定位相关的相机逻辑保留)
+        mLastLocation = location;
+        lastMovementState = state;
+
+        if (googleMap == null) return;
+        boolean focusChanged = updateNearbyFocus(location);
+        Location effective = location;
+        if (mSmartLocationManager != null) {
+            Location predicted = mSmartLocationManager.getPredictedLocation();
+            if (predicted != null) {
+                effective = predicted;
+            }
+        }
+        followLocation(effective, state, focusChanged && autoFollowEnabled);
     }
 
     @Override
@@ -445,6 +980,11 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         super.onPause();
         if (mapView != null) mapView.onPause();
         if (googleMap != null) savedPosition = googleMap.getCameraPosition().target;
+        if (interactionResetRunnable != null) {
+            interactionHandler.removeCallbacks(interactionResetRunnable);
+            interactionResetRunnable = null;
+        }
+        cancelCameraAnimator();
         if (mSmartLocationManager != null) mSmartLocationManager.stopLocationUpdates();
         requireActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
@@ -460,6 +1000,7 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
             clusterManager.clearItems();
             clusterManager = null;
         }
+        cancelCameraAnimator();
         if (mapView != null) mapView.onDestroy();
     }
 

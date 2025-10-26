@@ -158,6 +158,40 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             tvCustomerName.setText(deliveryInfo.getName());
             tvUnitNumber.setText(deliveryInfo.getUnitNumber());
             tvAddress.setText(deliveryInfo.getAddress());
+
+            // --- 让地址可点击进入导航 ---
+            tvAddress.setClickable(true);
+            tvAddress.setFocusable(true);
+            tvAddress.setContentDescription(getString(R.string.tap_to_navigate));
+
+// 下划线效果，像可点击的链接
+            tvAddress.setPaintFlags(tvAddress.getPaintFlags() | android.graphics.Paint.UNDERLINE_TEXT_FLAG);
+
+// 触摸水波纹反馈（有则用）
+            try {
+                android.util.TypedValue out = new android.util.TypedValue();
+                if (getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, out, true)) {
+                    tvAddress.setBackgroundResource(out.resourceId);
+                }
+            } catch (Exception ignore) {}
+
+// 略微增大可点区域
+            int padH = (int) (8 * getResources().getDisplayMetrics().density);
+            int padV = (int) (4 * getResources().getDisplayMetrics().density);
+            tvAddress.setPadding(
+                    tvAddress.getPaddingLeft() + padH,
+                    tvAddress.getPaddingTop() + padV,
+                    tvAddress.getPaddingRight() + padH,
+                    tvAddress.getPaddingBottom() + padV
+            );
+
+// 右侧加一个导航小图标（系统自带）
+            try {
+                tvAddress.setCompoundDrawablesWithIntrinsicBounds(0, 0, android.R.drawable.ic_menu_directions, 0);
+                tvAddress.setCompoundDrawablePadding((int) (6 * getResources().getDisplayMetrics().density));
+            } catch (Exception ignore) {}
+
+            tvAddress.setOnClickListener(v -> openNavigationToPackage());
         }
 
         // 3) 缩略图栏
@@ -824,5 +858,35 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 previewView.postDelayed(this::startCameraIfNeeded, 300);
             }
         }, ContextCompat.getMainExecutor(this));
+    }
+
+    /**
+     * 从当前定位到包裹目的地（mLatitude, mLongitude）发起导航。
+     * 优先使用 Google Maps turn-by-turn；不可用时回退到通用 VIEW。
+     */
+    private void openNavigationToPackage() {
+        if (mLatitude == -1 || mLongitude == -1) {
+            Toast.makeText(this, getString(R.string.nav_location_invalid), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // 1) 优先：Google Maps 导航
+        try {
+            android.net.Uri gmmIntentUri = android.net.Uri.parse("google.navigation:q=" + mLatitude + "," + mLongitude + "&mode=d");
+            Intent mapIntent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
+            mapIntent.setPackage("com.google.android.apps.maps");
+            if (mapIntent.resolveActivity(getPackageManager()) != null) {
+                startActivity(mapIntent);
+                return;
+            }
+        } catch (Exception ignored) {}
+
+        // 2) 回退：任意地图应用 / 浏览器
+        try {
+            String url = "https://www.google.com/maps/dir/?api=1&destination=" + mLatitude + "," + mLongitude + "&travelmode=driving";
+            Intent webMap = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url));
+            startActivity(webMap);
+        } catch (Exception e) {
+            Toast.makeText(this, getString(R.string.no_map_app_found), Toast.LENGTH_SHORT).show();
+        }
     }
 }

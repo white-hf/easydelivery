@@ -134,7 +134,8 @@
     <string name="phone_button">拨号</string>
     <string name="fail_button">失败</string>
     <string name="ok_button">完成</string>
-
-
-
+    <string name="copy_success">已复制到剪贴板</string>
+    <string name="tap_to_navigate">点击进入导航</string>
+    <string name="nav_location_invalid">目的地坐标无效</string>
+    <string name="no_map_app_found">未找到可用的地图应用</string>
 </resources>
