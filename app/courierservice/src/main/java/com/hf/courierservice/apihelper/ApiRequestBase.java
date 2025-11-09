@@ -87,13 +87,17 @@ public class ApiRequestBase<RE , RS> {
                     public void onErrorResponse(VolleyError error) {
 
 
-                        if (error.networkResponse != null && error.networkResponse.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                        if (error.networkResponse != null && (error.networkResponse.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED || 449 == error.networkResponse.statusCode)) {
                             cb.onFail(new UnAuthorizedException());
                         }else if (error.networkResponse != null && error.networkResponse.statusCode == HttpURLConnection.HTTP_BAD_REQUEST)
                         {
                             cb.onFail(new RequestParamException());
                         }
                         else {
+                            String httpCode = "";
+                            if (error.networkResponse != null)
+                                httpCode = String.valueOf(error.networkResponse.statusCode);
+                            FileLog.e(TAG, "Exception in onErrorResponse, http status code is " + httpCode, error);
                             cb.onFail(error);
                         }
                     }

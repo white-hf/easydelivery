@@ -47,7 +47,7 @@
         android:paddingTop="2dp"
         android:paddingBottom="2dp"
         android:fontFamily="monospace"
-        android:text="0/0/0/0"
+        android:text="0/0"
         android:textStyle="bold"
         android:textSize="15sp"
         android:textColor="@android:color/black"
@@ -84,7 +84,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:layout_margin="16dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="@dimen/info_pill_margin_bottom_base"
         android:visibility="gone"
         app:cardCornerRadius="18dp"
         app:cardElevation="6dp"
@@ -150,12 +153,38 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/info_pill_collapsed"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="@dimen/info_pill_margin_bottom_base"
+        android:visibility="gone"
+        app:cardCornerRadius="18dp"
+        app:cardElevation="4dp"
+        app:cardBackgroundColor="@android:color/white">
+
+        <TextView
+            android:id="@+id/info_pill_collapsed_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text="查看当前派送"
+            android:textColor="@android:color/black"
+            android:textStyle="bold" />
+    </com.google.android.material.card.MaterialCardView>
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_resume_follow"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_marginEnd="16dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="16dp"
         android:layout_marginBottom="24dp"
         android:text="重新跟随"
         android:visibility="gone"

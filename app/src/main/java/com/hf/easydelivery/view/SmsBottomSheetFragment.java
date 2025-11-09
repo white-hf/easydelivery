@@ -1,9 +1,8 @@
 package com.hf.easydelivery.view;
 
-import android.Manifest;
-import android.content.pm.PackageManager;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
-import android.telephony.SmsManager;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -16,8 +15,6 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.hf.easydelivery.R;
@@ -26,14 +23,14 @@ import com.hf.easydelivery.dao.DeliveryInfo;
 
 public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
 
-    private static final int SMS_PERMISSION_REQUEST_CODE = 1;
 
     private EditText smsEditText;
     private Button sendButton;
     private ListView templateListView;
     private String lastSentMessage;
-
     private Long mOrderId;
+    private DeliveryInfo currentDelivery;
+    private String[] formattedTemplates = new String[0];
 
     public SmsBottomSheetFragment(Long orderId) {
         this.mOrderId = orderId;
@@ -50,46 +47,78 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
         smsEditText = view.findViewById(R.id.sms_edit_text);
         sendButton = view.findViewById(R.id.send_button);
         templateListView = view.findViewById(R.id.template_list_view);
+        currentDelivery = (mOrderId != null) ? ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId) : null;
+        String[] rawTemplates = getResources().getStringArray(R.array.sms_tempalte);
+        formattedTemplates = new String[rawTemplates.length];
+        for (int i = 0; i < rawTemplates.length; i++) {
+            formattedTemplates[i] = formatTemplate(rawTemplates[i]);
+        }
 
         if (!TextUtils.isEmpty(lastSentMessage)) {
             smsEditText.setText(lastSentMessage);
+        } else if (formattedTemplates.length > 0) {
+            smsEditText.setText(formattedTemplates[0]);
         }
 
         sendButton.setOnClickListener(v -> {
             String message = smsEditText.getText().toString().trim();
-            if (!TextUtils.isEmpty(message)) {
-                sendSMS(message);
-
-                lastSentMessage = message;
-                dismiss();
-            } else {
+            if (TextUtils.isEmpty(message)) {
                 Toast.makeText(getContext(), "Message cannot be empty", Toast.LENGTH_SHORT).show();
+                return;
             }
+            attemptSendSMS(message);
         });
 
         // Set up the template list view here
-        ArrayAdapter<CharSequence> spinnerAdapter = ArrayAdapter.createFromResource(getContext(),
-                R.array.sms_tempalte, android.R.layout.simple_list_item_1);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_list_item_1,
+                formattedTemplates);
 
-        templateListView.setAdapter(spinnerAdapter);
+        templateListView.setAdapter(adapter);
         templateListView.setOnItemClickListener((parent, view1, position, id) -> {
-            smsEditText.setText(spinnerAdapter.getItem(position).toString());
+            if (position >= 0 && position < formattedTemplates.length) {
+                smsEditText.setText(formattedTemplates[position]);
+            }
         });
 
         return view;
     }
 
-    private void sendSMS(String msg) {
-        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.SEND_SMS}, SMS_PERMISSION_REQUEST_CODE);
-        } else {
-            final DeliveryInfo deliveryInfo = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
-            if (deliveryInfo != null) {
-                SmsManager smsManager = SmsManager.getDefault();
-                smsManager.sendTextMessage(deliveryInfo.getPhone(), null, msg , null, null);
-                Toast.makeText(getContext(), "SMS sent.", Toast.LENGTH_SHORT).show();
-            }
+    private void attemptSendSMS(String msg) {
+        launchSmsApp(msg);
+    }
+
+    private void launchSmsApp(String msg) {
+        final DeliveryInfo deliveryInfo = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
+        if (deliveryInfo == null) {
+            Toast.makeText(getContext(), "收件人信息缺失，无法发送短信", Toast.LENGTH_SHORT).show();
+            return;
         }
+        try {
+            Intent intent = new Intent(Intent.ACTION_SENDTO);
+            intent.setData(Uri.parse("smsto:" + deliveryInfo.getPhone()));
+            intent.putExtra("sms_body", msg);
+            startActivity(intent);
+            lastSentMessage = msg;
+            dismiss();
+        } catch (Exception ex) {
+            Toast.makeText(getContext(), "无法打开短信应用: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private String formatTemplate(String template) {
+        if (template == null) return "";
+        if (currentDelivery == null) return template;
+        String tracking = safe(currentDelivery.getOrderSn());
+        String address = safe(currentDelivery.getAddress());
+        return template
+                .replace("{tracking}", tracking)
+                .replace("{tracking_no}", tracking)
+                .replace("{address}", address);
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 
 }

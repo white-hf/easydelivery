@@ -2,8 +2,10 @@ package com.hf.easydelivery.common;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.ExifInterface;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 
 public class BitmapUtils {
 
@@ -20,6 +22,26 @@ public class BitmapUtils {
         // 使用计算出的采样率加载缩略图
         options.inJustDecodeBounds = false;
         return BitmapFactory.decodeFile(imagePath, options);
+    }
+
+    public static int getRotationDegrees(String imagePath) {
+        try {
+            ExifInterface exif = new ExifInterface(imagePath);
+            int orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+            switch (orientation) {
+                case ExifInterface.ORIENTATION_ROTATE_90:
+                    return 90;
+                case ExifInterface.ORIENTATION_ROTATE_180:
+                    return 180;
+                case ExifInterface.ORIENTATION_ROTATE_270:
+                    return 270;
+                default:
+                    return 0;
+            }
+        } catch (IOException e) {
+            // Log the error or handle it
+            return 0;
+        }
     }
 
     // 计算采样率
@@ -49,31 +71,51 @@ public class BitmapUtils {
      */
     public static Bitmap compressBitmapToTarget(Bitmap bitmap, int maxBytes) {
         if (bitmap == null) return null;
-        int quality = 90;
+        Bitmap working = bitmap;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out);
 
-        // 多次降低质量直至小于 maxBytes
-        while (out.toByteArray().length > maxBytes && quality > 30) {
+        float quality = 0.8f;
+        int iteration = 0;
+        compressWithQuality(working, quality, out);
+        final int maxIterations = 6;
+
+        while (out.size() > maxBytes && iteration < maxIterations) {
             out.reset();
-            quality -= 10;
-            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out);
+            quality *= 0.7f;
+            if (quality < 0.1f) quality = 0.1f;
+            compressWithQuality(working, quality, out);
+            iteration++;
         }
 
-        // 若还太大，则缩小分辨率再压缩
-        while (out.toByteArray().length > maxBytes && bitmap.getWidth() > 320 && bitmap.getHeight() > 320) {
-            // 缩小为原来 80%
-            int newWidth = (int)(bitmap.getWidth() * 0.8);
-            int newHeight = (int)(bitmap.getHeight() * 0.8);
-            bitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true);
-            out.reset();
-            quality = 80;
-            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out);
+        if (out.size() > maxBytes) {
+            Bitmap resized = resizeMaxDimension(working, 720);
+            if (resized != null) {
+                working = resized;
+                out.reset();
+                compressWithQuality(working, 0.6f, out);
+            }
         }
 
-        byte[] bytes = out.toByteArray();
-        Bitmap result = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-        if (result != null) return result;
-        return bitmap; // 如果失败，返回原图
+        byte[] data = out.toByteArray();
+        Bitmap result = BitmapFactory.decodeByteArray(data, 0, data.length);
+        return result != null ? result : working;
+    }
+
+    private static void compressWithQuality(Bitmap bitmap, float qualityFraction, ByteArrayOutputStream out) {
+        int q = Math.max(1, Math.min(100, (int) (qualityFraction * 100)));
+        bitmap.compress(Bitmap.CompressFormat.JPEG, q, out);
+    }
+
+    private static Bitmap resizeMaxDimension(Bitmap source, int maxDimension) {
+        if (source == null) return null;
+        int width = source.getWidth();
+        int height = source.getHeight();
+        if (width <= 0 || height <= 0) return source;
+        int max = Math.max(width, height);
+        if (max <= maxDimension) return source;
+        float scale = maxDimension / (float) max;
+        int newWidth = Math.max(1, Math.round(width * scale));
+        int newHeight = Math.max(1, Math.round(height * scale));
+        return Bitmap.createScaledBitmap(source, newWidth, newHeight, true);
     }
 }

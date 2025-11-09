@@ -78,6 +78,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
     // --- 新增：用于驱动 UI 一次性事件的 LiveData (例如 Toast) ---
     private final MutableLiveData<Event<String>> toastMessage = new MutableLiveData<>();
     private final MutableLiveData<Event<Pair<String, String>>> duplicateScanEvent = new MutableLiveData<>(); // <运单号, 包裹号>
+    private final MutableLiveData<Event<Boolean>> scanSuccessEvent = new MutableLiveData<>();
 
     // --- 新增：用于驱动提交流程 UI 的 LiveData ---
     private final MutableLiveData<SubmissionState> submissionState = new MutableLiveData<>(SubmissionState.IDLE);
@@ -89,6 +90,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
     private boolean firstEnter = true;
 
     public LiveData<Event<Boolean>> getShowCameraPromptEvent() { return showCameraPromptEvent; }
+    public LiveData<Event<Boolean>> getScanSuccessEvent() { return scanSuccessEvent; }
     public ScanViewModel() {
         submitHelper = new BatchSubmitHelper(
                 resourceMgr.getmMydb().getScanRecordDao(),
@@ -264,6 +266,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
 
         // 存入数据库
         saveScanRecord(waybillNo, packageNo, scanBatchIdLive.getValue());
+        scanSuccessEvent.postValue(new Event<>(Boolean.TRUE));
     }
 
     /**

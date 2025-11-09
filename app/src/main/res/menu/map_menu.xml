@@ -1,14 +1,18 @@
 <!-- res/menu/map_menu.xml -->
-<menu xmlns:android="http://schemas.android.com/apk/res/android">
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
     <!-- 顶部统计项，不可点击 -->
 
     <item android:id="@+id/menu_unscanned"
         android:title="包裹预览"
-        android:icon="@drawable/ic_filter_unscanned"/>
+        android:icon="@drawable/ic_filter_unscanned"
+        app:showAsAction="never"/>
     <item android:id="@+id/menu_search"
         android:title="包裹搜索"
-        android:icon="@drawable/ic_search"/>
+        android:icon="@drawable/ic_search"
+        app:showAsAction="never"/>
     <item android:id="@+id/menu_refresh"
         android:title="刷新"
-        android:icon="@drawable/ic_refresh"/>
+        android:icon="@drawable/ic_refresh"
+        app:showAsAction="never"/>
 </menu>

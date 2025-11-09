@@ -11,11 +11,14 @@ public class DeliveredUploadParams {
     private Map<String, String> formFields;
     private Map<String, String> trailingFields;
     private String imageFiles;
+    private String trackingId;
 
     private Long orderId;
     private Double longitude;
     private Double latitude;
     private String recipientName;
+    private Integer deliveryResult;
+    private Integer failedReason;
 
 
     // Getters and Setters
@@ -50,6 +53,22 @@ public class DeliveredUploadParams {
 
     public void setRecipientName(String recipientName) {
         this.recipientName = recipientName;
+    }
+
+    public Integer getDeliveryResult() {
+        return deliveryResult;
+    }
+
+    public void setDeliveryResult(Integer deliveryResult) {
+        this.deliveryResult = deliveryResult;
+    }
+
+    public Integer getFailedReason() {
+        return failedReason;
+    }
+
+    public void setFailedReason(Integer failedReason) {
+        this.failedReason = failedReason;
     }
 
     public String getUrl() {
@@ -90,5 +109,13 @@ public class DeliveredUploadParams {
 
     public void setImageFiles(String imageFiles) {
         this.imageFiles = imageFiles;
+    }
+
+    public String getTrackingId() {
+        return trackingId;
+    }
+
+    public void setTrackingId(String trackingId) {
+        this.trackingId = trackingId;
     }
 }

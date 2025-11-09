@@ -88,7 +88,7 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
         android:gravity="center"
-        android:text="© 3324959 NS LTD. All rights reserved."
+        android:text="© 3324959 NS LTD. All rights reserved.  v2.2.2"
         android:textColor="@android:color/darker_gray"
         android:textSize="12sp"
         app:layout_constraintBottom_toBottomOf="parent"

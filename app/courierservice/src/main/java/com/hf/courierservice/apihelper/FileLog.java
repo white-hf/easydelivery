@@ -20,6 +20,7 @@ import java.io.OutputStreamWriter;
 import java.io.BufferedWriter;
 import java.io.Writer;
 import android.content.SharedPreferences;
+import androidx.core.content.FileProvider;
 
 /**
  * 文件日志类，支持 info/debug/warning/error 四级日志，支持格式化字符串和 tag。
@@ -397,6 +398,41 @@ public class FileLog {
         mOs = null;
         mRaf = null;
         mFile = null;
+    }
+
+    /**
+     * 获取日志分享所需的 Uri。
+     */
+    public Uri getShareUri() {
+        if (appCtx == null) return null;
+        if (mLogUri == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            mLogUri = restoreOrCreateDownloadsUri(appCtx);
+        }
+        if (mLogUri != null) {
+            return mLogUri;
+        }
+        File legacy = ensureLegacyFile();
+        if (legacy != null && legacy.exists()) {
+            try {
+                return FileProvider.getUriForFile(appCtx,
+                        appCtx.getPackageName() + ".fileprovider",
+                        legacy);
+            } catch (IllegalArgumentException e) {
+                Log.e("FileLog", "getShareUri: fail to build FileProvider uri", e);
+            }
+        }
+        return null;
+    }
+
+    private File ensureLegacyFile() {
+        if (appCtx == null) return null;
+        if (mFile != null) return mFile;
+        File logDir = new File(appCtx.getFilesDir(), "logs");
+        if (!logDir.exists()) {
+            logDir.mkdirs();
+        }
+        mFile = new File(logDir, LOG_DISPLAY_NAME);
+        return mFile;
     }
 
     public String getLogLocationHint() {

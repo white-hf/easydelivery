@@ -29,12 +29,12 @@ public class MapViewModel extends ViewModel implements Subscriber {
     private final MutableLiveData<MapStatus> statusLive = new MutableLiveData<>();
     private final MutableLiveData<Location> myLocationLive = new MutableLiveData<>();
     private final MutableLiveData<Event<String>> toastMessageLive = new MutableLiveData<>();
+    private final MutableLiveData<Event<String>> dialogMessageLive = new MutableLiveData<>();
+    private final MutableLiveData<Event<Boolean>> uploadSuccessHapticLive = new MutableLiveData<>();
 
     // 内部状态计数
     private int deliveredCount = 0;
     private int pendingCount = 0;
-    private int uploadingCount = 0;
-    private int failedCount = 0;
 
     // 标志：是否首次进入
     private boolean firstEnter = true;
@@ -43,8 +43,6 @@ public class MapViewModel extends ViewModel implements Subscriber {
     public static class MapStatus {
         public int deliveredCount;
         public int pendingCount;
-        public int uploadingCount;
-        public int failedCount;
         public boolean isLoading = true;
     }
 
@@ -79,6 +77,14 @@ public class MapViewModel extends ViewModel implements Subscriber {
     public LiveData<Event<String>> getToastMessageLive() {
         return toastMessageLive;
     }
+
+    public LiveData<Event<String>> getDialogMessageLive() {
+        return dialogMessageLive;
+    }
+
+    public LiveData<Event<Boolean>> getUploadSuccessHapticLive() {
+        return uploadSuccessHapticLive;
+    }
     // endregion
 
     // region ★ 公共方法：供 Fragment 调用 ★
@@ -109,19 +115,12 @@ public class MapViewModel extends ViewModel implements Subscriber {
      */
     public void requestAndRefreshMarkers(Boolean bDeliveryTask) {
         FileLog.i(TAG, "requestAndRefreshMarkers: loading data, bDeliveryTask=" + bDeliveryTask);
-        MapStatus currentStatus = statusLive.getValue();
-        if (currentStatus != null) {
-            currentStatus.isLoading = true;
-            statusLive.setValue(currentStatus);
-        }
+        publishStatus(true);
         try {
             ResourceMgr.getInstance().getDeliveryinfoMgr().getDeliveryInfo(ResourceMgr.getInstance().getLoginInfo().loginId, bDeliveryTask);
         } catch (Throwable t) {
             toastMessageLive.setValue(new Event<>("请求失败"));
-            if (currentStatus != null) {
-                currentStatus.isLoading = false;
-                statusLive.setValue(currentStatus);
-            }
+            publishStatus(false);
         }
     }
 
@@ -139,7 +138,8 @@ public class MapViewModel extends ViewModel implements Subscriber {
             case EventConstant.EVENT_UPLOAD_FAILURE:
                 FileLog.e(TAG, "receive: EVENT_UPLOAD_FAILURE");
                 toastMessageLive.setValue(new Event<>("上传包裹数据失败"));
-                updateStatusCounts(0, 0, 0, 1);
+                dialogMessageLive.setValue(new Event<>("包裹上传失败，请检查网络或稍后重试。"));
+                updateStatusCounts(0);
                 break;
 
             case EventConstant.EVENT_SAVE_DELIVERY_SUCCESS:
@@ -153,7 +153,7 @@ public class MapViewModel extends ViewModel implements Subscriber {
                     deliveryinfoMgr.getListDeliveryInfo().remove(info);
 
                 refreshMapItemsFromRepo();
-                updateStatusCounts(1, -1, 0, 0); // 计入“上传中”，pending-1
+                updateStatusCounts(0);
                 break;
 
             case EventConstant.EVENT_UPLOAD_SUCCESS:
@@ -161,13 +161,14 @@ public class MapViewModel extends ViewModel implements Subscriber {
                 PackageEntity pkg = (PackageEntity) event.getMessage();
                 if (pkg == null) return;
                 toastMessageLive.setValue(new Event<>("包裹上传成功"));
-                updateStatusCounts(-1, 0, 1, 0); // 上传中-1，已送达+1
+                uploadSuccessHapticLive.setValue(new Event<>(Boolean.TRUE));
+                updateStatusCounts(1);
                 break;
 
             case EventConstant.EVENT_DELIVERY_DATA_READY:
                 FileLog.i(TAG, "receive: EVENT_DELIVERY_DATA_READY");
                 refreshMapItemsFromRepo();
-                updateStatusCounts(0, 0, 0, 0); // 触发一次状态更新
+                updateStatusCounts(0);
                 break;
         }
     }
@@ -189,39 +190,37 @@ public class MapViewModel extends ViewModel implements Subscriber {
      * 初始化状态计数，仅在第一次加载时调用
      */
     private void initStatusBarCounts() {
-        try {
-            pendingCount = ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo().size();
-            // 尝试从 PendingPackagesMgr 统计“上传中/失败”，若不可用则保持 0
-            int up = ResourceMgr.getInstance().getPendingPackagesMgr().size();
-            uploadingCount = up;
-        } catch (Throwable ignore) {
-            // 保持默认值
-        }
-        updateStatusCounts(0, 0, 0, 0);
+        refreshPendingFromRepo();
+        publishStatus(false);
         FileLog.i(TAG, "initStatusBarCounts: initial counts - pending=" + pendingCount);
     }
 
     /**
      * 统一的状态计数更新
      */
-    private void updateStatusCounts(int uploadingDelta, int pendingDelta, int deliveredDelta, int failedDelta) {
-        uploadingCount += uploadingDelta;
-        pendingCount += pendingDelta;
+    private void updateStatusCounts(int deliveredDelta) {
         deliveredCount += deliveredDelta;
-        failedCount += failedDelta;
-        if (uploadingCount < 0) uploadingCount = 0;
-        if (pendingCount   < 0) pendingCount   = 0;
         if (deliveredCount < 0) deliveredCount = 0;
-        if (failedCount    < 0) failedCount    = 0;
+        refreshPendingFromRepo();
+        publishStatus(false);
+        FileLog.i(TAG, String.format("updateStatusCounts: delivered=%d, pending=%d", deliveredCount, pendingCount));
+    }
 
-        MapStatus newStatus = new MapStatus();
-        newStatus.deliveredCount = deliveredCount;
-        newStatus.pendingCount = pendingCount;
-        newStatus.uploadingCount = uploadingCount;
-        newStatus.failedCount = failedCount;
-        newStatus.isLoading = false;
-        statusLive.setValue(newStatus);
-        FileLog.i(TAG, String.format("updateStatusCounts: delivered=%d, pending=%d, uploading=%d, failed=%d", deliveredCount, pendingCount, uploadingCount, failedCount));
+    private void refreshPendingFromRepo() {
+        try {
+            List<DeliveryInfo> list = ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
+            pendingCount = list == null ? 0 : list.size();
+        } catch (Throwable t) {
+            pendingCount = 0;
+        }
+    }
+
+    private void publishStatus(boolean isLoading) {
+        MapStatus status = new MapStatus();
+        status.deliveredCount = deliveredCount;
+        status.pendingCount = pendingCount;
+        status.isLoading = isLoading;
+        statusLive.setValue(status);
     }
     // endregion
 

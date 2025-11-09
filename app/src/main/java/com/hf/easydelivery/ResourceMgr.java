@@ -3,6 +3,7 @@ package com.hf.easydelivery;
 import static com.hf.easydelivery.Constants.ITEM_CURRENT_BATCH_ID;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 
 import android.os.Handler;
@@ -26,6 +27,7 @@ import com.hf.easydelivery.core.DeliveryinfoMgr;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ResourceMgr {
 
@@ -47,6 +49,7 @@ public class ResourceMgr {
     private ConfigurationManager mConfigurationManager;
     private ICourierService mCourierService;
     private Handler mMainHandler;
+    private final AtomicBoolean loginRedirecting = new AtomicBoolean(false);
 
     static public class LoginInfo {
         public String loginName = "";
@@ -187,6 +190,29 @@ public class ResourceMgr {
         }
 
         return instance;
+    }
+
+    public void requestLoginRedirect() {
+        if (ctx == null) return;
+        if (loginRedirecting.getAndSet(true)) {
+            return;
+        }
+        LoginInfo info = getLoginInfo();
+        if (info != null) {
+            info.bIsLoggedIn = false;
+        }
+        Handler handler = mMainHandler != null ? mMainHandler : new Handler(Looper.getMainLooper());
+        handler.post(() -> {
+            try {
+                Intent intent = new Intent(ctx, com.hf.easydelivery.view.LoginActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                ctx.startActivity(intent);
+            } catch (Exception e) {
+                FileLog.getInstance().error("ResourceMgr", "requestLoginRedirect failed: " + e.getMessage());
+            } finally {
+                loginRedirecting.set(false);
+            }
+        });
     }
 }
 

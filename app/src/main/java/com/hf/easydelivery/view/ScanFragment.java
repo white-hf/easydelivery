@@ -12,6 +12,12 @@ import android.os.Handler;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Pair;
+import android.graphics.Typeface;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.AbsoluteSizeSpan;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -152,6 +158,8 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         pbSubmitting = view.findViewById(R.id.pbSubmitting);
         tvSubmitting = view.findViewById(R.id.tvSubmitting);
 
+        renderScanResult(null);
+
         adapter = new RecentScansAdapter(recentScans);
         rvRecentScans.setLayoutManager(new LinearLayoutManager(getContext()));
         rvRecentScans.setAdapter(adapter);
@@ -286,7 +294,9 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
             // 更新顶部扫描结果
             if (scannedList != null && !scannedList.isEmpty()) {
                 ScanItem lastScanned = scannedList.get(0);
-                tvPackageNumber.setText("包裹号：" + lastScanned.getPackageNo() + "\n" + "运单号：" + lastScanned.getWaybillNo());
+                renderScanResult(lastScanned);
+            } else {
+                renderScanResult(null);
             }
         });
 
@@ -324,9 +334,17 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
             if (payload instanceof Pair) {
                 @SuppressWarnings("unchecked")
                 Pair<String, String> data = (Pair<String, String>) payload;
-                String msg = "该包裹已扫\n包裹号：" + (data.second == null ? "" : data.second);
+                String pkgValue = data.second == null ? "" : data.second;
+                String msg = "该包裹已扫\n包裹号：" + pkgValue;
                 Toast.makeText(getContext(), msg, Toast.LENGTH_SHORT).show();
-                tvPackageNumber.setText("包裹号：" + (data.second == null ? "" : data.second) + "\n" + "运单号：" + data.first);
+                renderScanResult(new ScanItem(pkgValue, data.first, false, true));
+            }
+        });
+
+        scanViewModel.getScanSuccessEvent().observe(getViewLifecycleOwner(), event -> {
+            if (event == null) return;
+            if (Boolean.TRUE.equals(event.getMessage())) {
+                playScanHaptic();
             }
         });
 
@@ -393,23 +411,57 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         }
     }
 
+    private void renderScanResult(@Nullable ScanItem item) {
+        if (tvPackageNumber == null) return;
+        Context context = getContext();
+        if (context == null) return;
+        String packageValue = item != null && item.getPackageNo() != null ? item.getPackageNo() : "—";
+        String waybillValue = item != null ? item.getWaybillNo() : "—";
+        SpannableStringBuilder builder = new SpannableStringBuilder();
+        appendResultSegment(builder, context, "包裹号", packageValue, true);
+        builder.append("\n");
+        appendResultSegment(builder, context, "运单号", waybillValue, false);
+        tvPackageNumber.setText(builder);
+    }
+
+    private void appendResultSegment(SpannableStringBuilder builder, Context context,
+                                     String label, String value, boolean accent) {
+        int labelStart = builder.length();
+        builder.append(label).append("：");
+        builder.setSpan(new ForegroundColorSpan(
+                        ContextCompat.getColor(context, R.color.scan_result_label)),
+                labelStart, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        builder.setSpan(new AbsoluteSizeSpan(14, true),
+                labelStart, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+        int valueStart = builder.length();
+        builder.append(value != null ? value : "—");
+        int colorRes = accent ? R.color.scan_result_accent : R.color.scan_result_value;
+        builder.setSpan(new ForegroundColorSpan(ContextCompat.getColor(context, colorRes)),
+                valueStart, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        builder.setSpan(new StyleSpan(Typeface.BOLD), valueStart, builder.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        int valueSizeSp = accent ? 28 : 17;
+        builder.setSpan(new AbsoluteSizeSpan(valueSizeSp, true),
+                valueStart, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+
     /**
      * 相机服务检测到条码后的回调
      */
     private void onBarcodeDetectedFromService(String waybillNo) {
         if (isValidWaybill(waybillNo) && isNewBarcode(waybillNo)) {
-            // 仅负责震动和将条码传递给 ViewModel
-            vibrate();
+            // 仅负责将条码传递给 ViewModel
             scanViewModel.processBarcode(waybillNo);
         }
     }
 
-    private void vibrate() {
+    private void playScanHaptic() {
         if (vibrator != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE));
+                vibrator.vibrate(VibrationEffect.createOneShot(80, VibrationEffect.DEFAULT_AMPLITUDE));
             } else {
-                vibrator.vibrate(200);
+                vibrator.vibrate(80);
             }
         }
     }

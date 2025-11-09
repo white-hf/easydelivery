@@ -16,4 +16,7 @@ public class PackageEntity {
     public Double latitude;
     public Short driverId;
     public String batchNumber;
+    public Integer deliveryResult = 0;
+    public Integer failedReason;
+    public String recipientName;
 }

@@ -22,16 +22,35 @@
     </string-array>
 
     <string-array name="sms_tempalte">
-        <item>Hi, this is your delivery driver. I have a parcel for you and will be delivering it to you. Are you home?</item>
-        <item>Hi, this is your delivery driver. I have delivered your parcel at: mailroom</item>
-        <item>Hi, This is your delivery driver. I have a parcel for you. Please call or message me to arrange for delivery. Thank you!</item>
-        <item>Hi, This is your delivery driver. I have a parcel for you but could not reach you.</item>
+        <item>Hi, this is your delivery driver. I have a parcel (No. {tracking}) for you and will be delivering it to you. Are you home?</item>
+        <item>Hi, this is your delivery driver. I have delivered (No. {tracking}) your parcel at: mailroom</item>
+        <item>Hi, This is your delivery driver. I have a parcel (No. {tracking}) for you. Please call or message me to arrange for delivery. Thank you!</item>
+        <item>Hi, This is your delivery driver. I have a parcel (No. {tracking}) for you but could not reach you.</item>
+        <item>Hello, this is your delivery driver. I have a package ({tracking}) for {address}. Can you confirm the correct address?</item>
+        <item>Hello, this is your delivery driver. I’m at {address}. Could you provide the buzz code or entry instructions?</item>
     </string-array>
 
     <string-array name="delviery_data_type">
         <item>delivering</item>
         <item>unscanned</item>
         <item>scanned</item>
+    </string-array>
+
+    <string-array name="delivery_fail_reason_labels">
+        <item>P.O.Box</item>
+        <item>地址错误</item>
+        <item>收件人拒收包裹</item>
+        <item>商业场所关闭或大楼锁门</item>
+        <item>缺失建筑单元号</item>
+    </string-array>
+
+    <string-array name="delivery_fail_reason_codes">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>7</item>
+
     </string-array>
 
 </resources>

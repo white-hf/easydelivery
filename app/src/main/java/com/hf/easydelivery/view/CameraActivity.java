@@ -7,17 +7,25 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.location.Location;
+import android.os.SystemClock;
 
+import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
+import androidx.camera.core.ZoomState;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
+
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.common.util.concurrent.ListenableFuture;
 import android.view.View;
 import android.view.ViewGroup;
@@ -30,11 +38,15 @@ import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.button.MaterialButton;
 import com.hf.easydelivery.R;
@@ -42,6 +54,7 @@ import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.common.BitmapUtils;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.core.PendingPackagesMgr;
+import com.hf.easydelivery.core.SmartLocationManager;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.dao.PackageEntity;
 
@@ -59,6 +72,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -66,7 +80,18 @@ import java.text.SimpleDateFormat;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
+
 import com.hf.easydelivery.common.PermissionUtils;
+
+import android.util.Size;
+
+import com.google.mlkit.vision.barcode.common.Barcode;
+import com.google.mlkit.vision.barcode.BarcodeScanner;
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions;
+import com.google.mlkit.vision.barcode.BarcodeScanning;
+import com.google.mlkit.vision.common.InputImage;
+import com.hf.easydelivery.view.Adapter.ClusterParcelAdapter;
 
 /**
  * CameraActivity（从 Fragment 完整改造为 Activity）
@@ -74,7 +99,7 @@ import com.hf.easydelivery.common.PermissionUtils;
  * - 修复所有 Fragment API 遗留：requireActivity()/getArguments()/view.findViewById 等
  * - UI/业务逻辑保持不变（缩略图/短信/拨号/完成校验等）
  */
-public class CameraActivity extends AppCompatActivity implements SensorEventListener {
+public class CameraActivity extends AppCompatActivity implements SensorEventListener, SmartLocationManager.LocationUpdateListener {
 
     private static final String TAG = "CameraActivity";
     private static final int CAMERA_PERMISSION_REQUEST_CODE = 1001;
@@ -104,17 +129,23 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     // 传感器
     private SensorManager sensorManager;
-    private Sensor accelerometer, magnetometer;
+    private Sensor accelerometer, magnetometer, lightSensor;
     private final float[] accelerometerReading = new float[3];
     private final float[] magnetometerReading = new float[3];
-    private boolean isPortrait = false;
+    private float ambientLux = Float.NaN;
+    private float lastPitchDegrees = Float.NaN;
 
     // 业务参数
     private Long mOrderId;
-    private double mLatitude;
-    private double mLongitude;
+    private double targetLatitude = Double.NaN;
+    private double targetLongitude = Double.NaN;
+    private double currentLatitude = Double.NaN;
+    private double currentLongitude = Double.NaN;
 
     private SmsBottomSheetFragment mSmsBottomSheetFragment;
+    private SmartLocationManager smartLocationManager;
+    private Location lastKnownLocation;
+    private DeliveryInfo deliveryInfo;
 
     // 宿主 chrome
     private View hostToolbar, hostBottomBar;
@@ -123,6 +154,29 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     // private final CameraService cameraServie = CameraService.getInstance();
     // private boolean cameraBound = false;
     private boolean cameraStarted = false;
+    private boolean flashSupported = false;
+    private boolean lastFlashOn = false;
+    private static final float EXTREME_LOW_LIGHT_LUX_THRESHOLD = 5f;
+    private static final float DEFAULT_ZOOM_RATIO = 1.0f;
+    private static final float ZOOM_RATIO_TOLERANCE = 0.05f;
+    private Camera boundCamera;
+    private ImageAnalysis barcodeAnalysis;
+    private BarcodeScanner labelScanner;
+    private final ExecutorService analysisExecutor = Executors.newSingleThreadExecutor();
+
+    private enum CaptureIntent { WAYBILL, DROP_OFF, BUILDING }
+    private CaptureIntent captureStage = CaptureIntent.WAYBILL;
+    private CaptureIntent lastResolvedIntent = CaptureIntent.WAYBILL;
+    private long captureOrderId = -1L;
+    private int captureSequenceIndex = 0;
+    private float lastAppliedZoomRatio = DEFAULT_ZOOM_RATIO;
+    private long lastZoomAdjustMillis = 0L;
+    private static final long ZOOM_COMMAND_INTERVAL_MS = 120L;
+    private long lastBarcodeHitMillis = 0L;
+    private static final long BARCODE_HINT_TTL_MS = 2000L;
+    private boolean mismatchDialogShowing = false;
+    private String lastMismatchCode = null;
+    private long lastBarcodeAnalysisMillis = 0L;
 
     // Executor for background image processing
     private final ExecutorService cameraExecutor = Executors.newSingleThreadExecutor();
@@ -137,10 +191,19 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         Bundle args = getIntent() != null ? getIntent().getExtras() : null;
         if (args != null) {
             mOrderId = args.getLong("order_id", -1);
-            mLatitude = args.getDouble("latitude", -1);
-            mLongitude = args.getDouble("longitude", -1);
+            targetLatitude = args.getDouble("latitude", Double.NaN);
+            targetLongitude = args.getDouble("longitude", Double.NaN);
         }
+        ensureCaptureSequenceSynced();
         mSmsBottomSheetFragment = new SmsBottomSheetFragment(mOrderId);
+        try {
+            BarcodeScannerOptions options = new BarcodeScannerOptions.Builder()
+                    .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
+                    .build();
+            labelScanner = BarcodeScanning.getClient(options);
+        } catch (Exception e) {
+            FileLog.getInstance().error(TAG, "Failed to init barcode scanner: " + e.getMessage(), e);
+        }
 
         // 2) 顶部信息栏
         infoBar = findViewById(R.id.info_bar);
@@ -151,7 +214,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         tvAddress = findViewById(R.id.tv_address);
 
 
-        final DeliveryInfo deliveryInfo = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
+        deliveryInfo = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
         if (deliveryInfo != null) {
             tvRouteNumber.setText(String.valueOf(deliveryInfo.getRouteNumber()));
             tvOrderSn.setText(deliveryInfo.getOrderSn());
@@ -193,6 +256,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
             tvAddress.setOnClickListener(v -> openNavigationToPackage());
         }
+        initLocationManager();
 
         // 3) 缩略图栏
         thumbnailContainer = findViewById(R.id.thumbnail_container);
@@ -222,27 +286,11 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         phoneButton.setOnClickListener(v -> makeCall());
         failButton.setOnClickListener(v -> showFailReasonDialog());
         okButton.setOnClickListener(v -> {
-            int count = (int) mImageFiles.stream().filter(Objects::nonNull).count();
-            if (count < IMAGE_COUNT) {
-                okButton.setEnabled(false);
-                Toast.makeText(this, getString(R.string.take_picture), Toast.LENGTH_SHORT).show();
+            if (!hasEnoughPhotos(null)) {
                 return;
             }
-            okButton.setEnabled(true);
-            if (deliveryInfo != null) {
-                PackageEntity packageEntity = deliveryInfo.transferToPackageEntity();
-                packageEntity.createTime = System.currentTimeMillis();
-                packageEntity.imagePath = Arrays.toString(mImageFiles.stream().filter(Objects::nonNull).map(File::getAbsolutePath).toArray(String[]::new));
-                packageEntity.latitude = mLatitude;
-                packageEntity.longitude = mLongitude;
-                packageEntity.status = PendingPackagesMgr.PackageStatus.Pending.getStatus();
-                ResourceMgr.getInstance().getPendingPackagesMgr().save(packageEntity);
-            }
-            clearThumbnails();
-            if (!switchToNextPackage()) {
-                Toast.makeText(this, "已完成", Toast.LENGTH_SHORT).show();
-                finish();
-            }
+            warnIfFarFromTarget();
+            submitPackage(0, null);
         });
         updateOkButtonState();
 
@@ -255,6 +303,10 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         if (sensorManager != null) {
             accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
             magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+            lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
+            if (lightSensor == null) {
+                FileLog.getInstance().debug(TAG, "light sensor unavailable; fallback to CameraX auto flash");
+            }
         } else {
             Toast.makeText(this, "Sensor not available", Toast.LENGTH_SHORT).show();
             finish();
@@ -316,6 +368,122 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         hideHostChrome();
     }
 
+    private void initLocationManager() {
+        if (smartLocationManager != null) {
+            return;
+        }
+        try {
+            smartLocationManager = SmartLocationManager.getInstance(getApplicationContext());
+            if (smartLocationManager == null) {
+                FileLog.getInstance().error(TAG, "initLocationManager: SmartLocationManager unavailable (context null?)");
+                return;
+            }
+        } catch (Exception e) {
+            FileLog.getInstance().error(TAG, "initLocationManager failed: " + e.getMessage(), e);
+            smartLocationManager = null;
+        }
+        refreshCurrentLocationSnapshot();
+    }
+
+    private void startLocationTracking() {
+        initLocationManager();
+        if (smartLocationManager == null) {
+            return;
+        }
+        smartLocationManager.setLocationUpdateListener(this);
+        smartLocationManager.startLocationUpdates();
+        refreshCurrentLocationSnapshot();
+    }
+
+    private void stopLocationTracking() {
+        if (smartLocationManager == null) {
+            return;
+        }
+        try {
+            smartLocationManager.setLocationUpdateListener(null);
+            smartLocationManager.stopLocationUpdates();
+        } catch (Exception e) {
+            FileLog.getInstance().error(TAG, "stopLocationTracking error: " + e.getMessage(), e);
+        }
+    }
+
+    private void refreshCurrentLocationSnapshot() {
+        if (smartLocationManager == null) {
+            return;
+        }
+        try {
+            Location snapshot = smartLocationManager.getLastSmoothedLocation();
+            if (snapshot == null) {
+                snapshot = smartLocationManager.getPredictedLocation();
+            }
+            if (snapshot != null) {
+                updateCurrentLocation(snapshot);
+            }
+        } catch (Exception e) {
+            FileLog.getInstance().error(TAG, "refreshCurrentLocationSnapshot failed: " + e.getMessage(), e);
+        }
+    }
+
+    private void updateCurrentLocation(@NonNull Location location) {
+        lastKnownLocation = new Location(location);
+        currentLatitude = location.getLatitude();
+        currentLongitude = location.getLongitude();
+    }
+
+    private void ensureCaptureSequenceSynced() {
+        long currentOrder = mOrderId != null ? mOrderId : -1L;
+        if (captureOrderId != currentOrder) {
+            captureOrderId = currentOrder;
+            captureStage = CaptureIntent.WAYBILL;
+            captureSequenceIndex = 0;
+            lastResolvedIntent = CaptureIntent.WAYBILL;
+            lastAppliedZoomRatio = DEFAULT_ZOOM_RATIO;
+            lastBarcodeHitMillis = 0L;
+            if (boundCamera != null) {
+                applyProximityZoom(true);
+            }
+        }
+    }
+
+    private double resolveTargetLatitude() {
+        if (!Double.isNaN(targetLatitude)) return targetLatitude;
+        if (deliveryInfo != null) return deliveryInfo.getLatitude();
+        return Double.NaN;
+    }
+
+    private double resolveTargetLongitude() {
+        if (!Double.isNaN(targetLongitude)) return targetLongitude;
+        if (deliveryInfo != null) return deliveryInfo.getLongitude();
+        return Double.NaN;
+    }
+
+    private float estimateDistanceToTargetMeters() {
+        double targetLat = resolveTargetLatitude();
+        double targetLng = resolveTargetLongitude();
+        if (Double.isNaN(targetLat) || Double.isNaN(targetLng)) {
+            return Float.NaN;
+        }
+        double currentLat = currentLatitude;
+        double currentLng = currentLongitude;
+        if (Double.isNaN(currentLat) || Double.isNaN(currentLng)) {
+            if (lastKnownLocation != null) {
+                currentLat = lastKnownLocation.getLatitude();
+                currentLng = lastKnownLocation.getLongitude();
+            } else {
+                return Float.NaN;
+            }
+        }
+        float[] results = new float[1];
+        Location.distanceBetween(currentLat, currentLng, targetLat, targetLng, results);
+        return results[0];
+    }
+
+    @Override
+    public void onLocationUpdate(Location location, SmartLocationManager.MovementState state) {
+        if (location == null) return;
+        updateCurrentLocation(location);
+    }
+
     @Override
     protected void onStart() {
         super.onStart();
@@ -326,10 +494,16 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     protected void onResume() {
         super.onResume();
         startCameraIfNeeded();
+        startLocationTracking();
 
-        if (accelerometer != null && magnetometer != null) {
+        if (accelerometer != null) {
             sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
+        }
+        if (magnetometer != null) {
             sensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_NORMAL);
+        }
+        if (lightSensor != null) {
+            sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
         }
     }
 
@@ -340,11 +514,21 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
         super.onPause();
         if (sensorManager != null) sensorManager.unregisterListener(this);
+        stopLocationTracking();
         // Unbind camera on pause
         try {
             ProcessCameraProvider provider = ProcessCameraProvider.getInstance(this).get();
             provider.unbindAll();
             cameraStarted = false;
+            boundCamera = null;
+            flashSupported = false;
+            lastFlashOn = false;
+            if (barcodeAnalysis != null) {
+                barcodeAnalysis.clearAnalyzer();
+                barcodeAnalysis = null;
+            }
+            lastBarcodeAnalysisMillis = 0L;
+            lastBarcodeHitMillis = 0L;
         } catch (Exception e) {
             FileLog.getInstance().error(TAG, "unbind onPause failed", e);
         }
@@ -354,7 +538,18 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     protected void onDestroy() {
         FileLog.getInstance().debug(TAG, "onDestroy: clean up.");
         showHostChrome();
-        cameraExecutor.shutdown();
+        stopLocationTracking();
+        if (!cameraExecutor.isShutdown()) {
+            cameraExecutor.shutdown();
+        }
+        if (!analysisExecutor.isShutdown()) {
+            analysisExecutor.shutdown();
+        }
+        if (labelScanner != null) {
+            labelScanner.close();
+            labelScanner = null;
+        }
+        lastBarcodeHitMillis = 0L;
         super.onDestroy();
     }
 
@@ -436,13 +631,22 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             System.arraycopy(event.values, 0, accelerometerReading, 0, accelerometerReading.length);
         } else if (event.sensor == magnetometer) {
             System.arraycopy(event.values, 0, magnetometerReading, 0, magnetometerReading.length);
+        } else if (event.sensor == lightSensor) {
+            ambientLux = event.values[0];
+            applyDynamicFlashMode();
+            return;
         }
         float[] rotationMatrix = new float[9];
         if (SensorManager.getRotationMatrix(rotationMatrix, null, accelerometerReading, magnetometerReading)) {
             float[] orientation = new float[3];
             SensorManager.getOrientation(rotationMatrix, orientation);
-            float pitch = orientation[1];
-            isPortrait = Math.abs(pitch) > Math.PI / 4;
+            float pitchRad = orientation[1];
+            float newPitch = (float) Math.toDegrees(pitchRad);
+            boolean changed = Float.isNaN(lastPitchDegrees) || Math.abs(newPitch - lastPitchDegrees) > 2f;
+            lastPitchDegrees = newPitch;
+            if (changed) {
+                applyProximityZoom(false);
+            }
         }
     }
 
@@ -466,6 +670,12 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 startCamera();
             } else {
                 Toast.makeText(this, "Camera permission is required to use this feature", Toast.LENGTH_SHORT).show();
+            }
+        } else if (requestCode == CALL_PERMISSION_REQUEST_CODE) {
+            if (PermissionUtils.isPermissionGranted(grantResults)) {
+                makeCall();
+            } else {
+                Toast.makeText(this, "拨打电话需要电话权限", Toast.LENGTH_SHORT).show();
             }
         }
     }
@@ -501,6 +711,285 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         Intent intent = new Intent(Intent.ACTION_PICK);
         intent.setType("image/*");
         startActivityForResult(intent, REQUEST_CODE_PICK_IMAGE);
+    }
+
+    private void applyProximityZoom() {
+        applyProximityZoom(false);
+    }
+
+    private void applyProximityZoom(boolean force) {
+        if (boundCamera == null) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        if (!force && now - lastZoomAdjustMillis < ZOOM_COMMAND_INTERVAL_MS) {
+            return;
+        }
+        lastZoomAdjustMillis = now;
+        ensureCaptureSequenceSynced();
+        ZoomState zoomState = boundCamera.getCameraInfo().getZoomState().getValue();
+        if (zoomState == null) {
+            return;
+        }
+        CaptureIntent intent = resolveCaptureIntent();
+        float targetZoom = computeZoomRatio(zoomState, intent);
+        float currentZoom = zoomState.getZoomRatio();
+        if (Math.abs(currentZoom - targetZoom) < ZOOM_RATIO_TOLERANCE) {
+            lastResolvedIntent = intent;
+            lastAppliedZoomRatio = currentZoom;
+            return;
+        }
+        boundCamera.getCameraControl().setZoomRatio(targetZoom);
+        lastResolvedIntent = intent;
+        lastAppliedZoomRatio = targetZoom;
+        FileLog.getInstance().debug(TAG,
+                "applyProximityZoom shot=" + (captureSequenceIndex + 1)
+                        + " intent=" + intentLabel(intent)
+                        + " stage=" + intentLabel(captureStage)
+                        + " zoom=" + String.format(Locale.getDefault(), "%.2f", targetZoom)
+                        + " pitch=" + (Float.isNaN(lastPitchDegrees) ? "unknown" : String.format(Locale.getDefault(), "%.1f°", lastPitchDegrees)));
+    }
+
+    private CaptureIntent resolveCaptureIntent() {
+        if (captureStage == CaptureIntent.WAYBILL && isBarcodeHintActive()) {
+            return CaptureIntent.WAYBILL;
+        }
+        switch (captureStage) {
+            case WAYBILL:
+                return CaptureIntent.WAYBILL;
+            case DROP_OFF:
+                if (!Float.isNaN(lastPitchDegrees) && Math.abs(lastPitchDegrees) > 35f) {
+                    return CaptureIntent.BUILDING;
+                }
+                return CaptureIntent.DROP_OFF;
+            case BUILDING:
+                if (!Float.isNaN(lastPitchDegrees) && Math.abs(lastPitchDegrees) < 15f) {
+                    return CaptureIntent.WAYBILL;
+                }
+                return CaptureIntent.BUILDING;
+            default:
+                return captureStage;
+        }
+    }
+
+    private float computeZoomRatio(@NonNull ZoomState zoomState, CaptureIntent intent) {
+        float baseZoom = DEFAULT_ZOOM_RATIO;
+        float multiplier = intentMultiplier(intent);
+        float desired = baseZoom * multiplier;
+        float minZoom = zoomState.getMinZoomRatio();
+        float maxZoom = zoomState.getMaxZoomRatio();
+        return Math.max(minZoom, Math.min(maxZoom, desired));
+    }
+
+    private float intentMultiplier(CaptureIntent intent) {
+        switch (intent) {
+            case WAYBILL:
+                return 1.68f;
+            case BUILDING:
+                return 0.65f;
+            case DROP_OFF:
+            default:
+                return 0.65f;
+        }
+    }
+
+    private boolean isBarcodeHintActive() {
+        return captureStage == CaptureIntent.WAYBILL &&
+                SystemClock.elapsedRealtime() - lastBarcodeHitMillis < BARCODE_HINT_TTL_MS;
+    }
+
+    private CaptureIntent nextStageAfter(CaptureIntent intent) {
+        switch (intent) {
+            case WAYBILL:
+                return CaptureIntent.DROP_OFF;
+            case DROP_OFF:
+                return CaptureIntent.BUILDING;
+            case BUILDING:
+            default:
+                return CaptureIntent.DROP_OFF;
+        }
+    }
+
+    private void advanceStageForPreview(CaptureIntent completedIntent) {
+        captureStage = nextStageAfter(completedIntent);
+        if (captureStage != CaptureIntent.WAYBILL) {
+            clearBarcodeHint();
+        }
+        FileLog.getInstance().debug(TAG, "advanceStageForPreview -> " + intentLabel(captureStage));
+        applyProximityZoom(true);
+    }
+
+    private void clearBarcodeHint() {
+        lastBarcodeHitMillis = 0L;
+        lastMismatchCode = null;
+    }
+
+    private void promptMismatch(@NonNull String detected, @NonNull String expected) {
+        if (mismatchDialogShowing && detected.equals(lastMismatchCode)) {
+            return;
+        }
+        mismatchDialogShowing = true;
+        lastMismatchCode = detected;
+        runOnUiThread(() -> {
+            if (captureButton != null) captureButton.setEnabled(false);
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.camera_mismatch_title)
+                    .setMessage(getString(R.string.camera_mismatch_message, detected, expected))
+                    .setCancelable(false)
+                    .setPositiveButton(R.string.camera_mismatch_continue, (dialog, which) -> {
+                        mismatchDialogShowing = false;
+                        if (captureButton != null) captureButton.setEnabled(true);
+                    })
+                    .setNegativeButton(R.string.camera_mismatch_cancel, (dialog, which) -> {
+                        mismatchDialogShowing = false;
+                        if (captureButton != null) captureButton.setEnabled(true);
+                        Toast.makeText(this, R.string.camera_mismatch_toast, Toast.LENGTH_LONG).show();
+                    })
+                    .show();
+        });
+    }
+
+    private void markCaptureCommitted(@Nullable CaptureIntent intent) {
+        ensureCaptureSequenceSynced();
+        captureSequenceIndex += 1;
+        CaptureIntent appliedIntent = intent != null ? intent : lastResolvedIntent;
+        FileLog.getInstance().debug(TAG,
+                "captureSaved seq=" + captureSequenceIndex
+                        + " intent=" + intentLabel(appliedIntent)
+                        + " nextStage=" + intentLabel(captureStage));
+    }
+
+    private String intentLabel(@Nullable CaptureIntent intent) {
+        if (intent == null) return "unknown";
+        switch (intent) {
+            case WAYBILL:
+                return "waybill";
+            case DROP_OFF:
+                return "dropOff";
+            case BUILDING:
+                return "building";
+            default:
+                return intent.toString();
+        }
+    }
+
+    private void applyDynamicFlashMode() {
+        if (imageCapture == null) {
+            return;
+        }
+        if (!flashSupported) {
+            return;
+        }
+        if (lightSensor == null) {
+            imageCapture.setFlashMode(ImageCapture.FLASH_MODE_AUTO);
+            return;
+        }
+        boolean useFlash = shouldUseFlash();
+        int desired = useFlash ? ImageCapture.FLASH_MODE_ON : ImageCapture.FLASH_MODE_OFF;
+        if (imageCapture.getFlashMode() != desired) {
+            imageCapture.setFlashMode(desired);
+        }
+        if (lastFlashOn != useFlash) {
+            lastFlashOn = useFlash;
+            FileLog.getInstance().debug(TAG, "applyDynamicFlashMode: mode=" + (useFlash ? "ON" : "OFF") + " lux=" + ambientLux);
+        }
+    }
+
+    private boolean shouldUseFlash() {
+        return flashSupported && !Float.isNaN(ambientLux) && ambientLux < EXTREME_LOW_LIGHT_LUX_THRESHOLD;
+    }
+
+    private ImageAnalysis buildBarcodeAnalyzer() {
+        if (labelScanner == null) {
+            return null;
+        }
+        if (barcodeAnalysis != null) {
+            return barcodeAnalysis;
+        }
+        barcodeAnalysis = new ImageAnalysis.Builder()
+                .setTargetResolution(new Size(640, 480))
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build();
+        barcodeAnalysis.setAnalyzer(analysisExecutor, image -> {
+            if (labelScanner == null) {
+                image.close();
+                return;
+            }
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastBarcodeAnalysisMillis < 200) {
+                image.close();
+                return;
+            }
+            lastBarcodeAnalysisMillis = now;
+            if (image.getImage() == null) {
+                image.close();
+                return;
+            }
+            final int frameWidth = image.getWidth();
+            final int frameHeight = image.getHeight();
+            InputImage inputImage = InputImage.fromMediaImage(image.getImage(), image.getImageInfo().getRotationDegrees());
+            labelScanner.process(inputImage)
+                    .addOnSuccessListener(barcodes -> {
+                        if (barcodes == null || barcodes.isEmpty()) return;
+                        for (Barcode barcode : barcodes) {
+                            Rect box = barcode.getBoundingBox();
+                            if (isCentralLabel(box, frameWidth, frameHeight)) {
+                                String raw = barcode.getRawValue();
+                                if (raw != null && handleDetectedBarcode(raw)) {
+                                    runOnUiThread(() -> applyProximityZoom(false));
+                                }
+                                break;
+                            }
+                        }
+                    })
+                    .addOnFailureListener(e -> FileLog.getInstance().debug(TAG, "barcode scan failed: " + e.getMessage()))
+                    .addOnCompleteListener(task -> image.close());
+        });
+        return barcodeAnalysis;
+    }
+
+    private boolean isCentralLabel(Rect rect, int width, int height) {
+        if (rect == null || width <= 0 || height <= 0) return false;
+        float frameArea = width * height;
+        float area = rect.width() * rect.height();
+        if (area < frameArea * 0.02f || area > frameArea * 0.5f) {
+            return false;
+        }
+        float centerX = rect.exactCenterX();
+        float centerY = rect.exactCenterY();
+        float normX = Math.abs(centerX - width / 2f) / (width / 2f);
+        float normY = Math.abs(centerY - height / 2f) / (height / 2f);
+        return normX < 0.35f && normY < 0.35f;
+    }
+
+    private boolean handleDetectedBarcode(@NonNull String rawValue) {
+        String normalized = normalizeTracking(rawValue);
+        if (normalized == null || normalized.isEmpty()) return false;
+        String expected = getCurrentOrderTracking();
+        if (expected == null) {
+            lastBarcodeHitMillis = SystemClock.elapsedRealtime();
+            return true;
+        }
+        if (!normalized.equalsIgnoreCase(expected)) {
+            runOnUiThread(() -> promptMismatch(normalized, expected));
+            return false;
+        }
+        lastBarcodeHitMillis = SystemClock.elapsedRealtime();
+        lastMismatchCode = null;
+        return true;
+    }
+
+    private String getCurrentOrderTracking() {
+        if (deliveryInfo == null) {
+            return null;
+        }
+        return normalizeTracking(deliveryInfo.getOrderSn());
+    }
+
+    private String normalizeTracking(String raw) {
+        if (raw == null) return null;
+        String trimmed = raw.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.getDefault());
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     @Override
@@ -543,7 +1032,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private void clearThumbnails() {
-        for (int i = 0; i < MAX_PHOTOS; i++) removeThumbnail(i);
+        for (int i = 0; i < MAX_PHOTOS; i++) removeThumbnail(i, false);
         updateOkButtonState();
     }
 
@@ -561,10 +1050,14 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CALL_PHONE}, CALL_PERMISSION_REQUEST_CODE);
         } else {
-            final DeliveryInfo deliveryInfo = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
-            if (deliveryInfo != null) {
+            DeliveryInfo info = deliveryInfo;
+            if (info == null && mOrderId != null) {
+                info = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
+                deliveryInfo = info;
+            }
+            if (info != null) {
                 Intent callIntent = new Intent(Intent.ACTION_CALL);
-                callIntent.setData(Uri.parse("tel:" + deliveryInfo.getPhone()));
+                callIntent.setData(Uri.parse("tel:" + info.getPhone()));
                 startActivity(callIntent);
             }
         }
@@ -603,16 +1096,31 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         return File.createTempFile(imageFileName, ".jpg", storageDir);
     }
 
-    private void saveImage(byte[] bytes, File file, boolean portrait) throws IOException {
+    private void saveImage(byte[] bytes, File file, int rotationDegrees) throws IOException {
         Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-        if (portrait) {
-            Matrix matrix = new Matrix();
-            matrix.postRotate(90);
-            bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+        if (bitmap == null) {
+            throw new IOException("Unable to decode captured frame");
         }
-        bitmap = BitmapUtils.compressBitmapToTarget(bitmap, 120 * 1024);
+        if (rotationDegrees % 360 != 0) {
+            Matrix matrix = new Matrix();
+            matrix.postRotate(rotationDegrees);
+            Bitmap rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+            if (rotated != bitmap) {
+                bitmap.recycle();
+                bitmap = rotated;
+            }
+        }
+        Bitmap compressed = BitmapUtils.compressBitmapToTarget(bitmap, 400 * 1024);
+        if (compressed != null && compressed != bitmap) {
+            bitmap.recycle();
+            bitmap = compressed;
+        }
         try (FileOutputStream output = new FileOutputStream(file)) {
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, output);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output);
+        } finally {
+            if (!bitmap.isRecycled()) {
+                bitmap.recycle();
+            }
         }
     }
 
@@ -649,10 +1157,14 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     public void removeThumbnail(int index) {
+        removeThumbnail(index, true);
+    }
+
+    private void removeThumbnail(int index, boolean deleteFile) {
         if (index < 0 || index >= mImageFiles.size()) return;
         File f = mImageFiles.get(index);
         mImageFiles.set(index, null);
-        if (f != null && f.exists()) f.delete();
+        if (deleteFile && f != null && f.exists()) f.delete();
 
         ImageView iv = (index < mImageViews.size()) ? mImageViews.get(index) : null;
         if (iv == null) return;
@@ -672,7 +1184,93 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private void showFailReasonDialog() {
-        Toast.makeText(this, "失败原因弹窗", Toast.LENGTH_SHORT).show();
+        String[] labels = getResources().getStringArray(R.array.delivery_fail_reason_labels);
+        String[] codes = getResources().getStringArray(R.array.delivery_fail_reason_codes);
+        if (labels == null || labels.length == 0) {
+            Toast.makeText(this, R.string.fail_reason_title, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.fail_reason_title)
+                .setItems(labels, (dialog, which) -> {
+                    if (which >= 0 && which < (codes == null ? 0 : codes.length)) {
+                        handleFailReasonSelection(codes[which]);
+                    }
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void handleFailReasonSelection(@Nullable String codeStr) {
+        if (!hasEnoughPhotos(R.string.fail_reason_require_photo)) {
+            return;
+        }
+        warnIfFarFromTarget();
+        Integer reason = null;
+        if (codeStr != null) {
+            try {
+                reason = Integer.parseInt(codeStr);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        if (reason == null || reason <= 0) {
+            reason = 8; // default to "other"
+        }
+        submitPackage(1, reason);
+    }
+
+    private boolean hasEnoughPhotos(@Nullable Integer overrideMessageRes) {
+        int count = (int) mImageFiles.stream().filter(Objects::nonNull).count();
+        if (count < IMAGE_COUNT) {
+            int messageRes = overrideMessageRes != null ? overrideMessageRes : R.string.take_picture;
+            Toast.makeText(this, getString(messageRes), Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        return true;
+    }
+
+    private void submitPackage(int deliveryResult, @Nullable Integer failReasonCode) {
+        DeliveryInfo infoSnapshot = deliveryInfo;
+        if (infoSnapshot == null && mOrderId != null) {
+            infoSnapshot = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
+            deliveryInfo = infoSnapshot;
+        }
+        if (infoSnapshot == null) {
+            Toast.makeText(this, "包裹信息缺失，无法保存", Toast.LENGTH_SHORT).show();
+            FileLog.getInstance().error(TAG, "submitPackage: deliveryInfo missing for orderId=" + mOrderId);
+            return;
+        }
+
+        PackageEntity packageEntity = infoSnapshot.transferToPackageEntity();
+        packageEntity.createTime = System.currentTimeMillis();
+        packageEntity.imagePath = serializeImagePaths();
+        Double latToSave = !Double.isNaN(currentLatitude) ? currentLatitude
+                : (!Double.isNaN(targetLatitude) ? targetLatitude : null);
+        Double lngToSave = !Double.isNaN(currentLongitude) ? currentLongitude
+                : (!Double.isNaN(targetLongitude) ? targetLongitude : null);
+        packageEntity.latitude = latToSave;
+        packageEntity.longitude = lngToSave;
+        packageEntity.status = PendingPackagesMgr.PackageStatus.Pending.getStatus();
+        packageEntity.deliveryResult = deliveryResult;
+        packageEntity.failedReason = failReasonCode;
+        packageEntity.recipientName = infoSnapshot.getName();
+        ResourceMgr.getInstance().getPendingPackagesMgr().save(packageEntity);
+
+        clearThumbnails();
+        if (deliveryResult == 1) {
+            Toast.makeText(this, getString(R.string.fail_submit_success), Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "已完成", Toast.LENGTH_SHORT).show();
+        }
+
+        findAndShowNextPackages(infoSnapshot);
+    }
+
+    private String serializeImagePaths() {
+        return Arrays.toString(mImageFiles.stream()
+                .filter(Objects::nonNull)
+                .map(File::getAbsolutePath)
+                .toArray(String[]::new));
     }
 
     // ---------- 拍照反馈 ----------
@@ -715,6 +1313,16 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     // ---------- 拍照（走 CameraServie） ----------
     private void takePicture() {
         FileLog.getInstance().debug(TAG, "takePicture via CameraX");
+        applyProximityZoom(true);
+        applyDynamicFlashMode();
+        final CaptureIntent intentForShot = lastResolvedIntent;
+        FileLog.getInstance().debug(TAG,
+                "captureShot seq=" + (captureSequenceIndex + 1)
+                        + " stage=" + intentLabel(captureStage)
+                        + " intent=" + intentLabel(intentForShot)
+                        + " zoom=" + String.format(Locale.getDefault(), "%.2f", lastAppliedZoomRatio)
+                        + " pitch=" + (Float.isNaN(lastPitchDegrees) ? "unknown" : String.format(Locale.getDefault(), "%.1f°", lastPitchDegrees))
+                        + " barcodeHint=" + isBarcodeHintActive());
         // --- 播放拍照反馈 ---
         playShutterFeedback();
         boolean full = true;
@@ -790,7 +1398,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                         ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                         byte[] bytes = new byte[buffer.remaining()];
                         buffer.get(bytes);
-                        saveImage(bytes, imageFile, isPortrait);
+                        int rotationDegrees = image.getImageInfo().getRotationDegrees();
+                        saveImage(bytes, imageFile, rotationDegrees);
                         // On UI thread, replace the temp thumbnail with the real one
                         runOnUiThread(() -> {
                             if (placeholderIndex >= 0) {
@@ -808,10 +1417,14 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                                 ImageView iv = mImageViews.get(placeholderIndex);
                                 iv.setImageBitmap(thumb);
                                 updateOkButtonState();
+                                markCaptureCommitted(intentForShot);
+                                advanceStageForPreview(intentForShot);
                             } else {
                                 // fallback: insert real thumbnail into first available slot
                                 addThumbnail(imageFile, true);
                                 updateOkButtonState();
+                                markCaptureCommitted(intentForShot);
+                                advanceStageForPreview(intentForShot);
                             }
                         });
                     } catch (Exception e) {
@@ -843,13 +1456,26 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 FileLog.getInstance().debug(TAG, "startCamera: provider.get() success");
                 Preview preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(previewView.getSurfaceProvider());
-                imageCapture = new ImageCapture.Builder().build();
+                ImageCapture.Builder builder = new ImageCapture.Builder();
+                if (lightSensor == null) {
+                    builder.setFlashMode(ImageCapture.FLASH_MODE_AUTO);
+                }
+                imageCapture = builder.build();
                 FileLog.getInstance().debug(TAG, "startCamera: prepared preview and imageCapture, binding now...");
                 CameraSelector cameraSelector = new CameraSelector.Builder()
                         .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                         .build();
                 cameraProvider.unbindAll();
-                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
+                ImageAnalysis analysis = buildBarcodeAnalyzer();
+                if (analysis != null) {
+                    boundCamera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture, analysis);
+                } else {
+                    boundCamera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
+                }
+                flashSupported = boundCamera != null && boundCamera.getCameraInfo().hasFlashUnit();
+                lastFlashOn = false;
+                applyDynamicFlashMode();
+                applyProximityZoom(true);
                 FileLog.getInstance().debug(TAG, "startCamera: bindToLifecycle completed successfully");
             } catch (Exception e) {
                 FileLog.getInstance().error(TAG, "startCamera failed: "
@@ -861,17 +1487,19 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     /**
-     * 从当前定位到包裹目的地（mLatitude, mLongitude）发起导航。
+     * 从当前定位到包裹目的地（targetLatitude, targetLongitude）发起导航。
      * 优先使用 Google Maps turn-by-turn；不可用时回退到通用 VIEW。
      */
     private void openNavigationToPackage() {
-        if (mLatitude == -1 || mLongitude == -1) {
+        double lat = resolveTargetLatitude();
+        double lng = resolveTargetLongitude();
+        if (Double.isNaN(lat) || Double.isNaN(lng)) {
             Toast.makeText(this, getString(R.string.nav_location_invalid), Toast.LENGTH_SHORT).show();
             return;
         }
         // 1) 优先：Google Maps 导航
         try {
-            android.net.Uri gmmIntentUri = android.net.Uri.parse("google.navigation:q=" + mLatitude + "," + mLongitude + "&mode=d");
+            android.net.Uri gmmIntentUri = android.net.Uri.parse("google.navigation:q=" + lat + "," + lng + "&mode=d");
             Intent mapIntent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
             mapIntent.setPackage("com.google.android.apps.maps");
             if (mapIntent.resolveActivity(getPackageManager()) != null) {
@@ -882,11 +1510,108 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
         // 2) 回退：任意地图应用 / 浏览器
         try {
-            String url = "https://www.google.com/maps/dir/?api=1&destination=" + mLatitude + "," + mLongitude + "&travelmode=driving";
+            String url = "https://www.google.com/maps/dir/?api=1&destination=" + lat + "," + lng + "&travelmode=driving";
             Intent webMap = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url));
             startActivity(webMap);
         } catch (Exception e) {
             Toast.makeText(this, getString(R.string.no_map_app_found), Toast.LENGTH_SHORT).show();
         }
     }
+
+    private boolean warnIfFarFromTarget() {
+        DeliveryInfo infoSnapshot = deliveryInfo;
+        if (infoSnapshot == null) {
+            return false;
+        }
+        refreshCurrentLocationSnapshot();
+        double currentLat = currentLatitude;
+        double currentLng = currentLongitude;
+        if (Double.isNaN(currentLat) || Double.isNaN(currentLng)) {
+            if (lastKnownLocation != null) {
+                currentLat = lastKnownLocation.getLatitude();
+                currentLng = lastKnownLocation.getLongitude();
+            }
+        }
+        double targetLat = resolveTargetLatitude();
+        double targetLng = resolveTargetLongitude();
+        if (Double.isNaN(targetLat) || Double.isNaN(targetLng)) return false;
+        if (Math.abs(targetLat) < 0.000001 && Math.abs(targetLng) < 0.000001) return false;
+        if (Double.isNaN(currentLat) || Double.isNaN(currentLng)) return false;
+        float[] results = new float[1];
+        Location.distanceBetween(currentLat, currentLng, targetLat, targetLng, results);
+        float distance = results[0];
+        if (distance > 150f) {
+            Toast.makeText(this, String.format(java.util.Locale.getDefault(), "当前位置与包裹相差约%.0f米，请确认后再派送", distance), Toast.LENGTH_SHORT).show();
+            FileLog.getInstance().debug(TAG, "warnIfFarFromTarget: distance=" + distance + " target=(" + targetLat + "," + targetLng + ") current=(" + currentLat + "," + currentLng + ")");
+            return true;
+        }
+        return false;
+    }
+
+    private void findAndShowNextPackages(DeliveryInfo currentInfo) {
+        List<DeliveryInfo> nextPackages = findNextPackages(currentInfo);
+        if (!nextPackages.isEmpty()) {
+            showNextPackageChooser(nextPackages);
+        } else {
+            finish();
+        }
+    }
+
+    private List<DeliveryInfo> findNextPackages(DeliveryInfo currentInfo) {
+        if (currentInfo == null || currentInfo.getStreetName() == null || currentInfo.getStreetName().isEmpty() || currentInfo.getCivilNumber() == null) {
+            return Collections.emptyList();
+        }
+        List<DeliveryInfo> allDeliveries = ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
+        if (allDeliveries == null) {
+            return Collections.emptyList();
+        }
+
+        return allDeliveries.stream()
+                .filter(info -> info != null &&
+                        !info.getOrderId().equals(currentInfo.getOrderId()) &&
+                        currentInfo.getStreetName().equals(info.getStreetName()) &&
+                        Objects.equals(currentInfo.getCivilNumber(), info.getCivilNumber()))
+                .collect(Collectors.toList());
+    }
+
+    private void showNextPackageChooser(List<DeliveryInfo> items) {
+        BottomSheetDialog dialog = new BottomSheetDialog(this);
+        View sheet = getLayoutInflater().inflate(R.layout.dialog_cluster_list, null, false);
+        TextView title = sheet.findViewById(R.id.tv_cluster_title);
+        if (title != null) {
+            title.setText("同一地址的下一个包裹");
+        }
+        dialog.setContentView(sheet);
+
+        RecyclerView rv = sheet.findViewById(R.id.rv_cluster);
+        rv.setLayoutManager(new LinearLayoutManager(this));
+        ClusterParcelAdapter adapter = new ClusterParcelAdapter(items, info -> {
+            dialog.dismiss();
+            resetForNewPackage(info);
+        });
+        rv.setAdapter(adapter);
+        dialog.show();
+    }
+
+    private void resetForNewPackage(DeliveryInfo newInfo) {
+        clearThumbnails();
+        updateInfoBar(newInfo);
+        ensureCaptureSequenceSynced();
+        Toast.makeText(this, "已切换到下一个包裹: " + newInfo.getRouteNumber(), Toast.LENGTH_SHORT).show();
+    }
+
+    private void updateInfoBar(DeliveryInfo newInfo) {
+        if (newInfo == null) return;
+        this.deliveryInfo = newInfo;
+        this.mOrderId = newInfo.getOrderId();
+        if (tvRouteNumber != null) tvRouteNumber.setText(String.valueOf(newInfo.getRouteNumber()));
+        if (tvOrderSn != null) tvOrderSn.setText(newInfo.getOrderSn());
+        if (tvCustomerName != null) tvCustomerName.setText(newInfo.getName());
+        if (tvUnitNumber != null) tvUnitNumber.setText(newInfo.getUnitNumber());
+        if (tvAddress != null) {
+            tvAddress.setText(newInfo.getAddress());
+            tvAddress.setOnClickListener(v -> openNavigationToPackage());
+        }
+    }
+
 }

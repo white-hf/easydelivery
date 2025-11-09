@@ -62,6 +62,7 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
+import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.dao.DeliveryInfo;
 
@@ -293,6 +294,7 @@ public class SmartLocationManager {
         if (listener != null) {
             listener.onLocationUpdate(outputLoc, currentState);
         }
+        DrivingDistanceTracker.getInstance(context).onLocationUpdate(outputLoc, currentState);
 
         if (newLocation.getAccuracy() > WEAK_SIGNAL_THRESHOLD) {
             weakSignalCount++;
@@ -406,15 +408,15 @@ public class SmartLocationManager {
     private long getRecommendedUpdateInterval() {
         switch (currentState) {
             case STATIONARY:
-                return 60 * 1000; // 1 minute (shorter initial interval)
-            case WALKING:
                 return 30 * 1000; // 30 seconds
+            case WALKING:
+                return 8 * 1000; // 8 seconds
             case SLOW_DRIVING:
-                return 15 * 1000; // 15 seconds
-            case NORMAL_DRIVING:
                 return 5 * 1000; // 5 seconds
+            case NORMAL_DRIVING:
+                return 3 * 1000; // 3 seconds
             default:
-                return 30 * 1000; // Default 30 seconds
+                return 10 * 1000; // Default 10 seconds
         }
     }
 
@@ -422,15 +424,15 @@ public class SmartLocationManager {
     private long getMinUpdateInterval() {
         switch (currentState) {
             case STATIONARY:
-                return 30 * 1000; // 30 seconds (shorter initial interval)
+                return 15 * 1000; // 15 seconds
             case WALKING:
-                return 10 * 1000; // 10 seconds
+                return 4 * 1000; // 4 seconds
             case SLOW_DRIVING:
-                return 5 * 1000; // 5 seconds
+                return 2 * 1000; // 2 seconds
             case NORMAL_DRIVING:
-                return 3 * 1000; // 3 seconds
+                return 1 * 1000; // 1 second
             default:
-                return 10 * 1000; // Default 10 seconds
+                return 5 * 1000; // Default 5 seconds
         }
     }
 

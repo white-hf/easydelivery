@@ -83,12 +83,14 @@
         android:id="@+id/tvPackageNumber"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:padding="12dp"
-        android:background="#80000000"
-        android:text="包裹号：—"
-        android:textColor="@android:color/white"
-        android:textSize="24sp"
-        android:textStyle="bold"
+        android:padding="16dp"
+        android:background="@drawable/bg_scan_result"
+        android:text="包裹号：—\n运单号：—"
+        android:textColor="@color/scan_result_label"
+        android:textSize="18sp"
+        android:lineSpacingExtra="4dp"
+        android:textStyle="normal"
+        android:gravity="center_vertical"
         android:elevation="4dp"
         android:translationZ="8dp"
         app:layout_constraintStart_toStartOf="parent"
@@ -96,7 +98,9 @@
         app:layout_constraintTop_toTopOf="@id/previewView"
         app:layout_constraintBottom_toBottomOf="@id/previewView"
         app:layout_constraintVertical_bias="1.0"
-        android:layout_marginBottom="8dp"/>
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="12dp"/>
 
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/segmented"

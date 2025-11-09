@@ -1,6 +1,8 @@
 package com.hf.easydelivery.core;
 
+import android.content.Context;
 import android.os.Handler;
+import android.widget.Toast;
 
 import com.hf.courierservice.ICourierService;
 import com.hf.easydelivery.event.Event;
@@ -14,6 +16,8 @@ import com.hf.easydelivery.dao.DeliveredPackagesDao;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.dao.PackageEntity;
 
+import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -25,6 +29,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This class manages delivered packages, including saving the delivered packages to the database,uploading the delivered packages to the server, and loading the delivered packages from the database.
@@ -68,6 +73,9 @@ public class PendingPackagesMgr implements Subscriber {
 
     private final BlockingQueue<PackageEntity> packageQueue = new LinkedBlockingQueue<>();
     private final ExecutorService executorService = Executors.newFixedThreadPool(1); // 1 producer, 1 consumer
+    // Track scheduled retry runnables by trackingId so we can cancel them on success/unrecoverable failure
+    private final ConcurrentHashMap<String, Runnable> retryTasks = new ConcurrentHashMap<>();
+    private final Handler mainHandler = ResourceMgr.getInstance().getMainHandler();
 
     private final DeliveredPackagesDao deliveredPackagesDao = ResourceMgr.getInstance().getmMydb().getDeliveredPackagesDao();
 
@@ -130,6 +138,11 @@ public class PendingPackagesMgr implements Subscriber {
                 );
             } catch (Exception e) {
                 FileLog.getInstance().error("[PendingMgr] save failed tracking=" + tracking + ", err=" + e.getMessage());
+                Context ctx = ResourceMgr.getInstance().getCtx();
+                if (ctx != null) {
+                    ResourceMgr.getInstance().getMainHandler().post(() ->
+                            Toast.makeText(ctx, "包裹数据保存失败，请稍后重试", Toast.LENGTH_SHORT).show());
+                }
             }
         });
     }
@@ -242,12 +255,31 @@ public class PendingPackagesMgr implements Subscriber {
     }
 
     private boolean isUploadSuccess(PackageEntity deliveryInfo) {
+        // Guard: if all image files are missing (possibly cleaned after a prior success), avoid sending an invalid request
+        if (deliveryInfo.imagePath != null && !deliveryInfo.imagePath.trim().isEmpty()) {
+            List<String> paths = parseImagePathList(deliveryInfo.imagePath);
+            boolean anyExists = false;
+            for (String p : paths) {
+                if (p == null || p.isEmpty()) continue;
+                File f = p.startsWith("file://") ? new File(p.substring("file://".length())) : new File(p);
+                if (f.exists() && f.isFile() && f.length() > 0) { anyExists = true; break; }
+            }
+            if (!anyExists) {
+                FileLog.getInstance().info("[PendingMgr] skip upload: no existing image files for tracking=" + deliveryInfo.trackingId);
+                return false;
+            }
+        }
+
         DeliveredUploadParams params = new DeliveredUploadParams();
 
         params.setOrderId(deliveryInfo.orderId);
         params.setLatitude(deliveryInfo.latitude);
         params.setLongitude(deliveryInfo.longitude);
         params.setImageFiles(deliveryInfo.imagePath);
+        params.setTrackingId(deliveryInfo.trackingId);
+        params.setDeliveryResult(deliveryInfo.deliveryResult == null ? 0 : deliveryInfo.deliveryResult);
+        params.setFailedReason(deliveryInfo.failedReason);
+        params.setRecipientName(deliveryInfo.recipientName);
 
         ICourierService courierService = ResourceMgr.getInstance().getCourierService();
         assert courierService != null;
@@ -279,8 +311,12 @@ public class PendingPackagesMgr implements Subscriber {
                 if (deliveryInfo == null) {
                     continue; // 空轮询
                 }
-
                 final String tracking = deliveryInfo.trackingId;
+                if (PackageStatus.UPLOADED.getStatus().equals(deliveryInfo.status)) {
+                    synchronized (enqueued) { enqueued.remove(tracking); }
+                    FileLog.getInstance().debug("[PendingMgr] consumer: skip uploaded tracking=" + tracking);
+                    continue;
+                }
                 FileLog.getInstance().debug("[PendingMgr] consumer: dequeued tracking=" + tracking);
 
                 boolean ok = isUploadSuccess(deliveryInfo);
@@ -292,14 +328,22 @@ public class PendingPackagesMgr implements Subscriber {
                     backoffTime = Math.min(backoffTime * 2, maxBackoffTime);
                     long delayMs = backoffTime;
                     FileLog.getInstance().debug("[PendingMgr] consumer: upload failed, schedule retry in " + delayMs + "ms, tracking=" + tracking);
-                    ResourceMgr.getInstance().getMainHandler().postDelayed(() -> {
-                        // 允许重试重新入队
-                        synchronized (enqueued) {
-                            if (!enqueued.contains(tracking)) enqueued.add(tracking);
+                    // Create a tracked retry runnable so we can cancel it on success
+                    Runnable retry = new Runnable() {
+                        @Override public void run() {
+                            retryTasks.remove(tracking);
+                            synchronized (enqueued) {
+                                if (!enqueued.contains(tracking)) enqueued.add(tracking);
+                            }
+                            packageQueue.add(deliveryInfo);
+                            FileLog.getInstance().debug("[PendingMgr] re-enqueued tracking=" + tracking);
                         }
-                        packageQueue.add(deliveryInfo);
-                        FileLog.getInstance().debug("[PendingMgr] re-enqueued tracking=" + tracking);
-                    }, delayMs);
+                    };
+                    Runnable prev = retryTasks.put(tracking, retry);
+                    if (prev != null) {
+                        mainHandler.removeCallbacks(prev);
+                    }
+                    mainHandler.postDelayed(retry, delayMs);
                 }
             }
         } catch (InterruptedException e) {
@@ -309,7 +353,6 @@ public class PendingPackagesMgr implements Subscriber {
             FileLog.getInstance().debug("[PendingMgr] consumer: exit");
         }
     }
-
     public void shutdown() {
         running = false;
         executorService.shutdownNow();
@@ -320,9 +363,18 @@ public class PendingPackagesMgr implements Subscriber {
     public void onUploadSuccess(PackageEntity pkg) {
         final String tracking = pkg.trackingId;
         FileLog.getInstance().debug("[PendingMgr] onUploadSuccess tracking=" + tracking);
+        // Cancel any scheduled retry for this tracking
+        Runnable r = retryTasks.remove(tracking);
+        if (r != null) {
+            mainHandler.removeCallbacks(r);
+            FileLog.getInstance().debug("[PendingMgr] cancel scheduled retry on success tracking=" + tracking);
+        }
+        // Purge any duplicated items still in the queue to prevent second upload after cleanup
+        packageQueue.removeIf(item -> tracking.equals(item.trackingId));
         // 从去重集合移除，允许后续同 tracking 再次入队（通常不需要，但保持一致性）
         synchronized (enqueued) { enqueued.remove(tracking); }
         update(tracking, PackageStatus.UPLOADED.getStatus());
+        cleanupLocalImages(pkg.imagePath);
         ResourceMgr.getInstance().getMainHandler().post(() ->
                 ResourceMgr.getInstance().getPublisher().notify(
                         EventConstant.EVENT_UPLOAD_SUCCESS,
@@ -330,23 +382,83 @@ public class PendingPackagesMgr implements Subscriber {
         );
     }
 
+    private void cleanupLocalImages(String imagePathRaw) {
+        if (imagePathRaw == null || imagePathRaw.trim().isEmpty()) return;
+        List<String> paths = parseImagePathList(imagePathRaw);
+        for (String path : paths) {
+            if (path == null || path.isEmpty()) continue;
+            try {
+                File file;
+                if (path.startsWith("file://")) {
+                    file = new File(path.substring("file://".length()));
+                } else {
+                    file = new File(path);
+                }
+                if (file.exists() && file.isFile()) {
+                    boolean deleted = file.delete();
+                    FileLog.getInstance().debug("[PendingMgr] cleanup image " + file.getAbsolutePath() + " deleted=" + deleted);
+                }
+            } catch (Throwable t) {
+                FileLog.getInstance().error("[PendingMgr] cleanup image error: " + t.getMessage());
+            }
+        }
+    }
+
+    private List<String> parseImagePathList(String raw) {
+        List<String> result = new ArrayList<>();
+        try {
+            String trimmed = raw.trim();
+            if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+                trimmed = trimmed.substring(1, trimmed.length() - 1);
+            }
+            if (trimmed.isEmpty()) return result;
+            String[] parts = trimmed.contains(",") ? trimmed.split(",") : new String[]{trimmed};
+            for (String part : parts) {
+                String path = part.trim();
+                if (!path.isEmpty()) {
+                    result.add(path);
+                }
+            }
+        } catch (Throwable t) {
+            FileLog.getInstance().error("[PendingMgr] parse image path failed: " + t.getMessage());
+        }
+        return result;
+    }
+
     public void onUploadRetriableFailure(PackageEntity pkg, int httpCode, String reason) {
         final String tracking = pkg.trackingId;
         backoffTime = Math.min(backoffTime * 2, maxBackoffTime);
         final long delayMs = backoffTime;
         FileLog.getInstance().error("[PendingMgr] onUploadRetriableFailure tracking=" + tracking + ", http=" + httpCode + ", reason=" + reason + ", retryInMs=" + delayMs);
-        ResourceMgr.getInstance().getMainHandler().postDelayed(() -> {
-            synchronized (enqueued) {
-                if (!enqueued.contains(tracking)) enqueued.add(tracking);
+        // Replace any earlier scheduled retry for the same tracking
+        Runnable prev = retryTasks.remove(tracking);
+        if (prev != null) {
+            mainHandler.removeCallbacks(prev);
+        }
+        Runnable retry = new Runnable() {
+            @Override public void run() {
+                retryTasks.remove(tracking);
+                synchronized (enqueued) {
+                    if (!enqueued.contains(tracking)) enqueued.add(tracking);
+                }
+                packageQueue.add(pkg);
+                FileLog.getInstance().debug("[PendingMgr] re-enqueued(after fail) tracking=" + tracking);
             }
-            packageQueue.add(pkg);
-            FileLog.getInstance().debug("[PendingMgr] re-enqueued(after fail) tracking=" + tracking);
-        }, delayMs);
+        };
+        retryTasks.put(tracking, retry);
+        mainHandler.postDelayed(retry, delayMs);
     }
 
     public void onUploadUnrecoverableFailure(PackageEntity pkg, int httpCode, String reason) {
         final String tracking = pkg.trackingId;
         FileLog.getInstance().error("[PendingMgr] onUploadUnrecoverableFailure tracking=" + tracking + ", http=" + httpCode + ", reason=" + reason);
+        // Cancel any scheduled retry and purge same-tracking items from queue
+        Runnable r = retryTasks.remove(tracking);
+        if (r != null) {
+            mainHandler.removeCallbacks(r);
+            FileLog.getInstance().debug("[PendingMgr] cancel scheduled retry on unrecoverable failure tracking=" + tracking);
+        }
+        packageQueue.removeIf(item -> tracking.equals(item.trackingId));
         synchronized (enqueued) { enqueued.remove(tracking); }
         // 标记失败
         update(tracking, PackageStatus.FAILED.getStatus());

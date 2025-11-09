@@ -10,7 +10,6 @@ import android.widget.ImageView;
 import android.widget.Toast;
 
 import androidx.fragment.app.DialogFragment;
-import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 
 import com.hf.easydelivery.R;
@@ -44,7 +43,6 @@ public class FullImageFragment extends DialogFragment {
 
         ImageView imageView = rootView.findViewById(R.id.full_image_view);
         imageView.setOnClickListener(v -> dismiss());
-        imageView.setOnLongClickListener(v -> deleteImage());
         imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
 
         Bundle args = getArguments();
@@ -66,24 +64,9 @@ public class FullImageFragment extends DialogFragment {
             dismiss();
         }
 
-        // 左上角关闭按钮
         View btnClose = rootView.findViewById(R.id.btn_close);
         btnClose.setOnClickListener(v -> dismiss());
 
         return rootView;
-    }
-
-    private boolean deleteImage() {
-        if (imageFilePath != null) {
-            FragmentActivity activity = getActivity();
-
-
-            // Close the fragment
-            Toast.makeText(getContext(), "Image deleted", Toast.LENGTH_SHORT).show();
-            dismiss();
-            return true;
-        }
-        else
-            return false;
     }
 }

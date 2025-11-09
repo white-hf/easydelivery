@@ -86,6 +86,9 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
         packageEntity.orderId = orderId;
         packageEntity.longitude = longitude;
         packageEntity.latitude = latitude;
+        packageEntity.recipientName = name;
+        packageEntity.deliveryResult = 0;
+        packageEntity.failedReason = null;
         //packageEntity.status = String.valueOf(state);
 
         return packageEntity;
@@ -147,10 +150,17 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
 
         Utils.AddressInfo addressInfo = Utils.extractApartmentAndStreetNumber(address);
 
-        if (!addressInfo.getStreetNumber().isEmpty())
-            civilNumber = Integer.parseInt(addressInfo.getStreetNumber());
+        String streetNumber = addressInfo.getStreetNumber();
+        if (streetNumber != null && !streetNumber.isEmpty()) {
+            try {
+                civilNumber = Integer.parseInt(streetNumber.replaceAll("[^0-9]", ""));
+            } catch (Exception ignored) { }
+        }
 
-        unitNumber = addressInfo.getApartmentNumber();
+        String extractedUnit = addressInfo.getApartmentNumber();
+        if (extractedUnit != null && !extractedUnit.trim().isEmpty()) {
+            unitNumber = extractedUnit;
+        }
 
         streetName = Utils.extractFirstWord(address);
     }

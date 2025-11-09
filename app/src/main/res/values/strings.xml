@@ -138,4 +138,23 @@
     <string name="tap_to_navigate">点击进入导航</string>
     <string name="nav_location_invalid">目的地坐标无效</string>
     <string name="no_map_app_found">未找到可用的地图应用</string>
+    <string name="fail_reason_title">请选择失败原因</string>
+    <string name="fail_reason_require_photo">请先拍摄至少两张照片再提交失败原因</string>
+    <string name="fail_submit_success">失败记录已保存并排队上传</string>
+    <string name="my_work_title">我的工作</string>
+    <string name="my_work_month_default">--</string>
+    <string name="my_work_pick_month">选择月份</string>
+    <string name="my_work_table_header_date">日期</string>
+    <string name="my_work_table_header_parcels">包裹数</string>
+    <string name="my_work_table_header_distance">里程 (km)</string>
+    <string name="my_work_summary_template">工作%1$d天，共派送%2$d个包裹，行驶%3$.1f公里</string>
+    <string name="my_work_summary_default">工作0天，共派送0个包裹，行驶0.0公里</string>
+    <string name="my_work_empty">本月暂无工作记录</string>
+    <string name="share_log_button">分享日志文件</string>
+    <string name="share_log_not_found">未找到日志文件，请先运行一次应用</string>
+    <string name="camera_mismatch_title">请确认包裹</string>
+    <string name="camera_mismatch_message">识别的运单号 %1$s 与当前包裹 %2$s 不一致，是否继续拍照？</string>
+    <string name="camera_mismatch_continue">继续拍照</string>
+    <string name="camera_mismatch_cancel">取消</string>
+    <string name="camera_mismatch_toast">请确认拿到正确的包裹后再继续</string>
 </resources>

@@ -220,7 +220,8 @@ public class PackageListFragment extends Fragment {
      * @param fullList 完整的、未过滤的包裹列表
      */
     private void updateList(List<DeliveryInfo> fullList) {
-        currentFullList = (fullList != null) ? fullList : new ArrayList<>();
+        currentFullList = (fullList != null) ? new ArrayList<>(fullList) : new ArrayList<>();
+        sortByRouteNumber(currentFullList);
         applyFilter(searchView != null ? searchView.getQuery().toString() : "");
     }
 
@@ -244,6 +245,7 @@ public class PackageListFragment extends Fragment {
                     .collect(Collectors.toList());
         }
 
+        sortByRouteNumber(filteredList);
         adapter.submit(filteredList);
         boolean empty = filteredList.isEmpty();
         recyclerView.setVisibility(empty ? View.GONE : View.VISIBLE);
@@ -260,6 +262,14 @@ public class PackageListFragment extends Fragment {
 
     private String safeLower(String s) {
         return s == null ? null : s.toLowerCase();
+    }
+
+    private void sortByRouteNumber(List<DeliveryInfo> list) {
+        list.sort((a, b) -> safeString(a.getRouteNumber()).compareTo(safeString(b.getRouteNumber())));
+    }
+
+    private String safeString(String value) {
+        return value == null ? "" : value.toLowerCase();
     }
 
     private void onItemClicked(@NonNull DeliveryInfo item) {
@@ -304,8 +314,11 @@ public class PackageListFragment extends Fragment {
         private final Context ctx;
         private final OnItemClickListener listener;
         private final List<DeliveryInfo> items = new ArrayList<>();
+        private final int minRowHeightPx;
         public ParcelListAdapter(Context ctx, OnItemClickListener l) {
             this.ctx = ctx; this.listener = l;
+            float density = ctx.getResources().getDisplayMetrics().density;
+            this.minRowHeightPx = (int) (64f * density);
         }
         @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View v = LayoutInflater.from(ctx).inflate(R.layout.item_package_list, parent, false);
@@ -313,6 +326,7 @@ public class PackageListFragment extends Fragment {
         }
         @Override public void onBindViewHolder(@NonNull VH h, int pos) {
             DeliveryInfo it = items.get(pos);
+            h.itemView.setMinimumHeight(minRowHeightPx);
             String routeText = "包裹号: " + valueOrDash(it.getRouteNumber());
             String orderText = "运单号: " + valueOrDash(it.getOrderSn());
             String customerText = "客户: " + valueOrDash(it.getName());
@@ -335,7 +349,17 @@ public class PackageListFragment extends Fragment {
             addressBuilder.append(addressLine);
             String addressText = addressBuilder.toString();
             h.address.setText(addressText);
-            h.itemView.setOnClickListener(v -> listener.onItemClick(it));
+            View.OnClickListener clickListener = v -> {
+                int adapterPos = h.getBindingAdapterPosition();
+                if (adapterPos == RecyclerView.NO_POSITION) return;
+                DeliveryInfo target = items.get(adapterPos);
+                listener.onItemClick(target);
+            };
+            h.itemView.setOnClickListener(clickListener);
+            h.routeNumber.setOnClickListener(clickListener);
+            h.orderSn.setOnClickListener(clickListener);
+            h.customer.setOnClickListener(clickListener);
+            h.address.setOnClickListener(clickListener);
 
             attachCopySupport(h.routeNumber, routeText);
             attachCopySupport(h.orderSn, orderText);

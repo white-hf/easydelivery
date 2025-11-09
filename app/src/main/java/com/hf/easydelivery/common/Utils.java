@@ -13,9 +13,12 @@ import android.os.Vibrator;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import android.os.VibratorManager;
@@ -55,16 +58,22 @@ public class Utils {
 
     private static final Pattern LEADING_UNIT_HYPHEN = Pattern.compile("^\\s*(\\w{1,6})\\s*-\\s*(\\d{1,5})\\b");
     private static final Pattern UNIT_PREFIX_PATTERN = Pattern.compile(
-            "^\\s*(?:apt|apartment|unit|suite|ste|rm|room|ph|buzzer|fl|floor|lvl|level|entrance|door|code|bldg|building|#)\\s*[:#-]?\\s*(\\w{1,6})\\s+(\\d{1,5})\\b",
+            "^\\s*(?:apt|apartment|unit|suite|ste|rm|room|ph|buzzer|fl|floor|lvl|level|entrance|door|code|bldg|building|#)\\s*[:#-]?\\s*(\\w{1,8})\\s+(\\d{1,5})\\b",
             Pattern.CASE_INSENSITIVE
     );
     private static final Pattern DOUBLE_NUMBER_PREFIX = Pattern.compile("^\\s*(\\d{1,4})\\s+(\\d{1,5})\\b");
-    private static final Pattern HASH_ONLY_PREFIX = Pattern.compile("^\\s*#\\s*(\\w{1,6})\\b");
+    private static final Pattern HASH_ONLY_PREFIX = Pattern.compile("^\\s*#\\s*(\\w{1,8})\\b");
     private static final Pattern GENERIC_NUMBER_PATTERN = Pattern.compile("\\b(\\d{1,5}[A-Za-z]?)\\b");
     private static final Pattern UNIT_KEYWORD_GLOBAL = Pattern.compile(
-            "(?i)(?:\\b(?:apt|apartment|unit|suite|ste|rm|room|ph|buzzer|fl|floor|lvl|level|entrance|door|code|bldg|building|locker|buzz)\\s*[:#-]?\\s*(\\w{1,6}))"
+            "(?i)(?:\\b(?:apt|apartment|unit|suite|ste|rm|room|ph|buzzer|fl|floor|lvl|level|entrance|door|code|bldg|building|locker|buzz)\\s*[:#-]?\\s*(\\w{1,8}))"
     );
-    private static final Pattern TRAILING_UNIT_PATTERN = Pattern.compile("(?i)(?:#|no\\.?|unit)\\s*(\\w{1,6})\\s*$");
+    private static final Pattern TRAILING_UNIT_PATTERN = Pattern.compile("(?i)(?:#|no\\.?|unit)\\s*(\\w{1,8})\\s*$");
+    private static final Pattern EMBEDDED_UNIT_TOKEN = Pattern.compile("(?i)^(?:apt|apartment|unit|suite|ste|rm|room|fl|floor|lvl|level|locker|buzzer|buzz)[:#-]?\\s*(\\w{1,8})$");
+    private static final Pattern HASHED_UNIT_TOKEN = Pattern.compile("^#\\s*(\\w{1,8})$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern INLINE_HYPHEN_UNIT = Pattern.compile("^(\\d{1,4})-(\\d{1,5})$");
+    private static final Set<String> UNIT_KEYWORDS = new HashSet<>(Arrays.asList(
+            "apt","apartment","unit","suite","ste","rm","room","ph","buzzer","fl","floor","lvl","level","entrance","door","code","bldg","building","locker","buzz"
+    ));
 
 
     public String getTodayString() {
@@ -92,6 +101,9 @@ public class Utils {
         }
         if (apartment.isEmpty()) {
             apartment = heuristicUnitFromNumbers(normalized, streetNumber);
+        }
+        if (apartment.isEmpty()) {
+            apartment = fallbackUnitFromTokens(normalized, streetNumber);
         }
 
         return new AddressInfo(apartment, streetNumber);
@@ -212,6 +224,52 @@ public class Utils {
         if (streetNumber == null || streetNumber.isEmpty()) {
             if (secondVal >= 1000 && firstVal > 0 && firstVal < secondVal) {
                 return first;
+            }
+        }
+
+        return "";
+    }
+
+    private static String fallbackUnitFromTokens(String text, String streetNumber) {
+        if (text == null || text.isEmpty()) return "";
+        String[] tokens = text.split("\\s+");
+
+        for (String token : tokens) {
+            Matcher hyphen = INLINE_HYPHEN_UNIT.matcher(token);
+            if (hyphen.find()) {
+                String candidate = hyphen.group(1);
+                if (!candidate.equalsIgnoreCase(streetNumber)) {
+                    return candidate;
+                }
+            }
+        }
+
+        for (int i = 0; i < tokens.length; i++) {
+            String raw = tokens[i];
+            if (raw == null || raw.isEmpty()) continue;
+
+            Matcher embedded = EMBEDDED_UNIT_TOKEN.matcher(raw);
+            if (embedded.find()) {
+                String candidate = embedded.group(1);
+                if (candidate != null && !candidate.isEmpty() && !candidate.equalsIgnoreCase(streetNumber)) {
+                    return candidate;
+                }
+            }
+
+            Matcher hash = HASHED_UNIT_TOKEN.matcher(raw);
+            if (hash.find()) {
+                String candidate = hash.group(1);
+                if (candidate != null && !candidate.isEmpty() && !candidate.equalsIgnoreCase(streetNumber)) {
+                    return candidate;
+                }
+            }
+
+            String keyword = raw.replaceAll("[^A-Za-z]", "").toLowerCase(Locale.US);
+            if (UNIT_KEYWORDS.contains(keyword) && i + 1 < tokens.length) {
+                String next = tokens[i + 1].replaceAll("[^0-9A-Za-z]", "");
+                if (!next.isEmpty() && !next.equalsIgnoreCase(streetNumber)) {
+                    return next;
+                }
             }
         }
 

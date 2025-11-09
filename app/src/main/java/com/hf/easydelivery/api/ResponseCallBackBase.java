@@ -23,6 +23,7 @@ public class ResponseCallBackBase<T> implements IResponseCallBack<T> {
         if(result instanceof UnAuthorizedException)
         {
             Toast.makeText(ResourceMgr.getInstance().getCtx() , com.hf.easydelivery.R.string.action_need_login , Toast.LENGTH_SHORT).show();
+            ResourceMgr.getInstance().requestLoginRedirect();
         }
         else
         {

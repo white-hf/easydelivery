@@ -9,5 +9,6 @@
     <dimen name="thumbnail_width">120dp</dimen>
     <dimen name="thumbnail_height">120dp</dimen>
     <dimen name="thumbnail_margin">8</dimen>
+    <dimen name="info_pill_margin_bottom_base">56dp</dimen>
 
 </resources>

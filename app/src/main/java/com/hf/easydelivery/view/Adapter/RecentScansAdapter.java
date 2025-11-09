@@ -1,6 +1,13 @@
 package com.hf.easydelivery.view.Adapter;
 
 
+import android.content.Context;
+import android.graphics.Typeface;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.AbsoluteSizeSpan;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -8,6 +15,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.hf.easydelivery.R;
@@ -35,26 +43,45 @@ public class RecentScansAdapter
     public void onBindViewHolder(
             @NonNull ViewHolder holder, int pos) {
         ScanItem it = items.get(pos);
-        holder.tvPackageNo.setText(
-                "包裹：" + (it.getPackageNo() != null ? it.getPackageNo() : "—"));
-        holder.tvWaybillNo.setText("运单：" + it.getWaybillNo());
+        Context context = holder.itemView.getContext();
+        String packageValue = it.getPackageNo() != null ? it.getPackageNo() : "—";
+        holder.tvPackageNo.setText(buildLine(context, "包裹号", packageValue, true));
+        holder.tvWaybillNo.setText(buildLine(context, "运单号", it.getWaybillNo(), false));
 
-        if (it.isScanned()) {
-            if (!it.isUploaded()) {
-                // Scanned but not uploaded: show unsynced icon with warning and yellow background
-                holder.itemView.setBackgroundColor(0xFFFFF59D);
-                holder.ivUnsynced.setImageResource(android.R.drawable.stat_sys_warning);
-                holder.ivUnsynced.setVisibility(View.VISIBLE);
-            } else {
-                // Scanned and uploaded: white background, hide icon
-                holder.itemView.setBackgroundColor(0xFFFFFFFF);
-                holder.ivUnsynced.setVisibility(View.GONE);
-            }
+        if (it.isScanned() && !it.isUploaded()) {
+            holder.cardContainer.setBackgroundResource(R.drawable.bg_scan_item_warning);
+            holder.ivUnsynced.setImageResource(android.R.drawable.stat_sys_warning);
+            holder.ivUnsynced.setVisibility(View.VISIBLE);
         } else {
-            // Not scanned: default style (white bg, no icon)
-            holder.itemView.setBackgroundColor(0xFFFFFFFF);
+            holder.cardContainer.setBackgroundResource(R.drawable.bg_scan_item_normal);
             holder.ivUnsynced.setVisibility(View.GONE);
         }
+    }
+
+    private CharSequence buildLine(Context context, String label, String value, boolean emphasize) {
+        SpannableStringBuilder builder = new SpannableStringBuilder();
+        int labelColor = ContextCompat.getColor(context, R.color.scan_list_label);
+        int valueColor = emphasize
+                ? ContextCompat.getColor(context, R.color.scan_result_accent)
+                : ContextCompat.getColor(context, R.color.scan_list_value);
+
+        int labelStart = builder.length();
+        builder.append(label).append("：");
+        builder.setSpan(new ForegroundColorSpan(labelColor), labelStart, builder.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        builder.setSpan(new AbsoluteSizeSpan(13, true), labelStart, builder.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+        int valueStart = builder.length();
+        builder.append(value != null ? value : "—");
+        builder.setSpan(new ForegroundColorSpan(valueColor), valueStart, builder.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        builder.setSpan(new StyleSpan(Typeface.BOLD), valueStart, builder.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        int valueSizeSp = emphasize ? 20 : 15;
+        builder.setSpan(new AbsoluteSizeSpan(valueSizeSp, true), valueStart, builder.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return builder;
     }
 
     @Override public int getItemCount() {
@@ -64,11 +91,13 @@ public class RecentScansAdapter
     static class ViewHolder extends RecyclerView.ViewHolder {
         TextView tvPackageNo, tvWaybillNo;
         ImageView ivUnsynced;
+        View cardContainer;
         ViewHolder(View v) {
             super(v);
             tvPackageNo  = v.findViewById(R.id.tvItemPackageNo);
             tvWaybillNo  = v.findViewById(R.id.tvItemWaybillNo);
             ivUnsynced = v.findViewById(R.id.ivUnsynced);
+            cardContainer = v.findViewById(R.id.text_container);
         }
     }
 }
