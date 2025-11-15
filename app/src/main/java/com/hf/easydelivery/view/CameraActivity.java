@@ -53,7 +53,9 @@ import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.common.BitmapUtils;
 import com.hf.courierservice.apihelper.FileLog;
+import com.hf.easydelivery.core.DeliveryinfoMgr;
 import com.hf.easydelivery.core.PendingPackagesMgr;
+import com.hf.easydelivery.core.PowerSaverSelector;
 import com.hf.easydelivery.core.SmartLocationManager;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.dao.PackageEntity;
@@ -1549,29 +1551,72 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private void findAndShowNextPackages(DeliveryInfo currentInfo) {
-        List<DeliveryInfo> nextPackages = findNextPackages(currentInfo);
-        if (!nextPackages.isEmpty()) {
-            showNextPackageChooser(nextPackages);
-        } else {
+        // 使用 PowerSaverSelector：同址优先 + 距离补足（+3），一次性在送达后触发
+        if (currentInfo == null) {
             finish();
+            return;
         }
+        DeliveryinfoMgr mgr = ResourceMgr.getInstance().getDeliveryinfoMgr();
+        if (mgr == null) {
+            finish();
+            return;
+        }
+        PowerSaverSelector.Params params = new PowerSaverSelector.Params();
+        params.extraNearCount = 3;       // “同址数量 + 3”
+        params.nearRadiusMeters = 150f;  // 对非同址的软半径；≤0 则不限制
+
+        Location ref = buildLocationFromPackage(currentInfo);
+        if (ref == null) {
+            ref = lastKnownLocation;
+        }
+
+        List<DeliveryInfo> next = new PowerSaverSelector().selectNext(currentInfo, ref, mgr, params);
+        int count = next == null ? 0 : next.size();
+        if (count == 0) {
+            try { FileLog.getInstance().debug(TAG, "findAndShowNextPackages: no candidates, finishing camera flow"); } catch (Throwable ignore) {}
+            finish();
+            return;
+        }
+        if (count == 1) {
+            try { FileLog.getInstance().debug(TAG, "findAndShowNextPackages: single candidate -> auto switch"); } catch (Throwable ignore) {}
+            // 仅一条：直接切换
+            resetForNewPackage(next.get(0));
+            return;
+        }
+        try { FileLog.getInstance().debug(TAG, "findAndShowNextPackages: multiple candidates=" + count + " -> show chooser"); } catch (Throwable ignore) {}
+        // 多条：弹出选择
+        showNextPackageChooser(next);
+    }
+    private List<DeliveryInfo> findNextPackages(DeliveryInfo currentInfo) {
+        if (currentInfo == null) return Collections.emptyList();
+        DeliveryinfoMgr mgr = ResourceMgr.getInstance().getDeliveryinfoMgr();
+        if (mgr == null) return Collections.emptyList();
+        PowerSaverSelector.Params params = new PowerSaverSelector.Params();
+        params.extraNearCount = 3;
+        params.nearRadiusMeters = 150f;
+        Location ref = buildLocationFromPackage(currentInfo);
+        if (ref == null) {
+            ref = lastKnownLocation;
+        }
+        return new PowerSaverSelector().selectNext(currentInfo, ref, mgr, params);
     }
 
-    private List<DeliveryInfo> findNextPackages(DeliveryInfo currentInfo) {
-        if (currentInfo == null || currentInfo.getStreetName() == null || currentInfo.getStreetName().isEmpty() || currentInfo.getCivilNumber() == null) {
-            return Collections.emptyList();
+    @Nullable
+    private Location buildLocationFromPackage(@Nullable DeliveryInfo info) {
+        if (info == null) return null;
+        try {
+            double lat = info.getLatitude();
+            double lng = info.getLongitude();
+            if (Math.abs(lat) < 1e-6 && Math.abs(lng) < 1e-6) {
+                return null;
+            }
+            Location tmp = new Location("pkg");
+            tmp.setLatitude(lat);
+            tmp.setLongitude(lng);
+            return tmp;
+        } catch (Throwable ignore) {
+            return null;
         }
-        List<DeliveryInfo> allDeliveries = ResourceMgr.getInstance().getDeliveryinfoMgr().getListDeliveryInfo();
-        if (allDeliveries == null) {
-            return Collections.emptyList();
-        }
-
-        return allDeliveries.stream()
-                .filter(info -> info != null &&
-                        !info.getOrderId().equals(currentInfo.getOrderId()) &&
-                        currentInfo.getStreetName().equals(info.getStreetName()) &&
-                        Objects.equals(currentInfo.getCivilNumber(), info.getCivilNumber()))
-                .collect(Collectors.toList());
     }
 
     private void showNextPackageChooser(List<DeliveryInfo> items) {

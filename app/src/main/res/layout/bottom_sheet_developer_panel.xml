@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        tools:context=".view.DeveloperPanelBottomSheet">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Developer Panel"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6" />
+
+            <Button
+                android:id="@+id/btn_reset_default"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Reset" />
+        </LinearLayout>
+
+        <!-- Profile Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Profile"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+
+        <RadioGroup
+            android:id="@+id/rg_profile"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp">
+
+            <RadioButton
+                android:id="@+id/rb_profile_powersaver"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PowerSaver" />
+
+            <RadioButton
+                android:id="@+id/rb_profile_advanced"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:text="Advanced" />
+        </RadioGroup>
+
+        <Button
+            android:id="@+id/btn_apply_profile"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:text="Apply Profile" />
+
+        <!-- Proximity Config Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Proximity Config"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="4">
+
+            <TextView android:text="enterRadiusM" android:layout_marginEnd="8dp"/>
+            <EditText android:id="@+id/et_enter_radius" android:inputType="numberDecimal" android:layout_width="80dp"/>
+            <TextView android:text="exitRadiusM" android:layout_marginStart="16dp" android:layout_marginEnd="8dp"/>
+            <EditText android:id="@+id/et_exit_radius" android:inputType="numberDecimal" android:layout_width="80dp"/>
+
+            <TextView android:text="throttleDrive (ms)" android:layout_marginEnd="8dp"/>
+            <EditText android:id="@+id/et_throttle_drive" android:inputType="number"/>
+            <TextView android:text="throttleOnFoot (ms)" android:layout_marginStart="16dp" android:layout_marginEnd="8dp"/>
+            <EditText android:id="@+id/et_throttle_foot" android:inputType="number"/>
+
+        </GridLayout>
+        <Button
+            android:id="@+id/btn_apply_proximity"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:text="Apply Proximity" />
+
+        <!-- Follow Config Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Follow Config"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="2">
+            <TextView android:text="stdIntervalMs"/>
+            <EditText android:id="@+id/et_follow_std_interval" android:inputType="number"/>
+            <TextView android:text="stdDistM"/>
+            <EditText android:id="@+id/et_follow_std_dist" android:inputType="numberDecimal"/>
+            <TextView android:text="stdHeadingDeg"/>
+            <EditText android:id="@+id/et_follow_std_heading" android:inputType="numberDecimal"/>
+        </GridLayout>
+        <Button
+            android:id="@+id/btn_apply_follow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:text="Apply Follow" />
+
+        <!-- Zoom Config Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Zoom Config"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="2">
+            <TextView android:text="closeMeters"/>
+            <EditText android:id="@+id/et_zoom_close_meters" android:inputType="numberDecimal"/>
+            <TextView android:text="closeZoom"/>
+            <EditText android:id="@+id/et_zoom_close_zoom" android:inputType="numberDecimal"/>
+            <TextView android:text="approachMeters"/>
+            <EditText android:id="@+id/et_zoom_approach_meters" android:inputType="numberDecimal"/>
+            <TextView android:text="approachZoom"/>
+            <EditText android:id="@+id/et_zoom_approach_zoom" android:inputType="numberDecimal"/>
+        </GridLayout>
+        <Button
+            android:id="@+id/btn_apply_zoom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:text="Apply Zoom" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Experiments"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_inside_boost"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Enable inside-zone GPS boost" />
+
+    </LinearLayout>
+</ScrollView>

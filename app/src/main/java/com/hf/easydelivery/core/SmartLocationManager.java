@@ -1,15 +1,15 @@
 /**
  * SmartLocationManager 主要逻辑（兼容原有设计，新增自适应提频能力）：
  * 1. 连续/高精度定位：根据司机运动状态（静止、步行、慢车、快车）动态调整定位间隔与精度；
- * 2. Burst 模式：当车辆靠近未完成派送包裹时，自动进入高频定位模式，以保证精确度，持续一定时长后恢复常规定位；
+ * 2. Burst 模式：由上层（如 ProximityCoordinator）在靠近包裹或需要更高精度时调用 requestBoost(...) 进入高频定位窗口，持续一定时长后恢复常规定位；
  * 3. 位置平滑：使用指数平滑算法减少 GPS 抖动，提升定位稳定性；
  * 4. 弱信号检测：当连续多次定位精度差（超出阈值）时，触发 onWeakSignal 回调提醒；
  * 5. 省电策略：静止时切换到 Significant Location Change 更新模式，避免持续高耗电。
  *
  * 【新增 / 扩展】
  * 6. 自适应临时提频（Boost）：当检测到“跳跃风险”或地图侧报告“边缘风险”时，
- *    通过 requestBoost(...) 进入临时高频定位窗口（例如 20s），并在窗口期内保持高频；
- *    与原有靠近包裹触发的 Burst 逻辑兼容，统一使用 inBurstMode 标志与同一套调度；
+ *    通过 requestBoost(...) 进入临时高频定位窗口（例如 20s），窗口期内保持高频；
+ *    使用统一的 inBurstMode 标志与调度，作为所有临时提频（含外部触发）的一致实现；
  * 7. 跳跃风险检测：两次定位点跨度较大且处于快速移动（如 >30m 且 >10m/s）会自动触发 Boost，
  *    以避免地图相机“到边再回中”的突兀；
  * 8. 边缘风险接口：地图侧可在蓝点离目标中心过远且速度较大时调用
@@ -22,10 +22,11 @@
  *   不调用时行为与旧版一致；
  * - inBurstMode 仍作为统一高频开关，新增 Boost 与原有靠近包裹的 Burst 共用同一套进入/退出与计时调度；
  * - updateLocationParametersForState() 会在进入/退出 Boost/Burst 或运动状态变更时自动重新申请定位参数。
+ * - 业务解耦：移除包裹查询触发与里程统计的直接调用，上层可通过协调器订阅定位事件并决定是否 Boost/统计。
  *
  * 建议用法：
  * - 地图渲染层可结合 200–300ms 小步动画与短期速度预测实现视觉平滑，新定位点到来用于“微校正”；
- * - 当检测到蓝点朝屏幕边缘偏离且速度较大时调用 requestBoost(20000)；靠近包裹范围内由本类自动触发 Burst。
+ * - 当检测到蓝点朝屏幕边缘偏离且速度较大时调用 requestBoost(20000)；靠近包裹范围内由上层协调器触发 requestBoost(...)，本类统一执行高频窗口。
  */
 
 package com.hf.easydelivery.core;
@@ -41,8 +42,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+
 import androidx.core.app.ActivityCompat;
-import android.util.Pair;
 
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -63,8 +64,6 @@ import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 import com.hf.courierservice.apihelper.FileLog;
-import com.hf.easydelivery.ResourceMgr;
-import com.hf.easydelivery.dao.DeliveryInfo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -115,6 +114,10 @@ public class SmartLocationManager {
 
     // Keep a reference to remove only our burst runnable, not all callbacks
     private Runnable burstModeRunnableRef;
+
+    // Cache last requested intervals to avoid redundant re-requests
+    private long lastRequestedIntervalMs = -1L;
+    private long lastRequestedMinIntervalMs = -1L;
 
     // Low-pass for heading smoothing (0..1). Larger = quicker but noisier
     private static final float HEADING_ALPHA = 0.2f;
@@ -169,6 +172,9 @@ public class SmartLocationManager {
      * @param speedMps     当前速度 m/s
      */
     public void requestBoostIfEdgeRisk(float offsetMeters, float speedMps) {
+        long now = System.currentTimeMillis();
+        // 节流：两次提频之间至少间隔 BOOST_MIN_INTERVAL_MS
+        if (now - lastBoostChangeMs < BOOST_MIN_INTERVAL_MS) return;
         if (offsetMeters > 25f && speedMps > 5f) {
             requestBoost(20_000L);
         }
@@ -294,7 +300,6 @@ public class SmartLocationManager {
         if (listener != null) {
             listener.onLocationUpdate(outputLoc, currentState);
         }
-        DrivingDistanceTracker.getInstance(context).onLocationUpdate(outputLoc, currentState);
 
         if (newLocation.getAccuracy() > WEAK_SIGNAL_THRESHOLD) {
             weakSignalCount++;
@@ -308,19 +313,18 @@ public class SmartLocationManager {
             weakSignalCount = 0;
         }
 
-        // If state changed or in burst mode, update location parameters
+        // 根据状态/提频情况调整定位参数
         if (stateChanged || inBurstMode) {
             updateLocationParametersForState();
         }
 
-        // If state changed to non-stationary, exit burst mode
-        if (stateChanged && currentState != MovementState.STATIONARY) {
+        // 仅当变为静止时自动退出高频窗口；行驶中保持高频以保障平滑
+        if (stateChanged && currentState == MovementState.STATIONARY) {
             exitBurstMode();
         }
 
-        if (lastSmoothedLocation != null) {
-            checkNearestPackageDistanceForBurst();
-        }
+        this.forwardToDrivingDistanceTracker(outputLoc , currentState);
+
     }
 
     private boolean updateMovementState() {
@@ -350,8 +354,8 @@ public class SmartLocationManager {
     private void enterBurstMode(long durationMs) {
         long now = System.currentTimeMillis();
         inBurstMode = true;
-        boostHoldUntilMs = Math.max(boostHoldUntilMs, now + Math.max(1_000L, durationMs));
         lastBoostChangeMs = now;
+        boostHoldUntilMs = Math.max(boostHoldUntilMs, now + Math.max(1_000L, durationMs));
         updateLocationParametersForState();
         scheduleBurstEnd();
     }
@@ -389,16 +393,29 @@ public class SmartLocationManager {
             handler.removeCallbacks(burstModeRunnableRef);
             burstModeRunnableRef = null;
         }
+        lastRequestedIntervalMs = -1L; // force reconfigure
+        lastRequestedMinIntervalMs = -1L;
         updateLocationParametersForState();
     }
 
     private void updateLocationParametersForState() {
         if (currentState == MovementState.STATIONARY && !inBurstMode) {
+            // 静止：改为低功耗/显著变化模式
             switchToSignificantChanges();
+            lastRequestedIntervalMs = -1L; // unknown for PASSIVE; force reconfigure next time
+            lastRequestedMinIntervalMs = -1L;
             return;
         }
         long interval = inBurstMode ? getBurstModeInterval() : getRecommendedUpdateInterval();
         long minInterval = inBurstMode ? getBurstModeInterval() : getMinUpdateInterval();
+
+        // 若参数未变化，避免重复调用 requestLocationUpdates 以省电
+        if (interval == lastRequestedIntervalMs && minInterval == lastRequestedMinIntervalMs) {
+            return;
+        }
+        lastRequestedIntervalMs = interval;
+        lastRequestedMinIntervalMs = minInterval;
+
         if (fusedLocationClient != null && locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
         }
@@ -440,22 +457,16 @@ public class SmartLocationManager {
         return 1000; // 1 second during burst mode
     }
 
-    private void checkNearestPackageDistanceForBurst() {
-        if (lastSmoothedLocation == null) return;
-        Pair<DeliveryInfo, Double> nearest = ResourceMgr.getInstance()
-                .getDeliveryinfoMgr()
-                .findNearestPackage(lastSmoothedLocation, lastSmoothedLocation, 200);
-        if (!inBurstMode && nearest.second != null && nearest.second < 200 && speed < 2.22f) {
-            enterBurstMode();
-        }
-    }
 
     public void stopLocationUpdates() {
         if (fusedLocationClient != null && locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
         }
         stopHeadingUpdates();
-        handler.removeCallbacksAndMessages(null);
+        if (burstModeRunnableRef != null) {
+            handler.removeCallbacks(burstModeRunnableRef);
+            burstModeRunnableRef = null;
+        }
     }
 
     public Location getLastLocation() {
@@ -684,6 +695,21 @@ public class SmartLocationManager {
         predicted.setBearing(heading);
         predicted.setSpeed(speedMps);
         return predicted;
+    }
+
+    /**
+     * Forward location to DrivingDistanceTracker (persisted odometer).
+     * Direct call (no reflection).
+     */
+    private void forwardToDrivingDistanceTracker(Location loc, MovementState state) {
+        if (loc == null) return;
+        try {
+            DrivingDistanceTracker
+                    .getInstance(context.getApplicationContext())
+                    .onLocationUpdate(loc, state);
+        } catch (Throwable ignore) {
+            // 某些构建变体若无 tracker，可安全忽略
+        }
     }
 
 }

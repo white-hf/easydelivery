@@ -31,6 +31,7 @@ public class MapViewModel extends ViewModel implements Subscriber {
     private final MutableLiveData<Event<String>> toastMessageLive = new MutableLiveData<>();
     private final MutableLiveData<Event<String>> dialogMessageLive = new MutableLiveData<>();
     private final MutableLiveData<Event<Boolean>> uploadSuccessHapticLive = new MutableLiveData<>();
+    private final MutableLiveData<Event<DeliveryInfo>> deliveryCompletedLive = new MutableLiveData<>();
 
     // 内部状态计数
     private int deliveredCount = 0;
@@ -84,6 +85,10 @@ public class MapViewModel extends ViewModel implements Subscriber {
 
     public LiveData<Event<Boolean>> getUploadSuccessHapticLive() {
         return uploadSuccessHapticLive;
+    }
+
+    public LiveData<Event<DeliveryInfo>> getDeliveryCompletedLive() {
+        return deliveryCompletedLive;
     }
     // endregion
 
@@ -149,8 +154,10 @@ public class MapViewModel extends ViewModel implements Subscriber {
                 toastMessageLive.setValue(new Event<>("包裹数据保存成功"));
                 // 从内存列表移除包裹，并更新 UI
                 DeliveryInfo info = deliveryinfoMgr.get(packageEntity.orderId);
-                if (info != null)
+                if (info != null) {
                     deliveryinfoMgr.getListDeliveryInfo().remove(info);
+                    deliveryCompletedLive.setValue(new Event<>(info));
+                }
 
                 refreshMapItemsFromRepo();
                 updateStatusCounts(0);

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"  android:id="@+id/list_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_parcel_list"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="8dp"/>
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/btn_search"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:src="@drawable/ic_search"
+        app:backgroundTint="@color/colorPrimary"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="18dp"/>
+
+</FrameLayout>

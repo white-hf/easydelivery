@@ -141,7 +141,7 @@ public class PendingPackagesMgr implements Subscriber {
                 Context ctx = ResourceMgr.getInstance().getCtx();
                 if (ctx != null) {
                     ResourceMgr.getInstance().getMainHandler().post(() ->
-                            Toast.makeText(ctx, "包裹数据保存失败，请稍后重试", Toast.LENGTH_SHORT).show());
+                            Toast.makeText(ctx, "包裹数据保存失败，请稍后重试", Toast.LENGTH_LONG).show());
                 }
             }
         });

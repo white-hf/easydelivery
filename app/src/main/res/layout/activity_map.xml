@@ -183,11 +183,12 @@
         android:id="@+id/btn_resume_follow"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
+        android:layout_gravity="center"
         android:layout_marginStart="16dp"
         android:layout_marginBottom="24dp"
         android:text="重新跟随"
         android:visibility="gone"
+
         style="@style/Widget.MaterialComponents.Button" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

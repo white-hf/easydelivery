@@ -34,6 +34,12 @@ public class MeFragment extends Fragment {
         });
         Button shareLogBtn = root.findViewById(R.id.btn_share_log);
         shareLogBtn.setOnClickListener(v -> shareLogFile());
+
+        Button devSettingsBtn = root.findViewById(R.id.btn_dev_settings);
+        devSettingsBtn.setOnClickListener(v -> {
+            DeveloperPanelBottomSheet.newInstance().show(getChildFragmentManager(), "DeveloperPanelBottomSheet");
+        });
+
         return root;
     }
 

@@ -70,14 +70,6 @@ public class MapHostFragment extends Fragment {
 
         mapViewModel = new ViewModelProvider(requireActivity()).get(MapViewModel.class);
 
-        // 默认加载 MapInnerFragment
-        if (savedInstanceState == null) {
-            getChildFragmentManager()
-                    .beginTransaction()
-                    .add(R.id.home_container, new MapInnerFragment(), "map")
-                    .commitNow();
-        }
-
         fabSwitchView = root.findViewById(R.id.fabSwitchView);
 
 // 初始化两个子 Fragment，但仅显示地图 Fragment
@@ -89,7 +81,7 @@ public class MapHostFragment extends Fragment {
             mapFrag = new MapInnerFragment();
             fm.beginTransaction()
                     .add(R.id.home_container, mapFrag, "map")
-                    .commit();
+                    .commitNow();
         }
 
         fabSwitchView.setOnClickListener(v -> {

@@ -1,0 +1,5 @@
+<!-- ic_switch_map_list.xml -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/ic_list" android:state_selected="true"/>
+    <item android:drawable="@drawable/ic_map"/>
+</selector>
