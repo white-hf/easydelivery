@@ -316,6 +316,10 @@ public class InfoPillProximityController {
             state.lastNearestDist = 0f;
         }
         state.suppressUntilMs = 0L;
+        state.anchorLat = null;
+        state.anchorLon = null;
+        DeliveryFocusManager.RegionConfig cfg = focusMgr.getRegionConfig();
+        state.lastTransitAnchorMeters = Math.max(0d, state.odometerMeters - Math.max(1d, cfg.clusterHopMeters));
         logD("onDeliveryCompleted: region=INSIDE hintUntil=" + state.completionHintUntilMs);
     }
 
@@ -492,6 +496,7 @@ public class InfoPillProximityController {
 
             DeliveryFocusManager.RegionConfig cfg = focusMgr.getRegionConfig();
             RegionState derived = deriveRegionState(s.lastNearestDist, cfg);
+            derived = overrideRegionStateAfterCompletion(derived, s, now);
             updateRegionState(s, derived);
 
             switch (s.regionState) {
@@ -565,6 +570,15 @@ public class InfoPillProximityController {
         if (distanceMeters > cfg.clusterRadiusMeters) return RegionState.IN_TRANSIT;
         if (distanceMeters > cfg.showRadiusMeters) return RegionState.APPROACH;
         return RegionState.INSIDE;
+    }
+
+    private RegionState overrideRegionStateAfterCompletion(@NonNull RegionState derived,
+                                                           @NonNull InternalState s,
+                                                           long nowMs) {
+        if (derived == RegionState.IN_TRANSIT && nowMs < s.completionHintUntilMs) {
+            return RegionState.INSIDE;
+        }
+        return derived;
     }
 
     private void updateRegionState(@NonNull InternalState s, @NonNull RegionState newState) {

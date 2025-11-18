@@ -4,8 +4,10 @@ import android.content.Context;
 import android.util.Log;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 import android.content.ContentResolver;
@@ -13,6 +15,7 @@ import android.content.ContentValues;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import java.io.OutputStream;
 import java.io.BufferedOutputStream;
@@ -34,6 +37,7 @@ public class FileLog {
     public final static String LOG_DISPLAY_NAME = "easydelivery.log"; // filename shown in Downloads
     private static final String PREFS_NAME = "filelog_prefs";
     private static final String PREF_KEY_URI = "downloads_log_uri";
+    private static final long MAX_LOG_BYTES = 10 * 1024 * 1024L; // 10 MB
 
     private static final String DEFAULT_TAG = "FileLog";
 
@@ -44,6 +48,7 @@ public class FileLog {
     private Uri mLogUri;
     private OutputStream mOs; // append output stream
     private Writer mWriter;
+    private long currentSizeBytes = 0L;
 
     // Legacy fallback
     File mFile;
@@ -91,6 +96,7 @@ public class FileLog {
                         mOs = appCtx.getContentResolver().openOutputStream(mLogUri, "wa");
                         if (mOs != null) {
                             mWriter = new BufferedWriter(new OutputStreamWriter(new BufferedOutputStream(mOs)));
+                            currentSizeBytes = queryMediaStoreSize();
                             return true;
                         }
                     } catch (Exception e) {
@@ -105,6 +111,7 @@ public class FileLog {
             if (!mFile.exists()) mFile.createNewFile();
             mRaf = new RandomAccessFile(mFile, "rw");
             mRaf.seek(mFile.length());
+            currentSizeBytes = mFile.length();
             return true;
         } catch (Exception e) {
             Log.e("FileLog", "Failed to init log file", e);
@@ -154,12 +161,66 @@ public class FileLog {
 
     private void writeLine(String line) throws IOException {
         if (line == null) return;
+        byte[] data = line.getBytes(StandardCharsets.UTF_8);
+        rotateIfNeeded(data.length);
         if (mWriter != null) {
             mWriter.write(line);
             mWriter.flush();
         } else if (mRaf != null) {
-            mRaf.write(line.getBytes());
+            mRaf.write(data);
         }
+        currentSizeBytes += data.length;
+    }
+
+    private long queryMediaStoreSize() {
+        if (mLogUri == null || appCtx == null) return 0L;
+        try (android.database.Cursor c = appCtx.getContentResolver().query(mLogUri,
+                new String[]{MediaStore.MediaColumns.SIZE}, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                return c.getLong(0);
+            }
+        } catch (Exception ignore) { }
+        return 0L;
+    }
+
+    private void rotateIfNeeded(int nextBytes) throws IOException {
+        if (MAX_LOG_BYTES <= 0) return;
+        if (currentSizeBytes + nextBytes <= MAX_LOG_BYTES) return;
+        if (mWriter != null && mLogUri != null) {
+            resetMediaStoreStream();
+        } else if (mRaf != null) {
+            mRaf.setLength(0);
+            mRaf.seek(0);
+            currentSizeBytes = 0L;
+        }
+    }
+
+    private void resetMediaStoreStream() throws IOException {
+        closeCurrentWriter();
+        if (appCtx == null || mLogUri == null) return;
+        ParcelFileDescriptor pfd = appCtx.getContentResolver().openFileDescriptor(mLogUri, "rw");
+        if (pfd == null) return;
+        FileOutputStream fos = new ParcelFileDescriptor.AutoCloseOutputStream(pfd);
+        fos.getChannel().truncate(0);
+        fos.getChannel().position(0);
+        mOs = fos;
+        mWriter = new BufferedWriter(new OutputStreamWriter(new BufferedOutputStream(mOs)));
+        currentSizeBytes = 0L;
+    }
+
+    private void closeCurrentWriter() {
+        try {
+            if (mWriter != null) {
+                mWriter.close();
+            }
+        } catch (IOException ignore) {}
+        try {
+            if (mOs != null) {
+                mOs.close();
+            }
+        } catch (IOException ignore) {}
+        mWriter = null;
+        mOs = null;
     }
 
     /**

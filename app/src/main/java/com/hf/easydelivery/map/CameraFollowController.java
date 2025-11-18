@@ -14,6 +14,8 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.maps.android.SphericalUtil;
+import com.google.maps.android.SphericalUtil;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.map.config.ProfileManager;
 import com.hf.easydelivery.core.SmartLocationManager;
@@ -42,7 +44,8 @@ public class CameraFollowController {
     private void logD(String msg){ try{ logger.debug(TAG, msg);}catch(Throwable ignore){} }
 
     private static final float DRIVING_MIN_ZOOM = 17f;
-    private static final float DRIVING_TARGET_SCREEN_FRACTION_Y = 0.75f;
+    private static final float DRIVING_TARGET_SCREEN_FRACTION_Y = 0.70f;
+    private static final float NAVIGATION_TARGET_SCREEN_FRACTION_Y = 0.88f;
     private static final float DEFAULT_TILT = 45f;
     private static final float EDGE_FORCE_METERS = 25f;
 
@@ -245,16 +248,22 @@ public class CameraFollowController {
     private long lastCameraUpdateUptime = 0L;
     @Nullable
     private LatLng lastCameraTargetLatLng = null;
+    @Nullable
+    private LatLng lastLocationLatLng = null;
     private float lastCameraBearing = Float.NaN;
     private float userPreferredBearing = Float.NaN;
     private boolean capturingUserBearing = false;
     private final float[] distanceResults = new float[1];
+    private boolean navigationModeEnabled = false;
 
     // --- Phase 3: jitter gating & low-speed north-up fallback ---
     private static final float MIN_BEARING_DELTA_DEG = 2f;   // skip tiny bearing changes
     private static final float MIN_PIXEL_DELTA = 2f;         // skip tiny pixel drifts
     private static final long LOW_SPEED_LOCK_MS = 5000L;     // low-speed sustained before locking north-up
     private static final float LOW_SPEED_MPS = 2.5f;         // ~9 km/h
+    private static final float DRIVING_ANCHOR_Y_RATIO = 0.68f;
+    private static final float NAVIGATION_ANCHOR_Y_RATIO = 0.78f;
+    private static final float NAVIGATION_MIN_TILT = 60f;
     private long lowSpeedStartUptime = 0L;
     private boolean isLowSpeed(@NonNull Location location) {
         return location.getSpeed() <= LOW_SPEED_MPS;
@@ -267,6 +276,13 @@ public class CameraFollowController {
 
     public void setSmartLocationManager(@Nullable SmartLocationManager manager) {
         this.smartLocationManager = manager;
+    }
+
+    public void setNavigationModeEnabled(boolean enabled) {
+        navigationModeEnabled = enabled;
+        if (enabled) {
+            pausedByUser = false;
+        }
     }
 
     public void beginBearingCapture() {
@@ -360,16 +376,23 @@ public class CameraFollowController {
         logD("follow() enter force="+force+", auto="+autoFollowEnabled+", interacting="+isUserInteracting+", prefZoom="+preferredFollowZoom);
         if (SystemClock.uptimeMillis() < suppressFollowUntilMs) return true;
 
-        // If user has paused auto-follow, ignore unless forced
-        if (pausedByUser && !force) {
+        boolean navMode = navigationModeEnabled;
+        if (navMode) {
+            autoFollowEnabled = true;
+            isUserInteracting = false;
+            force = force || !hasCenteredOnUser;
+        }
+
+        // If user has paused auto-follow, ignore unless forced or navigation mode is on
+        if (pausedByUser && !force && !navMode) {
             logD("follow() blocked: pausedByUser=true and not forced");
             return false;
         }
 
-        boolean driving = isDrivingState(state);
-        boolean lowSpeedInside = insideDeliveryZone && (state == SmartLocationManager.MovementState.WALKING
+        boolean driving = navMode || isDrivingState(state);
+        boolean lowSpeedInside = navMode || (insideDeliveryZone && (state == SmartLocationManager.MovementState.WALKING
                 || state == SmartLocationManager.MovementState.SLOW_DRIVING
-                || state == SmartLocationManager.MovementState.STATIONARY);
+                || state == SmartLocationManager.MovementState.STATIONARY));
         if (lowSpeedInside && autoFollowEnabled && !force) {
             float offsetMeters = estimateEdgeOffsetMeters(location);
             if (offsetMeters > EDGE_FORCE_METERS) {
@@ -386,10 +409,12 @@ public class CameraFollowController {
 
         if (!allowCameraMove) { logD("follow() blocked: allowCameraMove=false"); return false; }
         if (!canUpdateCamera && !force) { logD("follow() blocked: canUpdateCamera=false & not forced"); return false; }
-        if (!driving && !lowSpeedInside && !force) { logD("follow() blocked: not driving/inside and not forced"); return false; }
+        if (!navMode && !driving && !lowSpeedInside && !force) { logD("follow() blocked: not driving/inside and not forced"); return false; }
 
         CameraPosition targetCamera;
-        if (lowSpeedInside) {
+        if (navMode) {
+            targetCamera = buildDrivingCamera(location, preferredFollowZoom);
+        } else if (lowSpeedInside) {
             targetCamera = buildCenteredCamera(location);
         } else if (driving) {
             targetCamera = buildDrivingCamera(location, preferredFollowZoom);
@@ -431,6 +456,7 @@ public class CameraFollowController {
         lastCameraBearing = targetCamera.bearing;
         hasCenteredOnUser = true;
 
+        lastLocationLatLng = new LatLng(location.getLatitude(), location.getLongitude());
         if (smartLocationManager != null && driving) {
             float offset = estimateEdgeOffsetMeters(location);
             logD("edgeBoost offsetM="+offset+", speed="+location.getSpeed());
@@ -450,24 +476,13 @@ public class CameraFollowController {
     private CameraPosition buildDrivingCamera(@NonNull Location location, float preferredFollowZoom) {
         LatLng driverLatLng = new LatLng(location.getLatitude(), location.getLongitude());
         CameraPosition current = googleMap.getCameraPosition();
+        float bearing = resolveBearing(location, current);
+        double lookAheadMeters = navigationModeEnabled ? 80d : 45d;
         LatLng targetLatLng = driverLatLng;
-
-        if (mapView.getWidth() > 0 && mapView.getHeight() > 0) {
-            try {
-                Point point = googleMap.getProjection().toScreenLocation(driverLatLng);
-                int width = mapView.getWidth();
-                int height = mapView.getHeight();
-                int targetX = width / 2;
-                int targetY = (int) (height * DRIVING_TARGET_SCREEN_FRACTION_Y);
-                int dx = point.x - targetX;
-                int dy = point.y - targetY;
-                Point newCenter = new Point(width / 2 + dx, height / 2 + dy);
-                newCenter.x = Math.max(0, Math.min(width, newCenter.x));
-                newCenter.y = Math.max(0, Math.min(height, newCenter.y));
-                targetLatLng = googleMap.getProjection().fromScreenLocation(newCenter);
-            } catch (Exception ignore) {
-                targetLatLng = driverLatLng;
-            }
+        try {
+            targetLatLng = SphericalUtil.computeOffset(driverLatLng, lookAheadMeters, bearing);
+        } catch (Exception ignore) {
+            targetLatLng = driverLatLng;
         }
 
         float zoom = Math.max(preferredFollowZoom, DRIVING_MIN_ZOOM);
@@ -475,36 +490,26 @@ public class CameraFollowController {
         // --- Phase 3: low-speed north-up fallback bookkeeping ---
         boolean low = isLowSpeed(location);
         long nowUp = SystemClock.uptimeMillis();
-        if (low) {
+        if (low && !navigationModeEnabled) {
             if (lowSpeedStartUptime == 0L) lowSpeedStartUptime = nowUp;
         } else {
             lowSpeedStartUptime = 0L;
         }
 
         float tilt;
-        float bearing;
-        if (low && (lowSpeedStartUptime > 0L) && (nowUp - lowSpeedStartUptime >= LOW_SPEED_LOCK_MS)) {
+
+        boolean lockNorthUp = low && (lowSpeedStartUptime > 0L) && (nowUp - lowSpeedStartUptime >= LOW_SPEED_LOCK_MS) && !navigationModeEnabled;
+        if (lockNorthUp) {
             // Low-speed sustained: prefer north-up / minimal tilt to stabilize local browsing
             tilt = Math.min(current.tilt, 15f);
             bearing = Float.isNaN(userPreferredBearing) ? current.bearing : userPreferredBearing;
         } else {
-            tilt = current.tilt < DEFAULT_TILT ? DEFAULT_TILT : current.tilt;
-            if (!Float.isNaN(userPreferredBearing)) {
-                bearing = userPreferredBearing;
-            } else if (location.hasBearing() && location.getSpeed() > 0.5f) {
-                bearing = location.getBearing();
-            } else if (smartLocationManager != null) {
-                float heading = smartLocationManager.getCurrentHeading();
-                bearing = Float.isNaN(heading) ? current.bearing : heading;
-            } else {
-                bearing = current.bearing;
-            }
+            float minTilt = navigationModeEnabled ? NAVIGATION_MIN_TILT : DEFAULT_TILT;
+            tilt = current.tilt < minTilt ? minTilt : current.tilt;
+            bearing = resolveBearing(location, current);
         }
 
-        bearing = normalizeBearing(bearing);
-
-        logD("buildDrivingCamera zoom="+Math.max(preferredFollowZoom, DRIVING_MIN_ZOOM)+", tilt="+ (current.tilt < DEFAULT_TILT ? DEFAULT_TILT : current.tilt)
-                + ", bearingSrc=" + ( !Float.isNaN(userPreferredBearing) ? "user" : (location.hasBearing() && location.getSpeed()>0.5f ? "loc" : (smartLocationManager!=null ? "sensor" : "camera")) ) );
+        logD("buildDrivingCamera nav=" + navigationModeEnabled + " lookAhead=" + lookAheadMeters + "m target=" + targetLatLng.latitude + "," + targetLatLng.longitude + " bearing=" + bearing + " tilt=" + tilt);
 
         return new CameraPosition.Builder(current)
                 .target(targetLatLng)
@@ -583,7 +588,8 @@ public class CameraFollowController {
             Point point = googleMap.getProjection().toScreenLocation(latLng);
             int width = mapView.getWidth();
             int height = mapView.getHeight();
-            Point targetPoint = new Point(width / 2, (int) (height * DRIVING_TARGET_SCREEN_FRACTION_Y));
+            float fraction = navigationModeEnabled ? NAVIGATION_TARGET_SCREEN_FRACTION_Y : DRIVING_TARGET_SCREEN_FRACTION_Y;
+            Point targetPoint = new Point(width / 2, (int) (height * fraction));
             float dx = point.x - targetPoint.x;
             float dy = point.y - targetPoint.y;
             float pixelDistance = (float) Math.hypot(dx, dy);
@@ -610,6 +616,31 @@ public class CameraFollowController {
         float normalized = bearing % 360f;
         if (normalized < 0f) normalized += 360f;
         return normalized;
+    }
+
+    private float resolveBearing(@NonNull Location location, @NonNull CameraPosition current) {
+        if (!Float.isNaN(userPreferredBearing)) {
+            return userPreferredBearing;
+        }
+        if (location.hasBearing() && location.getSpeed() > 0.5f) {
+            return normalizeBearing(location.getBearing());
+        }
+        if (lastLocationLatLng != null) {
+            double heading = SphericalUtil.computeHeading(lastLocationLatLng, new LatLng(location.getLatitude(), location.getLongitude()));
+            if (!Double.isNaN(heading)) {
+                return normalizeBearing((float) heading);
+            }
+        }
+        if (smartLocationManager != null) {
+            float heading = smartLocationManager.getCurrentHeading();
+            if (!Float.isNaN(heading)) {
+                return normalizeBearing(heading);
+            }
+        }
+        if (!Float.isNaN(lastCameraBearing)) {
+            return normalizeBearing(lastCameraBearing);
+        }
+        return normalizeBearing(current.bearing);
     }
 
     /** Phase 3 convenience: apply unified focus decision to camera. */

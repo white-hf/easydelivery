@@ -14,6 +14,7 @@ import android.os.VibratorManager;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -26,6 +27,7 @@ import android.os.SystemClock;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
@@ -47,7 +49,6 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.button.MaterialButton;
 import com.google.maps.android.clustering.ClusterManager;
 import com.hf.courierservice.apihelper.FileLog;
@@ -104,7 +105,6 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     private LatLng savedPosition;
     private MaterialToolbar mToolbar;
     private TextView statusSummaryText;
-    private FloatingActionButton btnToggle;
     private ProgressBar progressMap;
     private View infoPill;
     private View collapsedInfoPill;
@@ -175,12 +175,11 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     private boolean infoPillCollapsed = false;
     private int infoPillBaseBottomMarginPx = 0;
     private int lastSystemBottomInset = 0;
+    private boolean navigationModeEnabled = false;
 
-    // --- Developer panel easter egg (hidden for normal users) ---
-    private static final int DEV_TAP_REQUIRED = 5;
-    private static final long DEV_TAP_WINDOW_MS = 2000L; // 2s
-    private int devTapCount = 0;
-    private long devTapWindowStart = 0L;
+    // --- Developer panel shortcut (double-tap toolbar) ---
+    private static final long DEV_DOUBLE_TAP_WINDOW_MS = 450L;
+    private long lastToolbarTapMs = 0L;
 
     // ===== Top-3 主案：Fragment 侧轻量采样/抑制配置 =====
     // 远距降采样：当最近目标很远时，降低 Proximity 评估频率
@@ -229,7 +228,7 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
 
         // 初始化 ViewModel
-        mapViewModel = new ViewModelProvider(this).get(MapViewModel.class);
+        mapViewModel = new ViewModelProvider(requireActivity()).get(MapViewModel.class);
         // 未扫描数据由 ScanViewModel 提供（跨页面共享，用 Activity 作用域）
         scanViewModel = new ViewModelProvider(requireActivity()).get(ScanViewModel.class);
 
@@ -276,7 +275,6 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         mapView = view.findViewById(R.id.mapView);
         mToolbar = view.findViewById(R.id.toolbar);
         statusSummaryText = view.findViewById(R.id.tv_status_compact);
-        btnToggle = view.findViewById(R.id.btn_toggle_mode);
         progressMap = view.findViewById(R.id.progress_map);
         infoPill = view.findViewById(R.id.info_pill);
         collapsedInfoPill = view.findViewById(R.id.info_pill_collapsed);
@@ -296,12 +294,10 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
 
         if (statusSummaryText != null) {
             statusSummaryText.setOnLongClickListener(v -> {
-                showStatusLegendDialog();
+                showDeveloperPanel();
                 return true;
             });
-            statusSummaryText.setOnClickListener(v -> onDeveloperTapEasterEgg());
         }
-        if (btnToggle != null) btnToggle.setVisibility(View.GONE);
 
         if (pillCloseButton != null) {
             pillCloseButton.setOnClickListener(v -> collapseInfoPill());
@@ -355,10 +351,7 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         }
 
         if (mToolbar != null) {
-            mToolbar.setOnLongClickListener(v -> {
-                onDeveloperTapEasterEgg(); // long-press toolbar counts as one tap toward the easter egg
-                return true;
-            });
+            mToolbar.setOnClickListener(v -> onToolbarTapped());
         }
     }
 
@@ -367,29 +360,31 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         Menu menu = mToolbar.getMenu();
         if (menu != null) menu.clear();
         mToolbar.inflateMenu(R.menu.map_menu);
+        updateNavigationMenuItem();
         mToolbar.setNavigationIcon(null);
-        mToolbar.setOnMenuItemClickListener(item -> {
-            int id = item.getItemId();
-            if (id == R.id.menu_refresh) {
-                // 派送中
-                currentMode = DataMode.DELIVERY;
-                try { mapViewModel.requestAndRefreshMarkers(true); } catch (Throwable ignore) {}
-                if (getParentFragment() instanceof MapHostFragment)
-                    ((MapHostFragment) getParentFragment()).onRequestInTransitList();
-                Toast.makeText(requireContext(), "刷新派送中...", Toast.LENGTH_SHORT).show();
-                return true;
-            } else if (id == R.id.menu_unscanned) {
-                // 未扫描
-                currentMode = DataMode.UNSCANNED;
-                if (scanViewModel != null) scanViewModel.queryUnscanned();
-                if (getParentFragment() instanceof MapHostFragment) {
-                    ((MapHostFragment) getParentFragment()).onRequestUnscannedList();
+            mToolbar.setOnMenuItemClickListener(item -> {
+                int id = item.getItemId();
+                if (id == R.id.menu_refresh) {
+                    currentMode = DataMode.DELIVERY;
+                    try { mapViewModel.requestAndRefreshMarkers(true); } catch (Throwable ignore) {}
+                    if (getParentFragment() instanceof MapHostFragment)
+                        ((MapHostFragment) getParentFragment()).onRequestInTransitList();
+                    Toast.makeText(requireContext(), "刷新派送中...", Toast.LENGTH_SHORT).show();
+                    return true;
+                } else if (id == R.id.menu_unscanned) {
+                    currentMode = DataMode.UNSCANNED;
+                    if (scanViewModel != null) scanViewModel.queryUnscanned();
+                    if (getParentFragment() instanceof MapHostFragment) {
+                        ((MapHostFragment) getParentFragment()).onRequestUnscannedList();
+                    }
+                    Toast.makeText(requireContext(), "查询未扫描...", Toast.LENGTH_SHORT).show();
+                    return true;
+                } else if (id == R.id.menu_nav_mode) {
+                    toggleNavigationMode();
+                    return true;
                 }
-                Toast.makeText(requireContext(), "查询未扫描...", Toast.LENGTH_SHORT).show();
-                return true;
-            }
-            return false;
-        });
+                return false;
+            });
     }
 
     private void setupMap(Bundle savedInstanceState) {
@@ -641,6 +636,7 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         googleMap.setMyLocationEnabled(true);
         cameraController = new CameraFollowController(googleMap, mapView);
         cameraController.setSmartLocationManager(mSmartLocationManager);
+        cameraController.setNavigationModeEnabled(navigationModeEnabled);
         try {
             if (profileManager != null) {
                 cameraController.applyAppProfile(profileManager.getCurrent());
@@ -678,19 +674,19 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                 pauseAutoFollowByGesture();
             }
             // 用户手势仅暂停自动跟随，不改动 Proximity 抑制；由 re-center 按钮清除。
-            isUserInteracting = gesture;
+            isUserInteracting = gesture && !navigationModeEnabled;
         });
 
         // Fallback: 某些 GMS/ROM 对轻微拖动不触发 gesture，这里用 click/long-click 兜底
         googleMap.setOnMapClickListener(latLng -> {
             logD("map click -> pauseAutoFollow (fallback)");
             pauseAutoFollowByGesture();
-            isUserInteracting = true;
+            isUserInteracting = !navigationModeEnabled;
         });
         googleMap.setOnMapLongClickListener(latLng -> {
             logD("map long click -> pauseAutoFollow (fallback)");
             pauseAutoFollowByGesture();
-            isUserInteracting = true;
+            isUserInteracting = !navigationModeEnabled;
         });
 
         googleMap.setOnCameraMoveListener(() -> {
@@ -733,7 +729,7 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         androidx.recyclerview.widget.RecyclerView rv = sheet.findViewById(R.id.rv_cluster);
         rv.setLayoutManager(new LinearLayoutManager(requireActivity()));
         List<DeliveryInfo> sorted = new ArrayList<>(items);
-        sorted.sort(this::compareDeliveriesForAddress);
+        sorted.sort(DeliveryFocusManager.getAddressComparator());
 
         rv.setAdapter(new ClusterParcelAdapter(sorted, info -> {
             dialog.dismiss();
@@ -742,123 +738,18 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         dialog.show();
     }
 
-    private int compareNumbersSafe(Integer a, Integer b) {
-        int valA = a == null ? Integer.MAX_VALUE : a;
-        int valB = b == null ? Integer.MAX_VALUE : b;
-        return Integer.compare(valA, valB);
-    }
-
-    private int compareNumericStrings(String a, String b) {
-        try {
-            int ai = Integer.parseInt(a.replaceAll("[^0-9]", ""));
-            int bi = Integer.parseInt(b.replaceAll("[^0-9]", ""));
-            return Integer.compare(ai, bi);
-        } catch (NumberFormatException ignored) {
-            return a.compareToIgnoreCase(b);
-        }
-    }
-
-    private int compareDeliveriesForAddress(DeliveryInfo a, DeliveryInfo b) {
-        String streetA = streetNameKey(a);
-        String streetB = streetNameKey(b);
-        int cmp = streetA.compareTo(streetB);
-        if (cmp != 0) return cmp;
-
-        int civilA = safeCivilNumber(a);
-        int civilB = safeCivilNumber(b);
-        cmp = Integer.compare(civilA, civilB);
-        if (cmp != 0) return cmp;
-
-        UnitKey unitA = buildUnitKey(a);
-        UnitKey unitB = buildUnitKey(b);
-        cmp = Integer.compare(unitA.emptyFlag, unitB.emptyFlag);
-        if (cmp != 0) return cmp;
-        cmp = Integer.compare(unitA.numeric, unitB.numeric);
-        if (cmp != 0) return cmp;
-        cmp = unitA.raw.compareTo(unitB.raw);
-        if (cmp != 0) return cmp;
-
-        String routeA = safeString(a.getRouteNumber());
-        String routeB = safeString(b.getRouteNumber());
-        return routeA.compareTo(routeB);
-    }
-
-    private String streetNameKey(DeliveryInfo info) {
-        String street = info.getStreetName();
-        if (TextUtils.isEmpty(street) && info.getAddress() != null) {
-            street = info.getAddress();
-        }
-        if (street == null) street = "";
-        String normalized = street.toLowerCase(Locale.US)
-                .replaceAll("[^a-z0-9]", " ")
-                .replaceAll("\\s+", " ")
-                .trim();
-        return normalized;
-    }
-
-    private int safeCivilNumber(DeliveryInfo info) {
-        Integer civil = info.getCivilNumber();
-        if (civil == null || civil <= 0) {
-            return Integer.MAX_VALUE;
-        }
-        return civil;
-    }
-
-    private UnitKey buildUnitKey(DeliveryInfo info) {
-        String raw = info.getUnitNumber();
-        if (TextUtils.isEmpty(raw)) {
-            return UnitKey.EMPTY;
-        }
-        String trimmed = raw.trim();
-        if (trimmed.isEmpty()) {
-            return UnitKey.EMPTY;
-        }
-        String lower = trimmed.toLowerCase(Locale.US);
-        int numeric = parseFirstNumber(lower);
-        return new UnitKey(0, numeric, lower);
-    }
-
-    private int parseFirstNumber(String text) {
-        if (TextUtils.isEmpty(text)) return Integer.MAX_VALUE;
-        String digits = text.replaceAll("[^0-9]", "");
-        if (digits.isEmpty()) return Integer.MAX_VALUE;
-        try {
-            return Integer.parseInt(digits);
-        } catch (NumberFormatException ex) {
-            return Integer.MAX_VALUE;
-        }
-    }
-
-    private String safeString(String value) {
-        return value == null ? "" : value.toLowerCase(Locale.US);
-    }
-
-    private static final class UnitKey {
-        static final UnitKey EMPTY = new UnitKey(1, Integer.MAX_VALUE, "");
-        final int emptyFlag;
-        final int numeric;
-        final String raw;
-        UnitKey(int emptyFlag, int numeric, String raw) {
-            this.emptyFlag = emptyFlag;
-            this.numeric = numeric;
-            this.raw = raw;
-        }
-    }
-
     private void showInfoPill(DeliveryInfo info, List<DeliveryInfo> focusGroup) {
         if (infoPill == null || info == null) return;
         expandInfoPill();
         // 同步主/群组，保证折叠提示一致
         currentPrimaryDelivery = info;
-        currentCloseDeliveries = (focusGroup == null || focusGroup.isEmpty())
-                ? Collections.singletonList(info)
-                : focusGroup;
+        DeliveryFocusManager.InfoGroup infoGroup = focusManager.buildInfoGroup(info, focusGroup);
+        List<DeliveryInfo> sameAddressGroup = infoGroup.sameAddress;
+        currentCloseDeliveries = sameAddressGroup;
         currentPrimaryKey = buildPrimaryKey(info);
 
-        List<DeliveryInfo> group = (focusGroup == null || focusGroup.isEmpty())
-                ? Collections.singletonList(info)
-                : focusGroup;
-        int groupSize = group.size();
+        int nearbyCount = infoGroup.nearbyCount;
+        int sameAddressCount = sameAddressGroup.size();
 
         String streetLabel = info.getCivilNumber() > 0 ? info.getCivilNumber() + "号" : "街号未知";
         String unitLabel = (info.getUnitNumber() == null || info.getUnitNumber().isEmpty()) ? "" : info.getUnitNumber() + "单元";
@@ -868,8 +759,11 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         if (!TextUtils.isEmpty(streetLabel)) primaryParts.add(streetLabel);
         if (!TextUtils.isEmpty(unitLabel)) primaryParts.add(unitLabel);
         if (!TextUtils.isEmpty(parcelLabel)) primaryParts.add(parcelLabel);
-        if (groupSize > 1) {
-            primaryParts.add(String.format(Locale.getDefault(), "共%d票", groupSize));
+        if (sameAddressCount > 1) {
+            primaryParts.add(String.format(Locale.getDefault(), "同址共%d票", sameAddressCount));
+        }
+        if (nearbyCount > 1) {
+            primaryParts.add(String.format(Locale.getDefault(), "附近共%d票", nearbyCount));
         }
         pillRouteText.setText(TextUtils.join("  ", primaryParts).trim());
 
@@ -877,7 +771,7 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         pillAddressText.setText(baseAddress);
 
         String recipient = info.getName() == null ? "—" : info.getName();
-        String parcelSummary = buildParcelSummary(group, info);
+        String parcelSummary = buildParcelSummary(sameAddressGroup, info);
         String recipientLine = String.format(Locale.getDefault(), "收件人: %s", recipient);
         if (!parcelSummary.isEmpty()) {
             recipientLine = recipientLine + "\n包裹: " + parcelSummary;
@@ -1014,7 +908,6 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
 
     private int estimateControlInset() {
         int extra = 0;
-        extra = Math.max(extra, controlInsetFor(btnToggle));
         extra = Math.max(extra, controlInsetFor(collapsedInfoPill));
         return extra;
     }
@@ -1093,18 +986,38 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         }
     }
 
-    /** Hidden developer easter egg: tap status text 5 times within 2s to open the panel. */
-    private void onDeveloperTapEasterEgg() {
-        final long now = SystemClock.elapsedRealtime();
-        if (now - devTapWindowStart > DEV_TAP_WINDOW_MS) {
-            // reset window
-            devTapWindowStart = now;
-            devTapCount = 0;
+    private void toggleNavigationMode() {
+        navigationModeEnabled = !navigationModeEnabled;
+        if (navigationModeEnabled) {
+            clearAutoFollowPause();
+            hideResumeFollowButton();
         }
-        devTapCount++;
-        if (devTapCount >= DEV_TAP_REQUIRED) {
-            devTapCount = 0;
-            devTapWindowStart = 0L;
+        if (cameraController != null) {
+            cameraController.setNavigationModeEnabled(navigationModeEnabled);
+            if (navigationModeEnabled) {
+                cameraController.resetHasCenteredOnUser();
+            }
+        }
+        updateNavigationMenuItem();
+        String msg = navigationModeEnabled ? "导航模式已开启" : "导航模式已关闭";
+        Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show();
+    }
+
+    private void updateNavigationMenuItem() {
+        if (mToolbar == null) return;
+        android.view.Menu menu = mToolbar.getMenu();
+        if (menu == null) return;
+        MenuItem navItem = menu.findItem(R.id.menu_nav_mode);
+        if (navItem == null) return;
+        navItem.setIcon(navigationModeEnabled ? R.drawable.ic_nav_mode_on : R.drawable.ic_nav_mode_off);
+        navItem.setTitle(navigationModeEnabled ? "退出导航视图" : "导航视图");
+    }
+
+    /** Hidden developer shortcut: double-tap the toolbar to open the panel. */
+    private void onToolbarTapped() {
+        final long now = SystemClock.elapsedRealtime();
+        if (now - lastToolbarTapMs <= DEV_DOUBLE_TAP_WINDOW_MS) {
+            lastToolbarTapMs = 0L;
             try {
                 showDeveloperPanel();
             } catch (Throwable t) {
@@ -1112,9 +1025,7 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                 Toast.makeText(requireContext(), "Developer panel unavailable", Toast.LENGTH_SHORT).show();
             }
         } else {
-            int remain = DEV_TAP_REQUIRED - devTapCount;
-            // 轻提示，不暴露功能给普通用户（只在调试时有帮助）
-            try { FileLog.getInstance().debug(TAG, "dev tap progress: " + (DEV_TAP_REQUIRED - remain) + "/" + DEV_TAP_REQUIRED); } catch (Throwable ignore) {}
+            lastToolbarTapMs = now;
         }
     }
 
@@ -1178,9 +1089,9 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         float preferredZoom = focusManager.computeZoomForDistance(distanceMeters);
         boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
         boolean manualHold = isManualCenterHoldActive();
-        boolean allowAutoFollow = !autoFollowPausedByGesture && !manualHold;
-        boolean shouldForce = !cameraController.hasCenteredOnUser() && allowAutoFollow;
-        boolean interacting = isUserInteracting || autoFollowPausedByGesture || manualHold;
+        boolean allowAutoFollow = navigationModeEnabled || (!autoFollowPausedByGesture && !manualHold);
+        boolean shouldForce = navigationModeEnabled || (!cameraController.hasCenteredOnUser() && allowAutoFollow);
+        boolean interacting = navigationModeEnabled ? false : (isUserInteracting || autoFollowPausedByGesture || manualHold);
         logD("camera follow: force=" + shouldForce
                 + ", allow=" + allowAutoFollow
                 + ", interacting=" + interacting
@@ -1203,6 +1114,10 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void pauseAutoFollowByGesture() {
+        if (navigationModeEnabled) {
+            logD("navigation mode active -> ignore pause gesture");
+            return;
+        }
         if (autoFollowPausedByGesture) return;
         autoFollowPausedByGesture = true;
         autoFollowPausedAtMs = SystemClock.uptimeMillis();
@@ -1226,7 +1141,7 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
 
 
     private void showResumeFollowButton() {
-        if (btnResumeFollow == null) return;
+        if (btnResumeFollow == null || navigationModeEnabled) return;
         // Ensure the button is above MapView/InfoPill and can receive clicks
         try { btnResumeFollow.bringToFront(); } catch (Throwable ignore) {}
         try { btnResumeFollow.setClickable(true); } catch (Throwable ignore) {}
@@ -1288,16 +1203,21 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
 
     private void maybeRecoverAutoFollow(@NonNull SmartLocationManager.MovementState state) {
         if (!autoFollowPausedByGesture) return;
-        if (autoFollowPausedAtMs == 0L) return;
-        if (state != SmartLocationManager.MovementState.SLOW_DRIVING
-                && state != SmartLocationManager.MovementState.NORMAL_DRIVING) {
+        if (navigationModeEnabled) {
+            logD("navigation mode active -> auto-resume follow");
+            clearAutoFollowPause();
             return;
         }
+        if (autoFollowPausedAtMs == 0L) return;
+        boolean moving = state == SmartLocationManager.MovementState.SLOW_DRIVING
+                || state == SmartLocationManager.MovementState.NORMAL_DRIVING
+                || state == SmartLocationManager.MovementState.WALKING;
+        if (!moving) return;
         long now = SystemClock.uptimeMillis();
         if (now - autoFollowPausedAtMs < 5_000L) {
             return;
         }
-        logD("auto-follow paused >5s during drive -> auto-resume");
+        logD("auto-follow paused >5s during drive/walk -> auto-resume");
         clearAutoFollowPause();
     }
 

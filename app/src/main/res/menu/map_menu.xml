@@ -15,4 +15,9 @@
         android:title="刷新"
         android:icon="@drawable/ic_refresh"
         app:showAsAction="never"/>
+    <item
+        android:id="@+id/menu_nav_mode"
+        android:title="导航模式"
+        android:icon="@drawable/ic_nav_mode_off"
+        app:showAsAction="always"/>
 </menu>

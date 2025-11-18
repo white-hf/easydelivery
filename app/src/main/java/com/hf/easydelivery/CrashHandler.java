@@ -9,6 +9,8 @@ import androidx.annotation.NonNull;
 
 import com.hf.courierservice.apihelper.FileLog;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.io.Writer;
@@ -129,5 +131,26 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
         sb.append(result);
 
         FileLog.getInstance().writeLog(sb.toString());
+        writeCrashToExternal(sb.toString());
+    }
+
+    private void writeCrashToExternal(String logContent) {
+        if (mContext == null) return;
+        try {
+            File dir = mContext.getExternalFilesDir("crash_logs");
+            if (dir == null) {
+                dir = new File(mContext.getExternalFilesDir(null), "crash_logs");
+            }
+            if (dir != null && (dir.exists() || dir.mkdirs())) {
+                String filename = "crash_" + System.currentTimeMillis() + ".log";
+                File file = new File(dir, filename);
+                FileWriter writer = new FileWriter(file, false);
+                writer.write(logContent);
+                writer.flush();
+                writer.close();
+            }
+        } catch (Exception e) {
+            FileLog.getInstance().error(TAG, "Failed to write crash log to external storage", e);
+        }
     }
 }

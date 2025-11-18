@@ -1,6 +1,7 @@
 package com.hf.easydelivery.map;
 
 import android.location.Location;
+import android.text.TextUtils;
 import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
@@ -85,6 +86,17 @@ public class DeliveryFocusManager {
             lastZoomLogged = zoom;
         }
     }
+
+    public static final class InfoGroup {
+        public final List<DeliveryInfo> sameAddress;
+        public final int nearbyCount;
+        InfoGroup(List<DeliveryInfo> sameAddress, int nearbyCount) {
+            this.sameAddress = sameAddress;
+            this.nearbyCount = nearbyCount;
+        }
+    }
+
+    private static final Comparator<DeliveryInfo> ADDRESS_COMPARATOR = (a, b) -> compareDeliveriesForAddress(a, b);
 
     public static final float DEFAULT_FOLLOW_ZOOM = 17f;
     private static final float CLOSE_DISTANCE_METERS = 90f;         // CLOSE_DISTANCE_METERS: 强贴近（站点前/楼下）
@@ -550,6 +562,31 @@ public class DeliveryFocusManager {
         return result;
     }
 
+    public InfoGroup buildInfoGroup(@Nullable DeliveryInfo anchor,
+                                    @Nullable List<DeliveryInfo> nearby) {
+        int nearbyCount = (nearby == null) ? 0 : nearby.size();
+        List<DeliveryInfo> sameAddress = new ArrayList<>();
+        if (anchor != null) {
+            List<DeliveryInfo> candidates = (nearby == null || nearby.isEmpty())
+                    ? Collections.singletonList(anchor)
+                    : nearby;
+            for (DeliveryInfo candidate : candidates) {
+                if (candidate == null) continue;
+                if (isSameAddress(anchor, candidate)) {
+                    sameAddress.add(candidate);
+                }
+            }
+            if (sameAddress.isEmpty()) {
+                sameAddress.add(anchor);
+            }
+        }
+        return new InfoGroup(sameAddress, nearbyCount);
+    }
+
+    public static Comparator<DeliveryInfo> getAddressComparator() {
+        return ADDRESS_COMPARATOR;
+    }
+
     public float distanceTo(@Nullable DeliveryInfo info, @NonNull Location location) {
         if (info == null || !isCoordinateValid(info)) {
             logI("distanceTo(): invalid coord -> INF(far) for info=" + (info == null ? "null" : info.getOrderId()));
@@ -596,6 +633,117 @@ public class DeliveryFocusManager {
         float[] results = new float[1];
         Location.distanceBetween(lat1, lon1, lat2, lon2, results);
         return results[0];
+    }
+
+    private static boolean isSameAddress(DeliveryInfo a, DeliveryInfo b) {
+        if (a == null || b == null) return false;
+        AddressKey keyA = buildAddressKey(a);
+        AddressKey keyB = buildAddressKey(b);
+        return keyA.street.equals(keyB.street)
+                && keyA.civil == keyB.civil
+                && keyA.unit.emptyFlag == keyB.unit.emptyFlag
+                && keyA.unit.numeric == keyB.unit.numeric
+                && keyA.unit.raw.equals(keyB.unit.raw);
+    }
+
+    private static int compareDeliveriesForAddress(DeliveryInfo a, DeliveryInfo b) {
+        AddressKey keyA = buildAddressKey(a);
+        AddressKey keyB = buildAddressKey(b);
+        int cmp = keyA.street.compareTo(keyB.street);
+        if (cmp != 0) return cmp;
+        cmp = Integer.compare(keyA.civil, keyB.civil);
+        if (cmp != 0) return cmp;
+        cmp = Integer.compare(keyA.unit.emptyFlag, keyB.unit.emptyFlag);
+        if (cmp != 0) return cmp;
+        cmp = Integer.compare(keyA.unit.numeric, keyB.unit.numeric);
+        if (cmp != 0) return cmp;
+        cmp = keyA.unit.raw.compareTo(keyB.unit.raw);
+        if (cmp != 0) return cmp;
+        String routeA = safeString(a.getRouteNumber());
+        String routeB = safeString(b.getRouteNumber());
+        return routeA.compareTo(routeB);
+    }
+
+    private static AddressKey buildAddressKey(DeliveryInfo info) {
+        if (info == null) {
+            return new AddressKey("", Integer.MAX_VALUE, UnitKey.EMPTY);
+        }
+        String street = streetNameKey(info);
+        int civil = safeCivilNumber(info);
+        UnitKey unit = buildUnitKey(info);
+        return new AddressKey(street, civil, unit);
+    }
+
+    private static String streetNameKey(DeliveryInfo info) {
+        String street = info.getStreetName();
+        if (TextUtils.isEmpty(street) && info.getAddress() != null) {
+            street = info.getAddress();
+        }
+        if (street == null) street = "";
+        return street.toLowerCase(java.util.Locale.US)
+                .replaceAll("[^a-z0-9]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private static int safeCivilNumber(DeliveryInfo info) {
+        Integer civil = info.getCivilNumber();
+        if (civil == null || civil <= 0) {
+            return Integer.MAX_VALUE;
+        }
+        return civil;
+    }
+
+    private static UnitKey buildUnitKey(DeliveryInfo info) {
+        String raw = info.getUnitNumber();
+        if (TextUtils.isEmpty(raw)) {
+            raw = "";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return UnitKey.EMPTY;
+        }
+        String lower = trimmed.toLowerCase(java.util.Locale.US);
+        int numeric = parseFirstNumber(lower);
+        return new UnitKey(0, numeric, lower);
+    }
+
+    private static int parseFirstNumber(String text) {
+        if (TextUtils.isEmpty(text)) return Integer.MAX_VALUE;
+        String digits = text.replaceAll("[^0-9]", "");
+        if (digits.isEmpty()) return Integer.MAX_VALUE;
+        try {
+            return Integer.parseInt(digits);
+        } catch (NumberFormatException ex) {
+            return Integer.MAX_VALUE;
+        }
+    }
+
+    private static String safeString(String value) {
+        return value == null ? "" : value.toLowerCase(java.util.Locale.US);
+    }
+
+    private static final class UnitKey {
+        static final UnitKey EMPTY = new UnitKey(1, Integer.MAX_VALUE, "");
+        final int emptyFlag;
+        final int numeric;
+        final String raw;
+        UnitKey(int emptyFlag, int numeric, String raw) {
+            this.emptyFlag = emptyFlag;
+            this.numeric = numeric;
+            this.raw = raw;
+        }
+    }
+
+    private static final class AddressKey {
+        final String street;
+        final int civil;
+        final UnitKey unit;
+        AddressKey(String street, int civil, UnitKey unit) {
+            this.street = street;
+            this.civil = civil;
+            this.unit = unit;
+        }
     }
 
     private static float clamp(float value, float min, float max) {
