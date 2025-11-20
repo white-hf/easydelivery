@@ -54,6 +54,7 @@ public class DeliveredPackagesAdapter extends RecyclerView.Adapter<DeliveredPack
 
         TextView trackingId;
         TextView status;
+        TextView saveTime;
         private long lastClickTime = 0;
         private static final long DOUBLE_CLICK_TIME_DELTA = 300; // milliseconds
         private final OnItemDoubleClickListener doubleClickListener;
@@ -63,11 +64,17 @@ public class DeliveredPackagesAdapter extends RecyclerView.Adapter<DeliveredPack
             this.doubleClickListener = listener;
             trackingId = itemView.findViewById(R.id.tracking_id);
             status = itemView.findViewById(R.id.status);
+            saveTime = itemView.findViewById(R.id.save_time);
         }
 
         public void bind(final PackageEntity packageEntity) {
             trackingId.setText(packageEntity.trackingId);
             status.setText(packageEntity.status);
+            if (saveTime != null) {
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm:ss",
+                        java.util.Locale.getDefault());
+                saveTime.setText(sdf.format(new java.util.Date(packageEntity.createTime)));
+            }
             itemView.setOnClickListener(v -> {
                 long clickTime = System.currentTimeMillis();
                 if (clickTime - lastClickTime < DOUBLE_CLICK_TIME_DELTA) {

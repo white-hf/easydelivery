@@ -60,7 +60,6 @@ import com.hf.easydelivery.core.SmartLocationManager;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.dao.PackageEntity;
 
-
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -108,7 +107,8 @@ import com.hf.easydelivery.apartment.ApartmentPhotoService.MatchResult;
  * - 修复所有 Fragment API 遗留：requireActivity()/getArguments()/view.findViewById 等
  * - UI/业务逻辑保持不变（缩略图/短信/拨号/完成校验等）
  */
-public class CameraActivity extends AppCompatActivity implements SensorEventListener, SmartLocationManager.LocationUpdateListener {
+public class CameraActivity extends AppCompatActivity
+        implements SensorEventListener, SmartLocationManager.LocationUpdateListener {
 
     private static final String TAG = "CameraActivity";
     private static final int CAMERA_PERMISSION_REQUEST_CODE = 1001;
@@ -177,7 +177,10 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     private BarcodeScanner labelScanner;
     private final ExecutorService analysisExecutor = Executors.newSingleThreadExecutor();
 
-    private enum CaptureIntent { WAYBILL, DROP_OFF, BUILDING }
+    private enum CaptureIntent {
+        WAYBILL, DROP_OFF, BUILDING
+    }
+
     private CaptureIntent captureStage = CaptureIntent.WAYBILL;
     private CaptureIntent lastResolvedIntent = CaptureIntent.WAYBILL;
     private long captureOrderId = -1L;
@@ -226,7 +229,6 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         tvUnitNumber = findViewById(R.id.tv_unit_number);
         tvAddress = findViewById(R.id.tv_address);
 
-
         deliveryInfo = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
         if (deliveryInfo != null) {
             tvRouteNumber.setText(String.valueOf(deliveryInfo.getRouteNumber()));
@@ -240,32 +242,33 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             tvAddress.setFocusable(true);
             tvAddress.setContentDescription(getString(R.string.tap_to_navigate));
 
-// 下划线效果，像可点击的链接
+            // 下划线效果，像可点击的链接
             tvAddress.setPaintFlags(tvAddress.getPaintFlags() | android.graphics.Paint.UNDERLINE_TEXT_FLAG);
 
-// 触摸水波纹反馈（有则用）
+            // 触摸水波纹反馈（有则用）
             try {
                 android.util.TypedValue out = new android.util.TypedValue();
                 if (getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, out, true)) {
                     tvAddress.setBackgroundResource(out.resourceId);
                 }
-            } catch (Exception ignore) {}
+            } catch (Exception ignore) {
+            }
 
-// 略微增大可点区域
+            // 略微增大可点区域
             int padH = (int) (8 * getResources().getDisplayMetrics().density);
             int padV = (int) (4 * getResources().getDisplayMetrics().density);
             tvAddress.setPadding(
                     tvAddress.getPaddingLeft() + padH,
                     tvAddress.getPaddingTop() + padV,
                     tvAddress.getPaddingRight() + padH,
-                    tvAddress.getPaddingBottom() + padV
-            );
+                    tvAddress.getPaddingBottom() + padV);
 
-// 右侧加一个导航小图标（系统自带）
+            // 右侧加一个导航小图标（系统自带）
             try {
                 tvAddress.setCompoundDrawablesWithIntrinsicBounds(0, 0, android.R.drawable.ic_menu_directions, 0);
                 tvAddress.setCompoundDrawablePadding((int) (6 * getResources().getDisplayMetrics().density));
-            } catch (Exception ignore) {}
+            } catch (Exception ignore) {
+            }
 
             tvAddress.setOnClickListener(v -> openNavigationToPackage());
         }
@@ -273,7 +276,9 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
         // 3) 缩略图栏
         thumbnailContainer = findViewById(R.id.thumbnail_container);
-        mImageFiles.clear(); mImageViews.clear(); mCardViews.clear();
+        mImageFiles.clear();
+        mImageViews.clear();
+        mCardViews.clear();
         for (int i = 0; i < MAX_PHOTOS; i++) {
             CardView cardView = createThumbnailCardView(i);
             thumbnailContainer.addView(cardView);
@@ -334,7 +339,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         if (closeButton == null) {
             try {
                 View possibleRoot = findViewById(android.R.id.content);
-                ConstraintLayout root = (possibleRoot instanceof ConstraintLayout) ? (ConstraintLayout) possibleRoot : null;
+                ConstraintLayout root = (possibleRoot instanceof ConstraintLayout) ? (ConstraintLayout) possibleRoot
+                        : null;
                 if (root != null) {
                     closeButton = new ImageButton(this);
                     int closeId = getResources().getIdentifier("btn_close", "id", getPackageName());
@@ -369,7 +375,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             int cancelId = getResources().getIdentifier("cancel_button", "id", getPackageName());
             if (cancelId != 0) {
                 View cb = findViewById(cancelId);
-                if (cb != null) cb.setVisibility(View.GONE);
+                if (cb != null)
+                    cb.setVisibility(View.GONE);
             }
         } catch (Exception e) {
             FileLog.getInstance().debug(TAG, "optional cancel_button not found: " + e.getMessage());
@@ -391,7 +398,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         try {
             smartLocationManager = SmartLocationManager.getInstance(getApplicationContext());
             if (smartLocationManager == null) {
-                FileLog.getInstance().error(TAG, "initLocationManager: SmartLocationManager unavailable (context null?)");
+                FileLog.getInstance().error(TAG,
+                        "initLocationManager: SmartLocationManager unavailable (context null?)");
                 return;
             }
         } catch (Exception e) {
@@ -462,14 +470,18 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private double resolveTargetLatitude() {
-        if (!Double.isNaN(targetLatitude)) return targetLatitude;
-        if (deliveryInfo != null) return deliveryInfo.getLatitude();
+        if (!Double.isNaN(targetLatitude))
+            return targetLatitude;
+        if (deliveryInfo != null)
+            return deliveryInfo.getLatitude();
         return Double.NaN;
     }
 
     private double resolveTargetLongitude() {
-        if (!Double.isNaN(targetLongitude)) return targetLongitude;
-        if (deliveryInfo != null) return deliveryInfo.getLongitude();
+        if (!Double.isNaN(targetLongitude))
+            return targetLongitude;
+        if (deliveryInfo != null)
+            return deliveryInfo.getLongitude();
         return Double.NaN;
     }
 
@@ -496,7 +508,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     @Override
     public void onLocationUpdate(Location location, SmartLocationManager.MovementState state) {
-        if (location == null) return;
+        if (location == null)
+            return;
         updateCurrentLocation(location);
     }
 
@@ -529,7 +542,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         showHostChrome();
 
         super.onPause();
-        if (sensorManager != null) sensorManager.unregisterListener(this);
+        if (sensorManager != null)
+            sensorManager.unregisterListener(this);
         stopLocationTracking();
         // Unbind camera on pause
         try {
@@ -573,20 +587,26 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     private void prepareHostChromeRefs() {
         try {
             String pkg = getPackageName();
-            String[] toolbarNames = new String[]{"toolbar", "appbar", "top_bar"};
+            String[] toolbarNames = new String[] { "toolbar", "appbar", "top_bar" };
             for (String name : toolbarNames) {
                 int resId = getResources().getIdentifier(name, "id", pkg);
                 if (resId != 0) {
                     View v = findViewById(resId);
-                    if (v != null) { hostToolbar = v; break; }
+                    if (v != null) {
+                        hostToolbar = v;
+                        break;
+                    }
                 }
             }
-            String[] bottomNames = new String[]{"bottom_nav", "nav_view", "tab_layout", "bottom_bar"};
+            String[] bottomNames = new String[] { "bottom_nav", "nav_view", "tab_layout", "bottom_bar" };
             for (String name : bottomNames) {
                 int resId = getResources().getIdentifier(name, "id", pkg);
                 if (resId != 0) {
                     View v = findViewById(resId);
-                    if (v != null) { hostBottomBar = v; break; }
+                    if (v != null) {
+                        hostBottomBar = v;
+                        break;
+                    }
                 }
             }
         } catch (Exception e) {
@@ -596,8 +616,10 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     private void hideHostChrome() {
         try {
-            if (hostToolbar != null) hostToolbar.setVisibility(View.GONE);
-            if (hostBottomBar != null) hostBottomBar.setVisibility(View.GONE);
+            if (hostToolbar != null)
+                hostToolbar.setVisibility(View.GONE);
+            if (hostBottomBar != null)
+                hostBottomBar.setVisibility(View.GONE);
         } catch (Exception e) {
             FileLog.getInstance().debug("CameraActivity", "hideHostChrome: " + e.getMessage());
         }
@@ -605,8 +627,10 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     private void showHostChrome() {
         try {
-            if (hostToolbar != null) hostToolbar.setVisibility(View.VISIBLE);
-            if (hostBottomBar != null) hostBottomBar.setVisibility(View.VISIBLE);
+            if (hostToolbar != null)
+                hostToolbar.setVisibility(View.VISIBLE);
+            if (hostBottomBar != null)
+                hostBottomBar.setVisibility(View.VISIBLE);
         } catch (Exception e) {
             FileLog.getInstance().debug("CameraActivity", "showHostChrome: " + e.getMessage());
         }
@@ -667,7 +691,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+    }
 
     // ---------- 权限/相机绑定（CameraServie） ----------
     private void initCamera() {
@@ -679,7 +704,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+            @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
             if (PermissionUtils.isPermissionGranted(grantResults)) {
@@ -705,8 +731,10 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     // ---------- 业务/UI 工具 ----------
     private String ellipsis(String str, int maxLen) {
-        if (str == null) return "";
-        if (str.length() <= maxLen) return str;
+        if (str == null)
+            return "";
+        if (str.length() <= maxLen)
+            return str;
         return str.substring(0, maxLen) + "...";
     }
 
@@ -763,7 +791,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                         + " intent=" + intentLabel(intent)
                         + " stage=" + intentLabel(captureStage)
                         + " zoom=" + String.format(Locale.getDefault(), "%.2f", targetZoom)
-                        + " pitch=" + (Float.isNaN(lastPitchDegrees) ? "unknown" : String.format(Locale.getDefault(), "%.1f°", lastPitchDegrees)));
+                        + " pitch=" + (Float.isNaN(lastPitchDegrees) ? "unknown"
+                                : String.format(Locale.getDefault(), "%.1f°", lastPitchDegrees)));
     }
 
     private CaptureIntent resolveCaptureIntent() {
@@ -779,9 +808,9 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 }
                 return CaptureIntent.DROP_OFF;
             case BUILDING:
-                //if (!Float.isNaN(lastPitchDegrees) && Math.abs(lastPitchDegrees) < 15f) {
-                    //return CaptureIntent.WAYBILL;
-                //}
+                // if (!Float.isNaN(lastPitchDegrees) && Math.abs(lastPitchDegrees) < 15f) {
+                // return CaptureIntent.WAYBILL;
+                // }
                 return CaptureIntent.BUILDING;
             default:
                 return captureStage;
@@ -847,18 +876,21 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         mismatchDialogShowing = true;
         lastMismatchCode = detected;
         runOnUiThread(() -> {
-            if (captureButton != null) captureButton.setEnabled(false);
+            if (captureButton != null)
+                captureButton.setEnabled(false);
             new AlertDialog.Builder(this)
                     .setTitle(R.string.camera_mismatch_title)
                     .setMessage(getString(R.string.camera_mismatch_message, detected, expected))
                     .setCancelable(false)
                     .setPositiveButton(R.string.camera_mismatch_continue, (dialog, which) -> {
                         mismatchDialogShowing = false;
-                        if (captureButton != null) captureButton.setEnabled(true);
+                        if (captureButton != null)
+                            captureButton.setEnabled(true);
                     })
                     .setNegativeButton(R.string.camera_mismatch_cancel, (dialog, which) -> {
                         mismatchDialogShowing = false;
-                        if (captureButton != null) captureButton.setEnabled(true);
+                        if (captureButton != null)
+                            captureButton.setEnabled(true);
                         Toast.makeText(this, R.string.camera_mismatch_toast, Toast.LENGTH_LONG).show();
                     })
                     .show();
@@ -876,7 +908,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private String intentLabel(@Nullable CaptureIntent intent) {
-        if (intent == null) return "unknown";
+        if (intent == null)
+            return "unknown";
         switch (intent) {
             case WAYBILL:
                 return "waybill";
@@ -907,7 +940,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         }
         if (lastFlashOn != useFlash) {
             lastFlashOn = useFlash;
-            FileLog.getInstance().debug(TAG, "applyDynamicFlashMode: mode=" + (useFlash ? "ON" : "OFF") + " lux=" + ambientLux);
+            FileLog.getInstance().debug(TAG,
+                    "applyDynamicFlashMode: mode=" + (useFlash ? "ON" : "OFF") + " lux=" + ambientLux);
         }
     }
 
@@ -943,10 +977,12 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             }
             final int frameWidth = image.getWidth();
             final int frameHeight = image.getHeight();
-            InputImage inputImage = InputImage.fromMediaImage(image.getImage(), image.getImageInfo().getRotationDegrees());
+            InputImage inputImage = InputImage.fromMediaImage(image.getImage(),
+                    image.getImageInfo().getRotationDegrees());
             labelScanner.process(inputImage)
                     .addOnSuccessListener(barcodes -> {
-                        if (barcodes == null || barcodes.isEmpty()) return;
+                        if (barcodes == null || barcodes.isEmpty())
+                            return;
                         for (Barcode barcode : barcodes) {
                             Rect box = barcode.getBoundingBox();
                             if (isCentralLabel(box, frameWidth, frameHeight)) {
@@ -958,14 +994,16 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                             }
                         }
                     })
-                    .addOnFailureListener(e -> FileLog.getInstance().debug(TAG, "barcode scan failed: " + e.getMessage()))
+                    .addOnFailureListener(
+                            e -> FileLog.getInstance().debug(TAG, "barcode scan failed: " + e.getMessage()))
                     .addOnCompleteListener(task -> image.close());
         });
         return barcodeAnalysis;
     }
 
     private boolean isCentralLabel(Rect rect, int width, int height) {
-        if (rect == null || width <= 0 || height <= 0) return false;
+        if (rect == null || width <= 0 || height <= 0)
+            return false;
         float frameArea = width * height;
         float area = rect.width() * rect.height();
         if (area < frameArea * 0.02f || area > frameArea * 0.5f) {
@@ -980,7 +1018,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     private boolean handleDetectedBarcode(@NonNull String rawValue) {
         String normalized = normalizeTracking(rawValue);
-        if (normalized == null || normalized.isEmpty()) return false;
+        if (normalized == null || normalized.isEmpty())
+            return false;
         String expected = getCurrentOrderTracking();
         if (expected == null) {
             lastBarcodeHitMillis = SystemClock.elapsedRealtime();
@@ -1003,7 +1042,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private String normalizeTracking(String raw) {
-        if (raw == null) return null;
+        if (raw == null)
+            return null;
         String trimmed = raw.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.getDefault());
         return trimmed.isEmpty() ? null : trimmed;
     }
@@ -1048,7 +1088,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private void clearThumbnails() {
-        for (int i = 0; i < MAX_PHOTOS; i++) removeThumbnail(i, false);
+        for (int i = 0; i < MAX_PHOTOS; i++)
+            removeThumbnail(i, false);
         apartmentAutoFilePaths.clear();
         activeAutoApartmentMatch = null;
         updateOkButtonState();
@@ -1065,8 +1106,10 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private void makeCall() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CALL_PHONE}, CALL_PERMISSION_REQUEST_CODE);
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[] { Manifest.permission.CALL_PHONE },
+                    CALL_PERMISSION_REQUEST_CODE);
         } else {
             DeliveryInfo info = deliveryInfo;
             if (info == null && mOrderId != null) {
@@ -1142,7 +1185,9 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         }
     }
 
-    private void addThumbnail(final File imageFile) { addThumbnail(imageFile, false); }
+    private void addThumbnail(final File imageFile) {
+        addThumbnail(imageFile, false);
+    }
 
     private void addThumbnail(final File imageFile, boolean withAnim) {
         for (int i = 0; i < MAX_PHOTOS; i++) {
@@ -1150,8 +1195,10 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 mImageFiles.set(i, imageFile);
                 int tw = getResources().getDimensionPixelSize(R.dimen.thumbnail_width);
                 int th = getResources().getDimensionPixelSize(R.dimen.thumbnail_height);
-                if (tw <= 0) tw = (int) (64 * getResources().getDisplayMetrics().density);
-                if (th <= 0) th = (int) (64 * getResources().getDisplayMetrics().density);
+                if (tw <= 0)
+                    tw = (int) (64 * getResources().getDisplayMetrics().density);
+                if (th <= 0)
+                    th = (int) (64 * getResources().getDisplayMetrics().density);
                 Bitmap thumb = BitmapUtils.decodeSampledBitmapFromFile(imageFile.getAbsolutePath(), tw, th);
                 ImageView iv = mImageViews.get(i);
                 iv.setImageBitmap(thumb);
@@ -1169,7 +1216,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     private void showFullImage(int index) {
         File imageFile = mImageFiles.get(index);
-        if (imageFile == null) return;
+        if (imageFile == null)
+            return;
         FullImageFragment dialog = FullImageFragment.newInstance(imageFile.getAbsolutePath(), index);
         dialog.show(getSupportFragmentManager(), "full_image");
     }
@@ -1179,7 +1227,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private void removeThumbnail(int index, boolean deleteFile) {
-        if (index < 0 || index >= mImageFiles.size()) return;
+        if (index < 0 || index >= mImageFiles.size())
+            return;
         File f = mImageFiles.get(index);
         boolean autoFile = f != null && apartmentAutoFilePaths.contains(f.getAbsolutePath());
         if (autoFile) {
@@ -1192,10 +1241,12 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             }
         }
         mImageFiles.set(index, null);
-        if (deleteFile && f != null && f.exists()) f.delete();
+        if (deleteFile && f != null && f.exists())
+            f.delete();
 
         ImageView iv = (index < mImageViews.size()) ? mImageViews.get(index) : null;
-        if (iv == null) return;
+        if (iv == null)
+            return;
         iv.animate().cancel();
         iv.setImageDrawable(null);
         iv.setImageBitmap(null);
@@ -1319,8 +1370,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
             addContentView(flashView, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT
-            ));
+                    FrameLayout.LayoutParams.MATCH_PARENT));
 
             flashView.animate()
                     .alpha(0.6f)
@@ -1333,8 +1383,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                                     ((ViewGroup) flashView.getParent()).removeView(flashView);
                                 }
                             })
-                            .start()
-                    ).start();
+                            .start())
+                    .start();
         }
     }
 
@@ -1349,13 +1399,18 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                         + " stage=" + intentLabel(captureStage)
                         + " intent=" + intentLabel(intentForShot)
                         + " zoom=" + String.format(Locale.getDefault(), "%.2f", lastAppliedZoomRatio)
-                        + " pitch=" + (Float.isNaN(lastPitchDegrees) ? "unknown" : String.format(Locale.getDefault(), "%.1f°", lastPitchDegrees))
+                        + " pitch="
+                        + (Float.isNaN(lastPitchDegrees) ? "unknown"
+                                : String.format(Locale.getDefault(), "%.1f°", lastPitchDegrees))
                         + " barcodeHint=" + isBarcodeHintActive());
         // --- 播放拍照反馈 ---
         playShutterFeedback();
         boolean full = true;
         for (File imageFile : mImageFiles) {
-            if (imageFile == null) { full = false; break; }
+            if (imageFile == null) {
+                full = false;
+                break;
+            }
         }
         if (full) {
             Toast.makeText(this, getString(R.string.take_picture_full), Toast.LENGTH_SHORT).show();
@@ -1374,8 +1429,10 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             // Scale down preview bitmap to avoid memory issues
             int tw = getResources().getDimensionPixelSize(R.dimen.thumbnail_width);
             int th = getResources().getDimensionPixelSize(R.dimen.thumbnail_height);
-            if (tw <= 0) tw = (int) (64 * getResources().getDisplayMetrics().density);
-            if (th <= 0) th = (int) (64 * getResources().getDisplayMetrics().density);
+            if (tw <= 0)
+                tw = (int) (64 * getResources().getDisplayMetrics().density);
+            if (th <= 0)
+                th = (int) (64 * getResources().getDisplayMetrics().density);
             Bitmap scaledPreview = Bitmap.createScaledBitmap(previewBitmap, tw, th, true);
             try {
                 tempFile = createImageFile();
@@ -1433,15 +1490,19 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                             if (placeholderIndex >= 0) {
                                 // Remove temp file
                                 File old = mImageFiles.get(placeholderIndex);
-                                if (old != null && old.exists() && tempFileForReplace != null && old.equals(tempFileForReplace)) {
+                                if (old != null && old.exists() && tempFileForReplace != null
+                                        && old.equals(tempFileForReplace)) {
                                     old.delete();
                                 }
                                 mImageFiles.set(placeholderIndex, imageFile);
                                 int tw = getResources().getDimensionPixelSize(R.dimen.thumbnail_width);
                                 int th = getResources().getDimensionPixelSize(R.dimen.thumbnail_height);
-                                if (tw <= 0) tw = (int) (64 * getResources().getDisplayMetrics().density);
-                                if (th <= 0) th = (int) (64 * getResources().getDisplayMetrics().density);
-                                Bitmap thumb = BitmapUtils.decodeSampledBitmapFromFile(imageFile.getAbsolutePath(), tw, th);
+                                if (tw <= 0)
+                                    tw = (int) (64 * getResources().getDisplayMetrics().density);
+                                if (th <= 0)
+                                    th = (int) (64 * getResources().getDisplayMetrics().density);
+                                Bitmap thumb = BitmapUtils.decodeSampledBitmapFromFile(imageFile.getAbsolutePath(), tw,
+                                        th);
                                 ImageView iv = mImageViews.get(placeholderIndex);
                                 iv.setImageBitmap(thumb);
                                 updateOkButtonState();
@@ -1463,15 +1524,20 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                         });
                     } catch (Exception e) {
                         FileLog.getInstance().error(TAG, "post-save compress failed", e);
-                        runOnUiThread(() -> Toast.makeText(CameraActivity.this, R.string.picture_save_failed, Toast.LENGTH_SHORT).show());
+                        runOnUiThread(() -> Toast
+                                .makeText(CameraActivity.this, R.string.picture_save_failed, Toast.LENGTH_SHORT)
+                                .show());
                     } finally {
                         image.close();
                     }
                 });
             }
+
             @Override
             public void onError(@NonNull ImageCaptureException exception) {
-                runOnUiThread(() -> Toast.makeText(CameraActivity.this, "Capture failed: " + exception.getMessage(), Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> Toast
+                        .makeText(CameraActivity.this, "Capture failed: " + exception.getMessage(), Toast.LENGTH_SHORT)
+                        .show());
             }
         });
     }
@@ -1540,11 +1606,13 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 startActivity(mapIntent);
                 return;
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         // 2) 回退：任意地图应用 / 浏览器
         try {
-            String url = "https://www.google.com/maps/dir/?api=1&destination=" + lat + "," + lng + "&travelmode=driving";
+            String url = "https://www.google.com/maps/dir/?api=1&destination=" + lat + "," + lng
+                    + "&travelmode=driving";
             Intent webMap = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url));
             startActivity(webMap);
         } catch (Exception e) {
@@ -1568,15 +1636,20 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         }
         double targetLat = resolveTargetLatitude();
         double targetLng = resolveTargetLongitude();
-        if (Double.isNaN(targetLat) || Double.isNaN(targetLng)) return false;
-        if (Math.abs(targetLat) < 0.000001 && Math.abs(targetLng) < 0.000001) return false;
-        if (Double.isNaN(currentLat) || Double.isNaN(currentLng)) return false;
+        if (Double.isNaN(targetLat) || Double.isNaN(targetLng))
+            return false;
+        if (Math.abs(targetLat) < 0.000001 && Math.abs(targetLng) < 0.000001)
+            return false;
+        if (Double.isNaN(currentLat) || Double.isNaN(currentLng))
+            return false;
         float[] results = new float[1];
         Location.distanceBetween(currentLat, currentLng, targetLat, targetLng, results);
         float distance = results[0];
         if (distance > 150f) {
-            Toast.makeText(this, String.format(java.util.Locale.getDefault(), "当前位置与包裹相差约%.0f米，请确认后再派送", distance), Toast.LENGTH_SHORT).show();
-            FileLog.getInstance().debug(TAG, "warnIfFarFromTarget: distance=" + distance + " target=(" + targetLat + "," + targetLng + ") current=(" + currentLat + "," + currentLng + ")");
+            Toast.makeText(this, String.format(java.util.Locale.getDefault(), "当前位置与包裹相差约%.0f米，请确认后再派送", distance),
+                    Toast.LENGTH_SHORT).show();
+            FileLog.getInstance().debug(TAG, "warnIfFarFromTarget: distance=" + distance + " target=(" + targetLat + ","
+                    + targetLng + ") current=(" + currentLat + "," + currentLng + ")");
             return true;
         }
         return false;
@@ -1594,8 +1667,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             return;
         }
         PowerSaverSelector.Params params = new PowerSaverSelector.Params();
-        params.extraNearCount = 3;       // “同址数量 + 3”
-        params.nearRadiusMeters = 150f;  // 对非同址的软半径；≤0 则不限制
+        params.extraNearCount = 3; // “同址数量 + 3”
+        params.nearRadiusMeters = 150f; // 对非同址的软半径；≤0 则不限制
 
         Location ref = buildLocationFromPackage(currentInfo);
         if (ref == null) {
@@ -1605,24 +1678,37 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         List<DeliveryInfo> next = new PowerSaverSelector().selectNext(currentInfo, ref, mgr, params);
         int count = next == null ? 0 : next.size();
         if (count == 0) {
-            try { FileLog.getInstance().debug(TAG, "findAndShowNextPackages: no candidates, finishing camera flow"); } catch (Throwable ignore) {}
+            try {
+                FileLog.getInstance().debug(TAG, "findAndShowNextPackages: no candidates, finishing camera flow");
+            } catch (Throwable ignore) {
+            }
             finish();
             return;
         }
         if (count == 1) {
-            try { FileLog.getInstance().debug(TAG, "findAndShowNextPackages: single candidate -> auto switch"); } catch (Throwable ignore) {}
+            try {
+                FileLog.getInstance().debug(TAG, "findAndShowNextPackages: single candidate -> auto switch");
+            } catch (Throwable ignore) {
+            }
             // 仅一条：直接切换
             resetForNewPackage(next.get(0));
             return;
         }
-        try { FileLog.getInstance().debug(TAG, "findAndShowNextPackages: multiple candidates=" + count + " -> show chooser"); } catch (Throwable ignore) {}
+        try {
+            FileLog.getInstance().debug(TAG,
+                    "findAndShowNextPackages: multiple candidates=" + count + " -> show chooser");
+        } catch (Throwable ignore) {
+        }
         // 多条：弹出选择
         showNextPackageChooser(next);
     }
+
     private List<DeliveryInfo> findNextPackages(DeliveryInfo currentInfo) {
-        if (currentInfo == null) return Collections.emptyList();
+        if (currentInfo == null)
+            return Collections.emptyList();
         DeliveryinfoMgr mgr = ResourceMgr.getInstance().getDeliveryinfoMgr();
-        if (mgr == null) return Collections.emptyList();
+        if (mgr == null)
+            return Collections.emptyList();
         PowerSaverSelector.Params params = new PowerSaverSelector.Params();
         params.extraNearCount = 3;
         params.nearRadiusMeters = 150f;
@@ -1635,7 +1721,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     @Nullable
     private Location buildLocationFromPackage(@Nullable DeliveryInfo info) {
-        if (info == null) return null;
+        if (info == null)
+            return null;
         try {
             double lat = info.getLatitude();
             double lng = info.getLongitude();
@@ -1660,13 +1747,24 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         }
         dialog.setContentView(sheet);
 
+        java.util.concurrent.atomic.AtomicBoolean isPackageSelected = new java.util.concurrent.atomic.AtomicBoolean(
+                false);
+
         RecyclerView rv = sheet.findViewById(R.id.rv_cluster);
         rv.setLayoutManager(new LinearLayoutManager(this));
         ClusterParcelAdapter adapter = new ClusterParcelAdapter(items, info -> {
+            isPackageSelected.set(true);
             dialog.dismiss();
             resetForNewPackage(info);
         });
         rv.setAdapter(adapter);
+
+        dialog.setOnDismissListener(d -> {
+            if (!isPackageSelected.get()) {
+                finish();
+            }
+        });
+
         dialog.show();
     }
 
@@ -1679,20 +1777,24 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private void updateInfoBar(DeliveryInfo newInfo) {
-        if (newInfo == null) return;
+        if (newInfo == null)
+            return;
         this.deliveryInfo = newInfo;
         this.mOrderId = newInfo.getOrderId();
-        if (tvRouteNumber != null) tvRouteNumber.setText(String.valueOf(newInfo.getRouteNumber()));
-        if (tvOrderSn != null) tvOrderSn.setText(newInfo.getOrderSn());
-        if (tvCustomerName != null) tvCustomerName.setText(newInfo.getName());
-        if (tvUnitNumber != null) tvUnitNumber.setText(newInfo.getUnitNumber());
+        if (tvRouteNumber != null)
+            tvRouteNumber.setText(String.valueOf(newInfo.getRouteNumber()));
+        if (tvOrderSn != null)
+            tvOrderSn.setText(newInfo.getOrderSn());
+        if (tvCustomerName != null)
+            tvCustomerName.setText(newInfo.getName());
+        if (tvUnitNumber != null)
+            tvUnitNumber.setText(newInfo.getUnitNumber());
         if (tvAddress != null) {
             tvAddress.setText(newInfo.getAddress());
             tvAddress.setOnClickListener(v -> openNavigationToPackage());
         }
         initApartmentAssist();
     }
-
 
     private void initApartmentAssist() {
         if (apartmentPhotoService == null || deliveryInfo == null) {
@@ -1716,14 +1818,16 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     private void applyAutoFilledPhoto(@NonNull MatchResult match) {
         File file = match.file;
-        if (file == null || !file.exists()) return;
+        if (file == null || !file.exists())
+            return;
         activeAutoApartmentMatch = match;
         apartmentAutoFilePaths.add(file.getAbsolutePath());
         addThumbnail(file, true);
     }
 
     private int findImageIndexByPath(String path) {
-        if (TextUtils.isEmpty(path)) return -1;
+        if (TextUtils.isEmpty(path))
+            return -1;
         for (int i = 0; i < mImageFiles.size(); i++) {
             File file = mImageFiles.get(i);
             if (file != null && path.equals(file.getAbsolutePath())) {
@@ -1752,7 +1856,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private void promptStructuredApartmentKey(File imageFile,
-                                              ApartmentAddressKeyBuilder.KeyData keyData) {
+            ApartmentAddressKeyBuilder.KeyData keyData) {
         String preset = TextUtils.isEmpty(keyData.displayAddress)
                 ? keyData.key
                 : keyData.displayAddress;
@@ -1767,8 +1871,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     }
 
     private void showApartmentConfirmDialog(File imageFile,
-                                            @Nullable String initialText,
-                                            boolean manualSource) {
+            @Nullable String initialText,
+            boolean manualSource) {
         runOnUiThread(() -> {
             final EditText input = new EditText(this);
             input.setHint(R.string.camera_apartment_manual_hint);
@@ -1807,7 +1911,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             runOnUiThread(() -> {
                 if (saved) {
                     String label = TextUtils.isEmpty(displayAddress) ? key : displayAddress;
-                    Toast.makeText(this, getString(R.string.camera_apartment_saved_toast, label), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.camera_apartment_saved_toast, label), Toast.LENGTH_SHORT)
+                            .show();
                 } else {
                     Toast.makeText(this, R.string.picture_save_failed, Toast.LENGTH_SHORT).show();
                 }
