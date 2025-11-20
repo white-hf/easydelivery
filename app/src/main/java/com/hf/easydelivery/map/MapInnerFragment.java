@@ -1206,6 +1206,9 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         if (navigationModeEnabled) {
             logD("navigation mode active -> auto-resume follow");
             clearAutoFollowPause();
+            if (cameraController != null) {
+                cameraController.resetHasCenteredOnUser();
+            }
             return;
         }
         if (autoFollowPausedAtMs == 0L) return;
@@ -1219,6 +1222,9 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         }
         logD("auto-follow paused >5s during drive/walk -> auto-resume");
         clearAutoFollowPause();
+        if (cameraController != null) {
+            cameraController.resetHasCenteredOnUser();
+        }
     }
 
     private void maybeRequestInsideBoost(@NonNull SmartLocationManager.MovementState state) {

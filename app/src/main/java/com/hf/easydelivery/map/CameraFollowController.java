@@ -145,13 +145,16 @@ public class CameraFollowController {
                 if (delta > 180f) delta = 360f - delta;
                 headingOk = delta > FOLLOW_CONFIG.stdHeadingDeg;
             }
+            if (!isDrivingState(state) && distanceOk) {
+                headingOk = true;
+            }
 
             FileLog.getInstance().debug(TAG, "[STD] gates timeOk="+timeOk+", distOk="+distanceOk+", headOk="+headingOk);
 
             boolean driving = isDrivingState(state);
             if (!timeOk && !distanceOk && !headingOk) return false;
             if (driving) return timeOk && (distanceOk || headingOk);
-            return !hasCentered;
+            return !hasCentered || (timeOk && distanceOk);
         }
     };
 
@@ -192,13 +195,16 @@ public class CameraFollowController {
                 if (delta > 180f) delta = 360f - delta;
                 headingOk = delta > FOLLOW_CONFIG.basicHeadingDeg;
             }
+            if (!isDrivingState(state) && distanceOk) {
+                headingOk = true;
+            }
 
             FileLog.getInstance().debug(TAG, "[BASIC] gates timeOk="+timeOk+", distOk="+distanceOk+", headOk="+headingOk);
 
             boolean driving = isDrivingState(state);
             if (!timeOk && !distanceOk && !headingOk) return false;
             if (driving) return timeOk && (distanceOk || headingOk);
-            return !hasCentered;
+            return !hasCentered || (timeOk && distanceOk);
         }
     };
 

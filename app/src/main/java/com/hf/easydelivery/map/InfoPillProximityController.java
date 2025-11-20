@@ -213,6 +213,7 @@ public class InfoPillProximityController {
         double lastTransitAnchorMeters = 0d;
         long completionHintUntilMs = 0L;
         @Nullable String completionAnchorKey = null;
+        boolean forceShowAfterCompletion = false;
     }
 
     public enum RegionState { IN_TRANSIT, APPROACH, INSIDE }
@@ -315,6 +316,7 @@ public class InfoPillProximityController {
             state.lastNearest = delivered;
             state.lastNearestDist = 0f;
         }
+        state.forceShowAfterCompletion = true;
         state.suppressUntilMs = 0L;
         state.anchorLat = null;
         state.anchorLon = null;
@@ -333,8 +335,11 @@ public class InfoPillProximityController {
                                           @NonNull DeliveryFocusManager focusMgr) {
             logD("[BASIC] start pending=" + (pending==null?0:pending.size()));
             long now = System.currentTimeMillis();
-            if (!movedEnough(s.lastLoc, loc, PROX_CONFIG.basicMinMoveM) && !elapsed(now, s.lastEvalAtMs, PROX_CONFIG.basicThrottleMs))
+            boolean bypassGates = s.forceShowAfterCompletion;
+            if (!bypassGates && !movedEnough(s.lastLoc, loc, PROX_CONFIG.basicMinMoveM)
+                    && !elapsed(now, s.lastEvalAtMs, PROX_CONFIG.basicThrottleMs)) {
                 return ProximityDecision.none();
+            }
 
             s.lastEvalAtMs = now; s.lastLoc = cloneOf(loc);
 
@@ -347,6 +352,11 @@ public class InfoPillProximityController {
             Location.distanceBetween(loc.getLatitude(), loc.getLongitude(),
                     nearest.getLatitude(), nearest.getLongitude(), dist);
             float d = dist[0];
+
+            DeliveryFocusManager.RegionConfig cfg = focusMgr.getRegionConfig();
+            maybeExpireCompletionHint(s, d, now, cfg);
+            ProximityDecision forced = forceShowAfterCompletionIfNeeded(s, nearest, d, now, cfg);
+            if (forced != null) return forced;
 
             boolean cooled = elapsed(now, s.lastShowHideAtMs, PROX_CONFIG.showHideCooldownMs);
 
@@ -379,20 +389,23 @@ public class InfoPillProximityController {
                                           @NonNull DeliveryFocusManager focusMgr) {
             logD("[STD] start pending=" + (pending==null?0:pending.size()));
             long now = System.currentTimeMillis();
+            boolean bypassGates = s.forceShowAfterCompletion;
 
             // Use STANDARD driving thresholds (reduce enum coupling)
             final long throttle = PROX_CONFIG.stdThrottleDrivingMs;
             final float minMove = PROX_CONFIG.stdMinMoveDrivingM;
 
-            if (!movedEnough(s.lastLoc, loc, minMove) && !elapsed(now, s.lastEvalAtMs, throttle))
+            if (!bypassGates && !movedEnough(s.lastLoc, loc, minMove) && !elapsed(now, s.lastEvalAtMs, throttle))
                 return ProximityDecision.none();
 
             // If currently hidden and we are likely far, down-sample evaluations
-            if (!s.pillShowing && s.lastNearestDist > PROX_CONFIG.farBandM && !elapsed(now, s.lastEvalAtMs, PROX_CONFIG.farBandThrottleMs))
+            if (!bypassGates && !s.pillShowing && s.lastNearestDist > PROX_CONFIG.farBandM
+                    && !elapsed(now, s.lastEvalAtMs, PROX_CONFIG.farBandThrottleMs))
                 return ProximityDecision.none();
 
             // Commute suppression window active: skip full evaluation
-            if (!s.pillShowing && s.lastNearestDist > PROX_CONFIG.farBandM && s.suppressUntilMs > 0 && now < s.suppressUntilMs) {
+            if (!bypassGates && !s.pillShowing && s.lastNearestDist > PROX_CONFIG.farBandM
+                    && s.suppressUntilMs > 0 && now < s.suppressUntilMs) {
                 logD("[STD] commute suppress window active");
                 return ProximityDecision.none();
             }
@@ -418,6 +431,11 @@ public class InfoPillProximityController {
             Location.distanceBetween(loc.getLatitude(), loc.getLongitude(),
                     nearest.getLatitude(), nearest.getLongitude(), dist);
             float d = dist[0];
+
+            DeliveryFocusManager.RegionConfig cfg = focusMgr.getRegionConfig();
+            maybeExpireCompletionHint(s, d, now, cfg);
+            ProximityDecision forced = forceShowAfterCompletionIfNeeded(s, nearest, d, now, cfg);
+            if (forced != null) return forced;
 
             // Lock release if drifted beyond lockEnter + hysteresis
             if (s.lockedKey != null) {
@@ -495,6 +513,10 @@ public class InfoPillProximityController {
             s.lastNearestDist = nearest.distanceMeters;
 
             DeliveryFocusManager.RegionConfig cfg = focusMgr.getRegionConfig();
+            maybeExpireCompletionHint(s, s.lastNearestDist, now, cfg);
+            ProximityDecision forced = forceShowAfterCompletionIfNeeded(s, s.lastNearest, s.lastNearestDist, now, cfg);
+            if (forced != null) return forced;
+
             RegionState derived = deriveRegionState(s.lastNearestDist, cfg);
             derived = overrideRegionStateAfterCompletion(derived, s, now);
             updateRegionState(s, derived);
@@ -635,6 +657,62 @@ public class InfoPillProximityController {
         return r[0];
     }
 
+    private static void maybeExpireCompletionHint(@NonNull InternalState s,
+                                                  float distanceMeters,
+                                                  long nowMs,
+                                                  @Nullable DeliveryFocusManager.RegionConfig cfg) {
+        if (s.completionHintUntilMs <= 0L) return;
+        if (nowMs >= s.completionHintUntilMs) {
+            s.completionHintUntilMs = 0L;
+            s.completionAnchorKey = null;
+            s.forceShowAfterCompletion = false;
+            return;
+        }
+        if (cfg == null) return;
+        float clusterLimit = Math.max(cfg.clusterRadiusMeters, cfg.hideRadiusMeters);
+        if (Float.isNaN(distanceMeters)) return;
+        if (distanceMeters > clusterLimit) {
+            s.completionHintUntilMs = 0L;
+            s.completionAnchorKey = null;
+            s.forceShowAfterCompletion = false;
+        }
+    }
+
+    @Nullable
+    private static ProximityDecision forceShowAfterCompletionIfNeeded(@NonNull InternalState s,
+                                                                      @Nullable DeliveryInfo candidate,
+                                                                      float distanceMeters,
+                                                                      long nowMs,
+                                                                      @Nullable DeliveryFocusManager.RegionConfig cfg) {
+        if (!s.forceShowAfterCompletion) return null;
+        if (candidate == null) {
+            s.forceShowAfterCompletion = false;
+            return null;
+        }
+        if (nowMs >= s.completionHintUntilMs) {
+            s.forceShowAfterCompletion = false;
+            return null;
+        }
+        float maxRadius = Float.MAX_VALUE;
+        if (cfg != null) {
+            maxRadius = Math.max(cfg.hideRadiusMeters, cfg.clusterRadiusMeters);
+        }
+        float safeDistance = Float.isNaN(distanceMeters) ? Float.MAX_VALUE : distanceMeters;
+        if (safeDistance > maxRadius) {
+            s.forceShowAfterCompletion = false;
+            s.completionHintUntilMs = 0L;
+            s.completionAnchorKey = null;
+            return null;
+        }
+        s.forceShowAfterCompletion = false;
+        s.pillShowing = true;
+        s.lastShowHideAtMs = nowMs;
+        s.lastNearest = candidate;
+        s.lastNearestDist = safeDistance;
+        s.lockedKey = keyOf(candidate);
+        return new ProximityDecision(true, false, false, candidate, safeDistance, true, PROX_CONFIG.defaultBoostMs);
+    }
+
     @Nullable
     private static String keyOf(@Nullable DeliveryInfo d){
         if (d == null) return null;
@@ -649,6 +727,9 @@ public class InfoPillProximityController {
         if (s.pillShowing && elapsed(System.currentTimeMillis(), s.lastShowHideAtMs, PROX_CONFIG.showHideCooldownMs)) {
             s.pillShowing = false; s.lastShowHideAtMs = System.currentTimeMillis();
             s.lastNearest = null; s.lastNearestDist = Float.MAX_VALUE;
+            s.forceShowAfterCompletion = false;
+            s.completionHintUntilMs = 0L;
+            s.completionAnchorKey = null;
             return new ProximityDecision(false, true, false, null, Float.MAX_VALUE, false, 0L);
         }
         return ProximityDecision.none();
