@@ -13,6 +13,7 @@ import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
 import com.hf.easydelivery.R;
+import com.hf.easydelivery.apartment.ApartmentGalleryActivity;
 import com.hf.courierservice.apihelper.FileLog;
 
 public class MeFragment extends Fragment {
@@ -29,6 +30,13 @@ public class MeFragment extends Fragment {
         myWorkButton.setOnClickListener(v -> {
             if (getContext() != null) {
                 Intent intent = new Intent(getContext(), MyWorkActivity.class);
+                startActivity(intent);
+            }
+        });
+        Button apartmentBtn = root.findViewById(R.id.btn_my_apartment);
+        apartmentBtn.setOnClickListener(v -> {
+            if (getContext() != null) {
+                Intent intent = new Intent(getContext(), ApartmentGalleryActivity.class);
                 startActivity(intent);
             }
         });

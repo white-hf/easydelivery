@@ -15,7 +15,6 @@ import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.maps.android.SphericalUtil;
-import com.google.maps.android.SphericalUtil;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.map.config.ProfileManager;
 import com.hf.easydelivery.core.SmartLocationManager;
@@ -43,10 +42,17 @@ public class CameraFollowController {
     private static final String TAG = "CameraFollowController";
     private void logD(String msg){ try{ logger.debug(TAG, msg);}catch(Throwable ignore){} }
 
-    private static final float DRIVING_MIN_ZOOM = 17f;
-    private static final float DRIVING_TARGET_SCREEN_FRACTION_Y = 0.70f;
-    private static final float NAVIGATION_TARGET_SCREEN_FRACTION_Y = 0.88f;
+    private static final float DRIVING_MIN_ZOOM = 16.5f;
+    private static final float DRIVING_TARGET_SCREEN_FRACTION_Y = 0.65f;
+    private static final float NAVIGATION_TARGET_SCREEN_FRACTION_Y = 0.86f;
     private static final float DEFAULT_TILT = 45f;
+    private static final float DRIVING_TILT_DEGREES = 55f;
+    private static final float NAVIGATION_TILT_DEGREES = 60f;
+    private static final float BROWSE_TILT_DEGREES = 35f;
+    private static final float SPEED_ZOOM_NEAR = 18.8f;
+    private static final float SPEED_ZOOM_CITY = 17.5f;
+    private static final float SPEED_ZOOM_SUBURB = 16.5f;
+    private static final float SPEED_ZOOM_HIGHWAY = 15.5f;
     private static final float EDGE_FORCE_METERS = 25f;
 
     private long suppressFollowUntilMs = 0L;
@@ -112,9 +118,7 @@ public class CameraFollowController {
                                        boolean insideZoneLowSpeed) {
             if (force) return true;
             if (!autoFollowEnabled) return false;
-            if (isUserInteracting) return false;
-            if (driving) return true;
-            return insideZoneLowSpeed;
+            return !isUserInteracting;
         }
 
         @Override
@@ -161,9 +165,7 @@ public class CameraFollowController {
                                        boolean insideZoneLowSpeed) {
             if (force) return true;
             if (!autoFollowEnabled) return false;
-            if (isUserInteracting) return false;
-            if (driving) return true;
-            return insideZoneLowSpeed;
+            return !isUserInteracting;
         }
 
         @Override
@@ -256,18 +258,9 @@ public class CameraFollowController {
     private final float[] distanceResults = new float[1];
     private boolean navigationModeEnabled = false;
 
-    // --- Phase 3: jitter gating & low-speed north-up fallback ---
+    // --- Phase 3: jitter gating ---
     private static final float MIN_BEARING_DELTA_DEG = 2f;   // skip tiny bearing changes
     private static final float MIN_PIXEL_DELTA = 2f;         // skip tiny pixel drifts
-    private static final long LOW_SPEED_LOCK_MS = 5000L;     // low-speed sustained before locking north-up
-    private static final float LOW_SPEED_MPS = 2.5f;         // ~9 km/h
-    private static final float DRIVING_ANCHOR_Y_RATIO = 0.68f;
-    private static final float NAVIGATION_ANCHOR_Y_RATIO = 0.78f;
-    private static final float NAVIGATION_MIN_TILT = 60f;
-    private long lowSpeedStartUptime = 0L;
-    private boolean isLowSpeed(@NonNull Location location) {
-        return location.getSpeed() <= LOW_SPEED_MPS;
-    }
 
     public CameraFollowController(@NonNull GoogleMap googleMap, @NonNull MapView mapView) {
         this.googleMap = googleMap;
@@ -282,6 +275,7 @@ public class CameraFollowController {
         navigationModeEnabled = enabled;
         if (enabled) {
             pausedByUser = false;
+            userPreferredBearing = Float.NaN;
         }
     }
 
@@ -477,39 +471,24 @@ public class CameraFollowController {
         LatLng driverLatLng = new LatLng(location.getLatitude(), location.getLongitude());
         CameraPosition current = googleMap.getCameraPosition();
         float bearing = resolveBearing(location, current);
-        double lookAheadMeters = navigationModeEnabled ? 80d : 45d;
-        LatLng targetLatLng = driverLatLng;
+        double lookAheadMeters = computeLookAheadMeters(location);
+        LatLng targetLatLng;
         try {
             targetLatLng = SphericalUtil.computeOffset(driverLatLng, lookAheadMeters, bearing);
         } catch (Exception ignore) {
             targetLatLng = driverLatLng;
         }
 
-        float zoom = Math.max(preferredFollowZoom, DRIVING_MIN_ZOOM);
-
-        // --- Phase 3: low-speed north-up fallback bookkeeping ---
-        boolean low = isLowSpeed(location);
-        long nowUp = SystemClock.uptimeMillis();
-        if (low && !navigationModeEnabled) {
-            if (lowSpeedStartUptime == 0L) lowSpeedStartUptime = nowUp;
-        } else {
-            lowSpeedStartUptime = 0L;
+        float zoom = computeSpeedZoom(location, preferredFollowZoom);
+        float tilt = navigationModeEnabled ? NAVIGATION_TILT_DEGREES : DRIVING_TILT_DEGREES;
+        if (current.tilt > tilt) {
+            tilt = current.tilt; // avoid abrupt tilt drops mid animation
         }
 
-        float tilt;
-
-        boolean lockNorthUp = low && (lowSpeedStartUptime > 0L) && (nowUp - lowSpeedStartUptime >= LOW_SPEED_LOCK_MS) && !navigationModeEnabled;
-        if (lockNorthUp) {
-            // Low-speed sustained: prefer north-up / minimal tilt to stabilize local browsing
-            tilt = Math.min(current.tilt, 15f);
-            bearing = Float.isNaN(userPreferredBearing) ? current.bearing : userPreferredBearing;
-        } else {
-            float minTilt = navigationModeEnabled ? NAVIGATION_MIN_TILT : DEFAULT_TILT;
-            tilt = current.tilt < minTilt ? minTilt : current.tilt;
-            bearing = resolveBearing(location, current);
-        }
-
-        logD("buildDrivingCamera nav=" + navigationModeEnabled + " lookAhead=" + lookAheadMeters + "m target=" + targetLatLng.latitude + "," + targetLatLng.longitude + " bearing=" + bearing + " tilt=" + tilt);
+        logD("buildDrivingCamera nav=" + navigationModeEnabled
+                + " lookAhead=" + lookAheadMeters
+                + "m target=" + targetLatLng.latitude + "," + targetLatLng.longitude
+                + " bearing=" + bearing + " tilt=" + tilt + " zoom=" + zoom);
 
         return new CameraPosition.Builder(current)
                 .target(targetLatLng)
@@ -524,13 +503,42 @@ public class CameraFollowController {
         CameraPosition current = googleMap.getCameraPosition();
         LatLng target = new LatLng(location.getLatitude(), location.getLongitude());
         float zoom = current.zoom < 15f ? 15f : current.zoom;
-        float bearing = Float.isNaN(userPreferredBearing) ? current.bearing : userPreferredBearing;
+        float bearing = (!navigationModeEnabled && !Float.isNaN(userPreferredBearing))
+                ? userPreferredBearing
+                : current.bearing;
+        float tilt = Math.max(current.tilt, BROWSE_TILT_DEGREES);
         logD("buildCenteredCamera zoom="+ (current.zoom < 15f ? 15f : current.zoom) + ", bearingSrc=" + (Float.isNaN(userPreferredBearing) ? "camera" : "user"));
         return new CameraPosition.Builder(current)
                 .target(target)
                 .zoom(zoom)
+                .tilt(tilt)
                 .bearing(bearing)
                 .build();
+    }
+
+    private float computeSpeedZoom(@NonNull Location location, float preferredFollowZoom) {
+        float kmh = location.hasSpeed() ? (location.getSpeed() * 3.6f) : 0f;
+        float baseZoom;
+        if (kmh < 20f) {
+            baseZoom = SPEED_ZOOM_NEAR;
+        } else if (kmh < 50f) {
+            baseZoom = SPEED_ZOOM_CITY;
+        } else if (kmh < 80f) {
+            baseZoom = SPEED_ZOOM_SUBURB;
+        } else {
+            baseZoom = SPEED_ZOOM_HIGHWAY;
+        }
+        float zoom = Math.max(baseZoom, Math.max(preferredFollowZoom, DRIVING_MIN_ZOOM));
+        return zoom;
+    }
+
+    private double computeLookAheadMeters(@NonNull Location location) {
+        float kmh = location.hasSpeed() ? (location.getSpeed() * 3.6f) : 0f;
+        if (kmh < 10f) return 35d;
+        if (kmh < 30f) return 55d;
+        if (kmh < 60f) return 85d;
+        if (kmh < 90f) return 110d;
+        return 140d;
     }
 
     private void animateCameraTo(@NonNull CameraPosition targetCamera) {
@@ -619,7 +627,7 @@ public class CameraFollowController {
     }
 
     private float resolveBearing(@NonNull Location location, @NonNull CameraPosition current) {
-        if (!Float.isNaN(userPreferredBearing)) {
+        if (!navigationModeEnabled && !Float.isNaN(userPreferredBearing)) {
             return userPreferredBearing;
         }
         if (location.hasBearing() && location.getSpeed() > 0.5f) {

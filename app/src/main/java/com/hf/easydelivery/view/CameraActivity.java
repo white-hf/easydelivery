@@ -66,6 +66,7 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 
+import android.widget.EditText;
 import android.widget.TextView;
 
 import java.io.File;
@@ -83,9 +84,12 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+import java.util.HashSet;
+import java.util.Set;
 
 import com.hf.easydelivery.common.PermissionUtils;
 
+import android.text.TextUtils;
 import android.util.Size;
 
 import com.google.mlkit.vision.barcode.common.Barcode;
@@ -94,6 +98,9 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions;
 import com.google.mlkit.vision.barcode.BarcodeScanning;
 import com.google.mlkit.vision.common.InputImage;
 import com.hf.easydelivery.view.Adapter.ClusterParcelAdapter;
+import com.hf.easydelivery.apartment.ApartmentAddressKeyBuilder;
+import com.hf.easydelivery.apartment.ApartmentPhotoService;
+import com.hf.easydelivery.apartment.ApartmentPhotoService.MatchResult;
 
 /**
  * CameraActivity（从 Fragment 完整改造为 Activity）
@@ -145,6 +152,10 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     private double currentLongitude = Double.NaN;
 
     private SmsBottomSheetFragment mSmsBottomSheetFragment;
+    private ApartmentPhotoService apartmentPhotoService;
+    private ApartmentAddressKeyBuilder.KeyData apartmentKeyData;
+    private MatchResult activeAutoApartmentMatch;
+    private final Set<String> apartmentAutoFilePaths = new HashSet<>();
     private SmartLocationManager smartLocationManager;
     private Location lastKnownLocation;
     private DeliveryInfo deliveryInfo;
@@ -268,6 +279,9 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             thumbnailContainer.addView(cardView);
             mImageFiles.add(null);
         }
+
+        apartmentPhotoService = ApartmentPhotoService.getInstance(this);
+        initApartmentAssist();
 
         // 4) 拍照/相册/重拍栏
         captureButton = findViewById(R.id.shutter_button);
@@ -765,9 +779,9 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                 }
                 return CaptureIntent.DROP_OFF;
             case BUILDING:
-                if (!Float.isNaN(lastPitchDegrees) && Math.abs(lastPitchDegrees) < 15f) {
-                    return CaptureIntent.WAYBILL;
-                }
+                //if (!Float.isNaN(lastPitchDegrees) && Math.abs(lastPitchDegrees) < 15f) {
+                    //return CaptureIntent.WAYBILL;
+                //}
                 return CaptureIntent.BUILDING;
             default:
                 return captureStage;
@@ -1035,6 +1049,8 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
 
     private void clearThumbnails() {
         for (int i = 0; i < MAX_PHOTOS; i++) removeThumbnail(i, false);
+        apartmentAutoFilePaths.clear();
+        activeAutoApartmentMatch = null;
         updateOkButtonState();
     }
 
@@ -1165,6 +1181,16 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
     private void removeThumbnail(int index, boolean deleteFile) {
         if (index < 0 || index >= mImageFiles.size()) return;
         File f = mImageFiles.get(index);
+        boolean autoFile = f != null && apartmentAutoFilePaths.contains(f.getAbsolutePath());
+        if (autoFile) {
+            deleteFile = false;
+            apartmentAutoFilePaths.remove(f.getAbsolutePath());
+            if (activeAutoApartmentMatch != null
+                    && activeAutoApartmentMatch.file != null
+                    && f.getAbsolutePath().equals(activeAutoApartmentMatch.file.getAbsolutePath())) {
+                activeAutoApartmentMatch = null;
+            }
+        }
         mImageFiles.set(index, null);
         if (deleteFile && f != null && f.exists()) f.delete();
 
@@ -1421,12 +1447,18 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
                                 updateOkButtonState();
                                 markCaptureCommitted(intentForShot);
                                 advanceStageForPreview(intentForShot);
+                                if (intentForShot == CaptureIntent.BUILDING) {
+                                    handleBuildingPhotoCaptured(imageFile);
+                                }
                             } else {
                                 // fallback: insert real thumbnail into first available slot
                                 addThumbnail(imageFile, true);
                                 updateOkButtonState();
                                 markCaptureCommitted(intentForShot);
                                 advanceStageForPreview(intentForShot);
+                                if (intentForShot == CaptureIntent.BUILDING) {
+                                    handleBuildingPhotoCaptured(imageFile);
+                                }
                             }
                         });
                     } catch (Exception e) {
@@ -1643,6 +1675,7 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
         updateInfoBar(newInfo);
         ensureCaptureSequenceSynced();
         Toast.makeText(this, "已切换到下一个包裹: " + newInfo.getRouteNumber(), Toast.LENGTH_SHORT).show();
+        initApartmentAssist();
     }
 
     private void updateInfoBar(DeliveryInfo newInfo) {
@@ -1657,6 +1690,128 @@ public class CameraActivity extends AppCompatActivity implements SensorEventList
             tvAddress.setText(newInfo.getAddress());
             tvAddress.setOnClickListener(v -> openNavigationToPackage());
         }
+        initApartmentAssist();
     }
 
+
+    private void initApartmentAssist() {
+        if (apartmentPhotoService == null || deliveryInfo == null) {
+            apartmentKeyData = null;
+            return;
+        }
+        apartmentKeyData = apartmentPhotoService.buildKeyData(deliveryInfo);
+        maybeAutoFillApartmentPhoto();
+    }
+
+    private void maybeAutoFillApartmentPhoto() {
+        if (apartmentPhotoService == null || deliveryInfo == null) {
+            return;
+        }
+        MatchResult match = apartmentPhotoService.findMatch(deliveryInfo);
+        if (match == null) {
+            return;
+        }
+        applyAutoFilledPhoto(match);
+    }
+
+    private void applyAutoFilledPhoto(@NonNull MatchResult match) {
+        File file = match.file;
+        if (file == null || !file.exists()) return;
+        activeAutoApartmentMatch = match;
+        apartmentAutoFilePaths.add(file.getAbsolutePath());
+        addThumbnail(file, true);
+    }
+
+    private int findImageIndexByPath(String path) {
+        if (TextUtils.isEmpty(path)) return -1;
+        for (int i = 0; i < mImageFiles.size(); i++) {
+            File file = mImageFiles.get(i);
+            if (file != null && path.equals(file.getAbsolutePath())) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void handleBuildingPhotoCaptured(File imageFile) {
+        if (apartmentPhotoService == null || deliveryInfo == null) {
+            return;
+        }
+        ApartmentAddressKeyBuilder.KeyData keyData = apartmentPhotoService.buildKeyData(deliveryInfo);
+        if (keyData == null || !keyData.isApartment) {
+            return;
+        }
+        if (keyData.hasStructuredKey && !TextUtils.isEmpty(keyData.key)) {
+            if (apartmentPhotoService.hasPhotoForKey(keyData.key)) {
+                return;
+            }
+            promptStructuredApartmentKey(imageFile, keyData);
+        } else {
+            promptManualAddressKey(imageFile);
+        }
+    }
+
+    private void promptStructuredApartmentKey(File imageFile,
+                                              ApartmentAddressKeyBuilder.KeyData keyData) {
+        String preset = TextUtils.isEmpty(keyData.displayAddress)
+                ? keyData.key
+                : keyData.displayAddress;
+        showApartmentConfirmDialog(imageFile, preset, false);
+    }
+
+    private void promptManualAddressKey(File imageFile) {
+        String suggested = apartmentPhotoService != null && deliveryInfo != null
+                ? apartmentPhotoService.suggestManualBase(deliveryInfo.getAddress())
+                : "";
+        showApartmentConfirmDialog(imageFile, suggested, true);
+    }
+
+    private void showApartmentConfirmDialog(File imageFile,
+                                            @Nullable String initialText,
+                                            boolean manualSource) {
+        runOnUiThread(() -> {
+            final EditText input = new EditText(this);
+            input.setHint(R.string.camera_apartment_manual_hint);
+            if (!TextUtils.isEmpty(initialText)) {
+                input.setText(initialText);
+                input.setSelection(initialText.length());
+            }
+            AlertDialog dialog = new AlertDialog.Builder(this)
+                    .setTitle(R.string.camera_apartment_manual_title)
+                    .setMessage(manualSource ? null : getString(R.string.camera_apartment_auto_confirm_msg))
+                    .setView(input)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .setNegativeButton(R.string.cancel, null)
+                    .create();
+            dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String raw = input.getText().toString().trim();
+                if (TextUtils.isEmpty(raw)) {
+                    Toast.makeText(this, R.string.camera_apartment_manual_error, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                String normalized = ApartmentAddressKeyBuilder.manualKeyFromInput(raw);
+                if (TextUtils.isEmpty(normalized)) {
+                    Toast.makeText(this, R.string.camera_apartment_manual_error, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                dialog.dismiss();
+                saveApartmentPhotoAsync(imageFile, normalized, raw, manualSource);
+            }));
+            dialog.show();
+        });
+    }
+
+    private void saveApartmentPhotoAsync(File imageFile, String key, String displayAddress, boolean manual) {
+        cameraExecutor.execute(() -> {
+            boolean saved = apartmentPhotoService.savePhoto(imageFile, key, displayAddress, manual);
+            runOnUiThread(() -> {
+                if (saved) {
+                    String label = TextUtils.isEmpty(displayAddress) ? key : displayAddress;
+                    Toast.makeText(this, getString(R.string.camera_apartment_saved_toast, label), Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, R.string.picture_save_failed, Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+    }
 }

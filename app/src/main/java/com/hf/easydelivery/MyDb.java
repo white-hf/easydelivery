@@ -16,6 +16,7 @@ import com.hf.easydelivery.dao.DeliveredPackagesDao;
 import com.hf.easydelivery.dao.DeliveryInfoDao;
 import com.hf.easydelivery.dao.ScanRecordDao;
 import com.hf.easydelivery.dao.DailyWorkStatsDao;
+import com.hf.easydelivery.dao.ApartmentPhotoDao;
 
 import java.util.Objects;
 
@@ -24,6 +25,7 @@ public class MyDb {
     private DeliveredPackagesDao deliveredPackagesDao;
     private ScanRecordDao scanRecordDao;
     private DailyWorkStatsDao dailyWorkStatsDao;
+    private ApartmentPhotoDao apartmentPhotoDao;
     private Handler mHandler;
 
     public Handler getHandler() {
@@ -51,13 +53,14 @@ public class MyDb {
     {
         AppDatabase db = Room.databaseBuilder(cxt,
                 AppDatabase.class, "easydelivery")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build();
 
         deliveryInfoDao  = db.deliveryInfoDao();
         deliveredPackagesDao = db.deliveredPackagesDao();
         scanRecordDao = db.scanRecordDao();
         dailyWorkStatsDao = db.dailyWorkStatsDao();
+        apartmentPhotoDao = db.apartmentPhotoDao();
 
         dbLooperThread.start();
     }
@@ -78,6 +81,21 @@ public class MyDb {
         }
     };
 
+    private static final Migration MIGRATION_3_4 = new Migration(3, 4) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS apartment_photos (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL," +
+                    "addressKey TEXT NOT NULL," +
+                    "displayAddress TEXT," +
+                    "filePath TEXT," +
+                    "savedAt INTEGER NOT NULL," +
+                    "lastUsedAt INTEGER NOT NULL," +
+                    "source TEXT NOT NULL)");
+            database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_apartment_photos_addressKey ON apartment_photos(addressKey)");
+        }
+    };
+
     public DeliveryInfoDao getDeliveryInfoDao() {
         return deliveryInfoDao;
     }
@@ -92,5 +110,9 @@ public class MyDb {
 
     public DailyWorkStatsDao getDailyWorkStatsDao() {
         return dailyWorkStatsDao;
+    }
+
+    public ApartmentPhotoDao getApartmentPhotoDao() {
+        return apartmentPhotoDao;
     }
 }

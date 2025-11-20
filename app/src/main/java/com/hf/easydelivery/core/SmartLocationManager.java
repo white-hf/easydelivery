@@ -40,6 +40,7 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 
 
@@ -63,6 +64,7 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
+import com.google.android.gms.tasks.CancellationTokenSource;
 import com.hf.courierservice.apihelper.FileLog;
 
 import java.util.ArrayList;
@@ -76,6 +78,7 @@ import java.util.List;
 public class SmartLocationManager {
     private static final long BURST_MODE_DURATION_MS = 60 * 1000; // 1 minute
     private static SmartLocationManager instance;
+    private static final String TAG = "SmartLocationManager";
 
     private Context context;
     private FusedLocationProviderClient fusedLocationClient;
@@ -107,6 +110,7 @@ public class SmartLocationManager {
     // === Heading (bearing) support via sensors ===
     private SensorManager sensorManager;
     private Sensor rotationVectorSensor;
+    private Sensor linearAccelerationSensor;
     private final float[] rotationMatrix = new float[9];
     private final float[] orientationAngles = new float[3];
     private float currentHeadingDegrees = Float.NaN; // 0..360, NaN if unknown
@@ -121,6 +125,14 @@ public class SmartLocationManager {
 
     // Low-pass for heading smoothing (0..1). Larger = quicker but noisier
     private static final float HEADING_ALPHA = 0.2f;
+    private static final float ACCEL_WAKE_THRESHOLD = 0.8f;
+    private static final int ACCEL_REQUIRED_HITS = 4;
+    private static final long ACCEL_WINDOW_MS = 400L;
+    private static final long MOTION_WAKE_COOLDOWN_MS = 8_000L;
+    private long lastAccelSpikeUptime = 0L;
+    private long lastMotionWakeUptime = 0L;
+    private int accelConsecutiveHits = 0;
+    private boolean singleUpdateInFlight = false;
 
     public interface WeakSignalListener extends LocationUpdateListener {
         void onWeakSignal();
@@ -194,6 +206,7 @@ public class SmartLocationManager {
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
             rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+            linearAccelerationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
         }
     }
 
@@ -222,6 +235,7 @@ public class SmartLocationManager {
         // Set initial update request
         updateLocationParametersForState();
         startHeadingUpdates();
+        startMotionWakeMonitoring();
     }
 
     private void requestLocationUpdates(long interval, long minInterval) {
@@ -463,6 +477,7 @@ public class SmartLocationManager {
             fusedLocationClient.removeLocationUpdates(locationCallback);
         }
         stopHeadingUpdates();
+        stopMotionWakeMonitoring();
         if (burstModeRunnableRef != null) {
             handler.removeCallbacks(burstModeRunnableRef);
             burstModeRunnableRef = null;
@@ -647,6 +662,83 @@ public class SmartLocationManager {
         if (result >= 360f) result -= 360f;
         if (result < 0f) result += 360f;
         return result;
+    }
+
+    private void startMotionWakeMonitoring() {
+        if (sensorManager != null && linearAccelerationSensor != null) {
+            sensorManager.registerListener(accelListener, linearAccelerationSensor, SensorManager.SENSOR_DELAY_GAME);
+        }
+    }
+
+    private void stopMotionWakeMonitoring() {
+        if (sensorManager != null && linearAccelerationSensor != null) {
+            sensorManager.unregisterListener(accelListener);
+        }
+        accelConsecutiveHits = 0;
+    }
+
+    private final SensorEventListener accelListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (event.sensor.getType() != Sensor.TYPE_LINEAR_ACCELERATION) return;
+            float ax = event.values[0];
+            float ay = event.values[1];
+            float az = event.values[2];
+            double magnitude = Math.sqrt(ax * ax + ay * ay + az * az);
+            long now = SystemClock.uptimeMillis();
+            if (magnitude >= ACCEL_WAKE_THRESHOLD) {
+                if (now - lastAccelSpikeUptime > ACCEL_WINDOW_MS) {
+                    accelConsecutiveHits = 0;
+                }
+                lastAccelSpikeUptime = now;
+                accelConsecutiveHits++;
+                if (accelConsecutiveHits >= ACCEL_REQUIRED_HITS) {
+                    accelConsecutiveHits = 0;
+                    maybeDispatchMotionWake(now);
+                }
+            } else if (now - lastAccelSpikeUptime > ACCEL_WINDOW_MS) {
+                accelConsecutiveHits = 0;
+            }
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+            // no-op
+        }
+    };
+
+    private void maybeDispatchMotionWake(long nowUptime) {
+        if (nowUptime - lastMotionWakeUptime < MOTION_WAKE_COOLDOWN_MS) {
+            return;
+        }
+        lastMotionWakeUptime = nowUptime;
+        FileLog.getInstance().debug(TAG, "motion wake detected -> boost + single fix");
+        try {
+            requestBoost(8_000L);
+        } catch (Throwable ignore) {}
+        requestSingleHighAccuracyFix();
+    }
+
+    private void requestSingleHighAccuracyFix() {
+        if (singleUpdateInFlight) return;
+        if (fusedLocationClient == null) return;
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        singleUpdateInFlight = true;
+        CancellationTokenSource tokenSource = new CancellationTokenSource();
+        try {
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, tokenSource.getToken())
+                    .addOnSuccessListener(location -> {
+                        singleUpdateInFlight = false;
+                        if (location != null) {
+                            updateLocation(location);
+                        }
+                    })
+                    .addOnFailureListener(error -> singleUpdateInFlight = false);
+        } catch (SecurityException se) {
+            singleUpdateInFlight = false;
+        }
     }
 
     public boolean hasReliableHeading() {

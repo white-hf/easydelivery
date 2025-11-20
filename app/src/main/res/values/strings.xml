@@ -157,4 +157,24 @@
     <string name="camera_mismatch_continue">继续拍照</string>
     <string name="camera_mismatch_cancel">取消</string>
     <string name="camera_mismatch_toast">请确认拿到正确的包裹后再继续</string>
+    <string name="camera_apartment_checkbox_label">设为该地址的默认公寓图</string>
+    <string name="camera_apartment_checkbox_label_manual">加入我的公寓</string>
+    <string name="camera_apartment_autofill_banner">已自动填充公寓外观图（%1$s）</string>
+    <string name="camera_apartment_autofill_fuzzy">已匹配到疑似公寓图（%1$s），请确认</string>
+    <string name="camera_apartment_autofill_remove">移除</string>
+    <string name="camera_apartment_manual_title">确认公寓地址</string>
+    <string name="camera_apartment_manual_hint">如：500 Main St</string>
+    <string name="camera_apartment_manual_error">地址不能为空</string>
+    <string name="camera_apartment_saved_toast">已保存 %1$s 的公寓图</string>
+    <string name="camera_apartment_missing_file">公寓图片已失效，请重新拍摄</string>
+    <string name="camera_apartment_auto_confirm_msg">检测到该地址为公寓，确认保存为默认外观图？</string>
+    <string name="my_apartment_title">我的公寓</string>
+    <string name="my_apartment_button">我的公寓</string>
+    <string name="my_apartment_empty">尚未保存任何公寓图片</string>
+    <string name="my_apartment_source_manual">自定义</string>
+    <string name="my_apartment_source_auto">自动</string>
+    <string name="my_apartment_edit_title">修改公寓地址</string>
+    <string name="my_apartment_edit_hint">请输入街道号 + 街道名</string>
+    <string name="my_apartment_edit_error">地址不能为空</string>
+    <string name="my_apartment_delete_confirm">删除该公寓图？</string>
 </resources>
