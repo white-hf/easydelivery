@@ -45,23 +45,38 @@ public class PackageListFragment extends Fragment {
 
     public enum Status {
         IN_TRANSIT(202),
+        RETRY_DELIVERY(231),
         GATEWAY_TRANSIT(199),
         OTHER(0);
+
         public final int code;
-        Status(int c) { this.code = c; }
+
+        Status(int c) {
+            this.code = c;
+        }
+
         public static Status fromState(@Nullable Integer state) {
-            if (state == null) return OTHER;
-            if (state == 202) return IN_TRANSIT;
-            if (state == 199) return GATEWAY_TRANSIT;
+            if (state == null)
+                return OTHER;
+            if (state == 202)
+                return IN_TRANSIT;
+            if (state == 231)
+                return RETRY_DELIVERY;
+            if (state == 199)
+                return GATEWAY_TRANSIT;
             return OTHER;
         }
+
         public boolean isDeliverable() {
-            return this == IN_TRANSIT;
+            return this == IN_TRANSIT || this == RETRY_DELIVERY;
         }
     }
 
     /** 列表模式：由哪个 ViewModel 提供数据 */
-    public enum ListMode { IN_TRANSIT_FROM_MAP, UNSCANNED_FROM_SCAN }
+    public enum ListMode {
+        IN_TRANSIT_FROM_MAP, UNSCANNED_FROM_SCAN
+    }
+
     private static final String ARG_LIST_MODE = "arg_list_mode";
 
     private RecyclerView recyclerView;
@@ -87,13 +102,14 @@ public class PackageListFragment extends Fragment {
 
     @Nullable
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
+            @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_packages_list, container, false);
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
         recyclerView = view.findViewById(R.id.recycler_view);
-        progressBar  = view.findViewById(R.id.progress_bar);
-        emptyView    = view.findViewById(R.id.empty_view);
-        searchView   = view.findViewById(R.id.search_view);
+        progressBar = view.findViewById(R.id.progress_bar);
+        emptyView = view.findViewById(R.id.empty_view);
+        searchView = view.findViewById(R.id.search_view);
         fabBackToMap = view.findViewById(R.id.fab_back_to_map);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
@@ -108,7 +124,11 @@ public class PackageListFragment extends Fragment {
         Bundle args = getArguments();
         if (args != null) {
             String m = args.getString(ARG_LIST_MODE, ListMode.IN_TRANSIT_FROM_MAP.name());
-            try { currentMode = ListMode.valueOf(m); } catch (Throwable ignored) { currentMode = ListMode.IN_TRANSIT_FROM_MAP; }
+            try {
+                currentMode = ListMode.valueOf(m);
+            } catch (Throwable ignored) {
+                currentMode = ListMode.IN_TRANSIT_FROM_MAP;
+            }
         }
 
         // 搜索：后缀匹配（包裹号/运单号）
@@ -119,6 +139,7 @@ public class PackageListFragment extends Fragment {
                     applyFilter(query);
                     return true;
                 }
+
                 @Override
                 public boolean onQueryTextChange(String newText) {
                     applyFilter(newText);
@@ -147,7 +168,7 @@ public class PackageListFragment extends Fragment {
 
         recyclerView.setClipToPadding(false);
 
-// 动态设置内边距
+        // 动态设置内边距
         ViewCompat.setOnApplyWindowInsetsListener(recyclerView, (v, insets) -> {
             // 获取系统导航栏的高度
             int sysBottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
@@ -177,6 +198,7 @@ public class PackageListFragment extends Fragment {
 
     /**
      * 切换监听的数据源，避免重复注册导致内存泄漏
+     * 
      * @param newSource 要开始观察的新 LiveData
      */
     private void switchDataSource(@NonNull LiveData<List<DeliveryInfo>> newSource) {
@@ -217,6 +239,7 @@ public class PackageListFragment extends Fragment {
 
     /**
      * 更新列表数据，此方法由 LiveData 的观察者自动调用
+     * 
      * @param fullList 完整的、未过滤的包裹列表
      */
     private void updateList(List<DeliveryInfo> fullList) {
@@ -227,6 +250,7 @@ public class PackageListFragment extends Fragment {
 
     /**
      * 过滤当前列表数据
+     * 
      * @param query 搜索关键字
      */
     private void applyFilter(String query) {
@@ -291,8 +315,16 @@ public class PackageListFragment extends Fragment {
 
         Intent intent = new Intent(requireContext(), CameraActivity.class);
         intent.putExtra("order_id", item.getOrderId());
-        try { intent.putExtra("latitude",  item.getLatitude()); } catch (Throwable ignore) { intent.putExtra("latitude",  -1); }
-        try { intent.putExtra("longitude", item.getLongitude()); } catch (Throwable ignore) { intent.putExtra("longitude", -1); }
+        try {
+            intent.putExtra("latitude", item.getLatitude());
+        } catch (Throwable ignore) {
+            intent.putExtra("latitude", -1);
+        }
+        try {
+            intent.putExtra("longitude", item.getLongitude());
+        } catch (Throwable ignore) {
+            intent.putExtra("longitude", -1);
+        }
         startActivity(intent);
     }
 
@@ -310,21 +342,31 @@ public class PackageListFragment extends Fragment {
     // public void showUnscannedList() { loadUnscannedParcels(); }
 
     public static final class ParcelListAdapter extends RecyclerView.Adapter<ParcelListAdapter.VH> {
-        public interface OnItemClickListener { void onItemClick(@NonNull DeliveryInfo item); }
+        public interface OnItemClickListener {
+            void onItemClick(@NonNull DeliveryInfo item);
+        }
+
         private final Context ctx;
         private final OnItemClickListener listener;
         private final List<DeliveryInfo> items = new ArrayList<>();
         private final int minRowHeightPx;
+
         public ParcelListAdapter(Context ctx, OnItemClickListener l) {
-            this.ctx = ctx; this.listener = l;
+            this.ctx = ctx;
+            this.listener = l;
             float density = ctx.getResources().getDisplayMetrics().density;
             this.minRowHeightPx = (int) (64f * density);
         }
-        @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+
+        @NonNull
+        @Override
+        public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View v = LayoutInflater.from(ctx).inflate(R.layout.item_package_list, parent, false);
             return new VH(v);
         }
-        @Override public void onBindViewHolder(@NonNull VH h, int pos) {
+
+        @Override
+        public void onBindViewHolder(@NonNull VH h, int pos) {
             DeliveryInfo it = items.get(pos);
             h.itemView.setMinimumHeight(minRowHeightPx);
             String routeText = "包裹号: " + valueOrDash(it.getRouteNumber());
@@ -351,7 +393,8 @@ public class PackageListFragment extends Fragment {
             h.address.setText(addressText);
             View.OnClickListener clickListener = v -> {
                 int adapterPos = h.getBindingAdapterPosition();
-                if (adapterPos == RecyclerView.NO_POSITION) return;
+                if (adapterPos == RecyclerView.NO_POSITION)
+                    return;
                 DeliveryInfo target = items.get(adapterPos);
                 listener.onItemClick(target);
             };
@@ -366,16 +409,26 @@ public class PackageListFragment extends Fragment {
             attachCopySupport(h.customer, customerText);
             attachCopySupport(h.address, addressText);
         }
-        @Override public int getItemCount() { return items.size(); }
-        public void submit(@NonNull List<DeliveryInfo> data) {
-            items.clear(); items.addAll(data); notifyDataSetChanged();
+
+        @Override
+        public int getItemCount() {
+            return items.size();
         }
+
+        public void submit(@NonNull List<DeliveryInfo> data) {
+            items.clear();
+            items.addAll(data);
+            notifyDataSetChanged();
+        }
+
         static final class VH extends RecyclerView.ViewHolder {
             final TextView routeNumber;
             final TextView orderSn;
             final TextView customer;
             final TextView address;
-            VH(@NonNull View itemView) { super(itemView);
+
+            VH(@NonNull View itemView) {
+                super(itemView);
                 routeNumber = itemView.findViewById(R.id.tv_route_number);
                 orderSn = itemView.findViewById(R.id.tv_order_sn);
                 customer = itemView.findViewById(R.id.tv_customer);
@@ -396,7 +449,8 @@ public class PackageListFragment extends Fragment {
 
         private void copyText(@NonNull String text) {
             ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-            if (clipboard == null) return;
+            if (clipboard == null)
+                return;
             ClipData clip = ClipData.newPlainText("parcel_info", text);
             clipboard.setPrimaryClip(clip);
             Toast.makeText(ctx, ctx.getString(R.string.copy_success), Toast.LENGTH_SHORT).show();
