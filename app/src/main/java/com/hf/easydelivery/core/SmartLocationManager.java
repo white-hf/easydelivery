@@ -43,7 +43,6 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 
-
 import androidx.core.app.ActivityCompat;
 
 import android.hardware.Sensor;
@@ -71,7 +70,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The SmartLocationManager class provides location-related functionality and try to reduce consumption of battery.
+ * The SmartLocationManager class provides location-related functionality and
+ * try to reduce consumption of battery.
+ * 
  * @author jvtang
  * @since 2024-08-21
  */
@@ -104,8 +105,8 @@ public class SmartLocationManager {
 
     // === Adaptive boost (temporary high-frequency updates) ===
     private static final long BOOST_MIN_INTERVAL_MS = 10_000L; // 预留：降频节流
-    private long boostHoldUntilMs = 0L;   // 保持高频到这个时间戳（wall clock）
-    private long lastBoostChangeMs = 0L;  // 最近一次切换 boost 状态（预留）
+    private long boostHoldUntilMs = 0L; // 保持高频到这个时间戳（wall clock）
+    private long lastBoostChangeMs = 0L; // 最近一次切换 boost 状态（预留）
 
     // === Heading (bearing) support via sensors ===
     private SensorManager sensorManager;
@@ -148,8 +149,7 @@ public class SmartLocationManager {
     public static synchronized SmartLocationManager getInstance(Context context) {
         if (instance != null)
             return instance;
-        else
-        {
+        else {
             if (context == null)
                 return null;
 
@@ -158,17 +158,18 @@ public class SmartLocationManager {
         return instance;
     }
 
-
     public interface LocationUpdateListener {
         void onLocationUpdate(Location location, MovementState state);
     }
 
     /**
      * 请求一段时间的高频定位（可叠加延长保持时间）。
+     * 
      * @param durationMs 例如 20_000（20 秒）
      */
     public void requestBoost(long durationMs) {
-        if (durationMs <= 0) durationMs = 5_000L;
+        if (durationMs <= 0)
+            durationMs = 5_000L;
         if (inBurstMode) {
             long now = System.currentTimeMillis();
             boostHoldUntilMs = Math.max(boostHoldUntilMs, now + durationMs);
@@ -180,13 +181,15 @@ public class SmartLocationManager {
 
     /**
      * 便捷：地图检测到“边缘风险/不平滑风险”时调用。
+     * 
      * @param offsetMeters 蓝点相对目标中心的米偏移
      * @param speedMps     当前速度 m/s
      */
     public void requestBoostIfEdgeRisk(float offsetMeters, float speedMps) {
         long now = System.currentTimeMillis();
         // 节流：两次提频之间至少间隔 BOOST_MIN_INTERVAL_MS
-        if (now - lastBoostChangeMs < BOOST_MIN_INTERVAL_MS) return;
+        if (now - lastBoostChangeMs < BOOST_MIN_INTERVAL_MS)
+            return;
         if (offsetMeters > 25f && speedMps > 5f) {
             requestBoost(20_000L);
         }
@@ -199,7 +202,8 @@ public class SmartLocationManager {
         activityRecognitionClient = ActivityRecognition.getClient(context);
 
         Intent intent = new Intent(context, ActivityTransitionReceiver.class);
-        activityRecognitionPendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        activityRecognitionPendingIntent = PendingIntent.getBroadcast(context, 0, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         registerActivityTransitionUpdates();
 
@@ -215,7 +219,8 @@ public class SmartLocationManager {
     }
 
     public void startLocationUpdates() {
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(context,
+                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // Handle the case where permission is not granted
             return;
         }
@@ -239,7 +244,8 @@ public class SmartLocationManager {
     }
 
     private void requestLocationUpdates(long interval, long minInterval) {
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(context,
+                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // Handle the case where permission is not granted
             return;
         }
@@ -255,7 +261,8 @@ public class SmartLocationManager {
     }
 
     private void switchToSignificantChanges() {
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(context,
+                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // Handle the case where permission is not granted
             return;
         }
@@ -272,7 +279,8 @@ public class SmartLocationManager {
 
         Location prevLast = lastLocation; // keep previous for jump computation
 
-        // Prefer device-provided speed (m/s) if available; otherwise compute from distance/time
+        // Prefer device-provided speed (m/s) if available; otherwise compute from
+        // distance/time
         if (newLocation.hasSpeed()) {
             speed = newLocation.getSpeed();
         } else if (lastLocation != null) {
@@ -299,8 +307,10 @@ public class SmartLocationManager {
 
         Location outputLoc;
         if (lastSmoothedLocation != null) {
-            double lat = lastSmoothedLocation.getLatitude() + SMOOTHING_FACTOR * (newLocation.getLatitude() - lastSmoothedLocation.getLatitude());
-            double lon = lastSmoothedLocation.getLongitude() + SMOOTHING_FACTOR * (newLocation.getLongitude() - lastSmoothedLocation.getLongitude());
+            double lat = lastSmoothedLocation.getLatitude()
+                    + SMOOTHING_FACTOR * (newLocation.getLatitude() - lastSmoothedLocation.getLatitude());
+            double lon = lastSmoothedLocation.getLongitude()
+                    + SMOOTHING_FACTOR * (newLocation.getLongitude() - lastSmoothedLocation.getLongitude());
             outputLoc = new Location(newLocation);
             outputLoc.setLatitude(lat);
             outputLoc.setLongitude(lon);
@@ -337,7 +347,7 @@ public class SmartLocationManager {
             exitBurstMode();
         }
 
-        this.forwardToDrivingDistanceTracker(outputLoc , currentState);
+        this.forwardToDrivingDistanceTracker(outputLoc, currentState);
 
     }
 
@@ -354,8 +364,18 @@ public class SmartLocationManager {
         }
 
         if (newState != currentState) {
+            // Patch 2: 从静止/步行 -> 开车，立即提频 + 拉一次准点
+            boolean isDrivingNow = newState == MovementState.SLOW_DRIVING || newState == MovementState.NORMAL_DRIVING;
+            boolean wasNotDriving = currentState == MovementState.STATIONARY || currentState == MovementState.WALKING;
+
+            if (isDrivingNow && wasNotDriving) {
+                requestBoost(15_000L); // 提频15秒
+                requestSingleHighAccuracyFix(); // 立刻拉一次准点
+            }
+
             currentState = newState;
-            // Removed automatic enterBurstMode on STATIONARY to allow explicit burst mode or distance-based triggers
+            // Removed automatic enterBurstMode on STATIONARY to allow explicit burst mode
+            // or distance-based triggers
             return true; // State has changed
         }
         return false; // State has not changed
@@ -399,7 +419,8 @@ public class SmartLocationManager {
     }
 
     private void exitBurstMode(boolean fromTimer) {
-        if (!inBurstMode) return;
+        if (!inBurstMode)
+            return;
         inBurstMode = false;
         boostHoldUntilMs = 0L;
         lastBoostChangeMs = System.currentTimeMillis();
@@ -413,13 +434,7 @@ public class SmartLocationManager {
     }
 
     private void updateLocationParametersForState() {
-        if (currentState == MovementState.STATIONARY && !inBurstMode) {
-            // 静止：改为低功耗/显著变化模式
-            switchToSignificantChanges();
-            lastRequestedIntervalMs = -1L; // unknown for PASSIVE; force reconfigure next time
-            lastRequestedMinIntervalMs = -1L;
-            return;
-        }
+        // Removed passive mode switch for STATIONARY to ensure reliable updates
         long interval = inBurstMode ? getBurstModeInterval() : getRecommendedUpdateInterval();
         long minInterval = inBurstMode ? getBurstModeInterval() : getMinUpdateInterval();
 
@@ -439,7 +454,7 @@ public class SmartLocationManager {
     private long getRecommendedUpdateInterval() {
         switch (currentState) {
             case STATIONARY:
-                return 30 * 1000; // 30 seconds
+                return 15 * 1000; // 15 seconds (was 30s)
             case WALKING:
                 return 8 * 1000; // 8 seconds
             case SLOW_DRIVING:
@@ -451,11 +466,10 @@ public class SmartLocationManager {
         }
     }
 
-
     private long getMinUpdateInterval() {
         switch (currentState) {
             case STATIONARY:
-                return 15 * 1000; // 15 seconds
+                return 10 * 1000; // 10 seconds (was 15s)
             case WALKING:
                 return 4 * 1000; // 4 seconds
             case SLOW_DRIVING:
@@ -470,7 +484,6 @@ public class SmartLocationManager {
     private long getBurstModeInterval() {
         return 1000; // 1 second during burst mode
     }
-
 
     public void stopLocationUpdates() {
         if (fusedLocationClient != null && locationCallback != null) {
@@ -615,7 +628,6 @@ public class SmartLocationManager {
         }
     }
 
-
     // === Heading lifecycle ===
     private void startHeadingUpdates() {
         if (sensorManager != null && rotationVectorSensor != null) {
@@ -637,7 +649,8 @@ public class SmartLocationManager {
                 SensorManager.getOrientation(rotationMatrix, orientationAngles);
                 float azimuthRad = orientationAngles[0];
                 float azimuthDeg = (float) Math.toDegrees(azimuthRad);
-                if (azimuthDeg < 0) azimuthDeg += 360f;
+                if (azimuthDeg < 0)
+                    azimuthDeg += 360f;
                 if (Float.isNaN(currentHeadingDegrees)) {
                     currentHeadingDegrees = azimuthDeg;
                 } else {
@@ -656,11 +669,16 @@ public class SmartLocationManager {
         // Handle wrap-around near 0/360 to avoid jumps
         float delta = input - output;
         if (Math.abs(delta) > 180f) {
-            if (delta > 0f) output += 360f; else output -= 360f;
+            if (delta > 0f)
+                output += 360f;
+            else
+                output -= 360f;
         }
         float result = output + alpha * (input - output);
-        if (result >= 360f) result -= 360f;
-        if (result < 0f) result += 360f;
+        if (result >= 360f)
+            result -= 360f;
+        if (result < 0f)
+            result += 360f;
         return result;
     }
 
@@ -680,7 +698,8 @@ public class SmartLocationManager {
     private final SensorEventListener accelListener = new SensorEventListener() {
         @Override
         public void onSensorChanged(SensorEvent event) {
-            if (event.sensor.getType() != Sensor.TYPE_LINEAR_ACCELERATION) return;
+            if (event.sensor.getType() != Sensor.TYPE_LINEAR_ACCELERATION)
+                return;
             float ax = event.values[0];
             float ay = event.values[1];
             float az = event.values[2];
@@ -715,14 +734,18 @@ public class SmartLocationManager {
         FileLog.getInstance().debug(TAG, "motion wake detected -> boost + single fix");
         try {
             requestBoost(8_000L);
-        } catch (Throwable ignore) {}
+        } catch (Throwable ignore) {
+        }
         requestSingleHighAccuracyFix();
     }
 
     private void requestSingleHighAccuracyFix() {
-        if (singleUpdateInFlight) return;
-        if (fusedLocationClient == null) return;
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (singleUpdateInFlight)
+            return;
+        if (fusedLocationClient == null)
+            return;
+        if (ActivityCompat.checkSelfPermission(context,
+                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
         singleUpdateInFlight = true;
@@ -757,7 +780,8 @@ public class SmartLocationManager {
 
     /** Returns last predicted location (may be null). */
     public Location getPredictedLocation() {
-        if (lastPredictedLocation == null) return null;
+        if (lastPredictedLocation == null)
+            return null;
         return new Location(lastPredictedLocation);
     }
 
@@ -766,10 +790,13 @@ public class SmartLocationManager {
         if (Float.isNaN(heading)) {
             heading = hasReliableHeading() ? currentHeadingDegrees : Float.NaN;
         }
-        if (Float.isNaN(heading)) return null;
-        if (speedMps < MIN_PREDICTION_SPEED_MPS) return null;
+        if (Float.isNaN(heading))
+            return null;
+        if (speedMps < MIN_PREDICTION_SPEED_MPS)
+            return null;
         double distance = speedMps * PREDICTION_HORIZON_SEC;
-        if (distance < 1.0) return null;
+        if (distance < 1.0)
+            return null;
         double headingRad = Math.toRadians(heading);
         double latRad = Math.toRadians(base.getLatitude());
         double lonRad = Math.toRadians(base.getLongitude());
@@ -794,7 +821,8 @@ public class SmartLocationManager {
      * Direct call (no reflection).
      */
     private void forwardToDrivingDistanceTracker(Location loc, MovementState state) {
-        if (loc == null) return;
+        if (loc == null)
+            return;
         try {
             DrivingDistanceTracker
                     .getInstance(context.getApplicationContext())

@@ -109,4 +109,11 @@ public class CourierService implements ICourierService {
     public void fetchDriverReport(int warehouse, int driverId, String date, IResponseCallBack<List<ScanBatchReportData>> callback) {
 
     }
+
+    @Override
+    public void retryDelivery(DeliveredUploadParams uploadInfo, IResponseCallBack<Void> callback)
+
+    {
+
+    }
 }

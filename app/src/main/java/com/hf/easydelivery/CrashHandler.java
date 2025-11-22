@@ -29,7 +29,8 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
     private Thread.UncaughtExceptionHandler mDefaultHandler;
     private final Map<String, String> mDeviceInfo = new HashMap<>();
 
-    private CrashHandler() {}
+    private CrashHandler() {
+    }
 
     public static CrashHandler getInstance() {
         if (instance == null) {
@@ -107,16 +108,23 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
 
     private void saveCrashInfoToFile(Throwable ex) {
         StringBuilder sb = new StringBuilder();
-        
+
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
-        sb.append("Crash Time: ").append(sdf.format(new Date())).append("\n");
+        String dateStr = "Crash Time: " + sdf.format(new Date());
+        FileLog.getInstance().writeLog(dateStr);
+        sb.append(dateStr).append("\n");
 
         for (Map.Entry<String, String> entry : mDeviceInfo.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
-            sb.append(key).append(" = ").append(value).append("\n");
+            String info = key + " = " + value;
+            FileLog.getInstance().writeLog(info);
+            sb.append(info).append("\n");
         }
-        sb.append("\n-------------------- Stack Trace --------------------\n\n");
+
+        String separator = "-------------------- Stack Trace --------------------";
+        FileLog.getInstance().writeLog(separator);
+        sb.append("\n").append(separator).append("\n\n");
 
         Writer writer = new StringWriter();
         PrintWriter printWriter = new PrintWriter(writer);
@@ -128,14 +136,21 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
         }
         printWriter.close();
         String result = writer.toString();
+
+        // Log stack trace line by line to ensure it's written to FileLog
+        String[] lines = result.split("\\r?\\n");
+        for (String line : lines) {
+            FileLog.getInstance().writeLog(line);
+        }
+
         sb.append(result);
 
-        FileLog.getInstance().writeLog(sb.toString());
         writeCrashToExternal(sb.toString());
     }
 
     private void writeCrashToExternal(String logContent) {
-        if (mContext == null) return;
+        if (mContext == null)
+            return;
         try {
             File dir = mContext.getExternalFilesDir("crash_logs");
             if (dir == null) {

@@ -78,7 +78,8 @@ public class MultipartUploader {
             Log.w(TAG, "upload: no valid image files parsed from imagePath");
         }
 
-        return new MultipartRequestBody(boundary, leadingFields, imageFiles, trailingFields, trackingId);
+        return new MultipartRequestBody(boundary, leadingFields, imageFiles, trailingFields, trackingId,
+                params.getImageFieldName());
     }
 
     private static void logMultipartPreview(DeliveredUploadParams params, String boundary) {
@@ -121,11 +122,12 @@ public class MultipartUploader {
                 content = trimmed.substring(1, trimmed.length() - 1);
             }
 
-            String[] paths = content.contains(",") ? content.split(",") : new String[]{content};
+            String[] paths = content.contains(",") ? content.split(",") : new String[] { content };
 
             for (String raw : paths) {
                 String p = raw.trim();
-                if (p.isEmpty()) continue;
+                if (p.isEmpty())
+                    continue;
                 String originalLabel = p;
                 String resolvedPath = p;
                 if (resolvedPath.startsWith("file://")) {
@@ -134,7 +136,8 @@ public class MultipartUploader {
                 File f = new File(resolvedPath);
                 if (!f.exists()) {
                     Log.w(TAG, "parseImagePath: file not found -> " + resolvedPath);
-                    FileLog.getInstance().writeLog("[MultipartUploader] parseImagePath: file not found -> " + resolvedPath);
+                    FileLog.getInstance()
+                            .writeLog("[MultipartUploader] parseImagePath: file not found -> " + resolvedPath);
                     continue;
                 }
                 if (!f.isFile()) {
@@ -144,7 +147,8 @@ public class MultipartUploader {
                 }
                 if (f.length() <= 0) {
                     Log.w(TAG, "parseImagePath: zero length file -> " + resolvedPath);
-                    FileLog.getInstance().writeLog("[MultipartUploader] parseImagePath: zero length file -> " + resolvedPath);
+                    FileLog.getInstance()
+                            .writeLog("[MultipartUploader] parseImagePath: zero length file -> " + resolvedPath);
                     continue;
                 }
                 fileList.add(new ImagePart(f, originalLabel));
@@ -167,8 +171,10 @@ public class MultipartUploader {
         }
 
         String fallbackFileName() {
-            if (file != null) return file.getName();
-            if (originalName != null && !originalName.isEmpty()) return originalName;
+            if (file != null)
+                return file.getName();
+            if (originalName != null && !originalName.isEmpty())
+                return originalName;
             return "image.jpg";
         }
     }
@@ -182,12 +188,11 @@ public class MultipartUploader {
         private final List<ImagePart> imageParts;
         private final List<Map.Entry<String, String>> trailingFields;
         private final String trackingId;
+        private final String imageFieldName;
 
-        MultipartRequestBody(String boundary,
-                             List<Map.Entry<String, String>> leadingFields,
-                             List<ImagePart> imageParts,
-                             List<Map.Entry<String, String>> trailingFields,
-                             String trackingId) {
+        MultipartRequestBody(String boundary, List<Map.Entry<String, String>> leadingFields,
+                List<ImagePart> imageParts, List<Map.Entry<String, String>> trailingFields,
+                String trackingId, String imageFieldName) {
             this.boundary = boundary;
             this.boundaryPrefix = ("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8);
             this.closingBoundary = ("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8);
@@ -195,6 +200,7 @@ public class MultipartUploader {
             this.imageParts = imageParts;
             this.trailingFields = trailingFields;
             this.trackingId = trackingId;
+            this.imageFieldName = imageFieldName;
         }
 
         @Override
@@ -220,7 +226,8 @@ public class MultipartUploader {
         }
 
         private void writeFields(BufferedSink sink, List<Map.Entry<String, String>> fields) throws IOException {
-            if (fields == null) return;
+            if (fields == null)
+                return;
             for (Map.Entry<String, String> entry : fields) {
                 String key = entry.getKey();
                 String value = entry.getValue() == null ? "" : entry.getValue();
@@ -234,14 +241,16 @@ public class MultipartUploader {
         }
 
         private void writeFiles(BufferedSink sink, List<ImagePart> files) throws IOException {
-            if (files == null) return;
+            if (files == null)
+                return;
             for (ImagePart part : files) {
                 File file = part.file;
                 if (file == null || !file.exists() || !file.isFile() || file.length() <= 0) {
                     continue;
                 }
                 sink.write(boundaryPrefix);
-                sink.writeUtf8("Content-Disposition: form-data; name=\"pod_images[]\"; filename=\"" + buildUploadFileName(part) + "\"\r\n");
+                sink.writeUtf8("Content-Disposition: form-data; name=\"" + imageFieldName + "\"; filename=\""
+                        + buildUploadFileName(part) + "\"\r\n");
                 sink.writeUtf8("Content-Type: image/jpg\r\n");
                 sink.writeUtf8("Content-Length: " + file.length() + "\r\n\r\n");
                 try (Source source = Okio.source(file)) {
@@ -261,7 +270,8 @@ public class MultipartUploader {
         }
 
         private long lengthOfFields(List<Map.Entry<String, String>> fields) {
-            if (fields == null) return 0;
+            if (fields == null)
+                return 0;
             long total = 0;
             for (Map.Entry<String, String> entry : fields) {
                 String value = entry.getValue() == null ? "" : entry.getValue();
@@ -277,14 +287,16 @@ public class MultipartUploader {
         }
 
         private long lengthOfFiles(List<ImagePart> files) {
-            if (files == null) return 0;
+            if (files == null)
+                return 0;
             long total = 0;
             for (ImagePart part : files) {
                 File file = part.file;
                 if (file == null || !file.exists() || !file.isFile() || file.length() <= 0) {
                     continue;
                 }
-                String header = "Content-Disposition: form-data; name=\"pod_images[]\"; filename=\"" + buildUploadFileName(part) + "\"\r\n" +
+                String header = "Content-Disposition: form-data; name=\"" + imageFieldName + "\"; filename=\""
+                        + buildUploadFileName(part) + "\"\r\n" +
                         "Content-Type: image/jpg\r\n" +
                         "Content-Length: " + file.length() + "\r\n\r\n";
                 total += boundaryPrefix.length;
