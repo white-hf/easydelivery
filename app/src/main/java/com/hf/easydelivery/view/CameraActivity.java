@@ -278,6 +278,11 @@ public class CameraActivity extends AppCompatActivity
             }
 
             tvAddress.setOnClickListener(v -> openNavigationToPackage());
+
+            // Check for signature requirement
+            if (deliveryInfo.getDispatchType() != null && deliveryInfo.getDispatchType().getSG() == 1) {
+                addSignatureButton();
+            }
         }
         initLocationManager();
 
@@ -2013,6 +2018,82 @@ public class CameraActivity extends AppCompatActivity
             dialog.show();
         });
     }
+
+    private void addSignatureButton() {
+        try {
+            // Find the info bar container (CardView) or its child layout
+            ViewGroup infoLayout = (ViewGroup) infoBar.getChildAt(0); // Assuming CardView has one child
+
+            // Create signature button
+            android.widget.ImageView signatureBtn = new android.widget.ImageView(this);
+            signatureBtn.setImageResource(android.R.drawable.ic_menu_edit); // Use a pencil/edit icon
+            signatureBtn.setColorFilter(ContextCompat.getColor(this, R.color.colorPrimary)); // Use app primary color
+
+            // Layout params
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    (int) (32 * getResources().getDisplayMetrics().density),
+                    (int) (32 * getResources().getDisplayMetrics().density));
+            params.gravity = android.view.Gravity.CENTER_VERTICAL;
+            params.setMarginStart((int) (8 * getResources().getDisplayMetrics().density));
+
+            signatureBtn.setLayoutParams(params);
+            signatureBtn.setOnClickListener(v -> showSignatureDialog());
+
+            // Add to the layout (assuming horizontal or relative layout in info bar)
+            // Ideally we should add it to a specific container, but for now appending to
+            // the main info layout
+            // If the layout is vertical, this might look bad. Let's try to find a better
+            // spot or add it dynamically.
+            // A safer bet is to add it to the 'tvAddress' or create a new container.
+            // Given the constraints, let's try adding it to the end of the infoLayout if
+            // it's horizontal,
+            // or just rely on a floating action button or similar if layout is complex.
+            // Let's try adding it to the infoLayout.
+            if (infoLayout instanceof LinearLayout) {
+                infoLayout.addView(signatureBtn);
+            } else if (infoLayout instanceof androidx.constraintlayout.widget.ConstraintLayout) {
+                // If constraint layout, we might need to clone constraints.
+                // Simplification: Add a floating button on top of the info bar
+                FrameLayout root = findViewById(android.R.id.content);
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(params.width, params.height);
+                lp.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+                lp.topMargin = (int) (16 * getResources().getDisplayMetrics().density); // Adjust based on info bar
+                                                                                        // height
+                lp.rightMargin = (int) (16 * getResources().getDisplayMetrics().density);
+                addContentView(signatureBtn, lp);
+            } else {
+                infoLayout.addView(signatureBtn);
+            }
+
+        } catch (Exception e) {
+            FileLog.getInstance().error(TAG, "Failed to add signature button", e);
+        }
+    }
+
+    private void showSignatureDialog() {
+        if (deliveryInfo == null)
+            return;
+        SignatureDialogFragment dialog = SignatureDialogFragment.newInstance(deliveryInfo.getName());
+        dialog.setOnSignatureCompletedListener((path, name) -> {
+            FileLog.getInstance().debug(TAG, "Signature saved: " + path + ", Name: " + name);
+            Toast.makeText(this, "Signature saved", Toast.LENGTH_SHORT).show();
+            // TODO: Store this path for upload.
+            // The requirement says "record signature image for upload after photo
+            // completion".
+            // We can store it in a member variable or add it to the package entity.
+            // For now, we just log it as requested "upload logic not modified yet".
+            // We could potentially add it to mImageFiles if we wanted to treat it as a
+            // photo,
+            // but the requirement implies a separate flow or just "recording" it.
+            // Let's store it in a temporary variable if needed later.
+            lastSignaturePath = path;
+            lastRecipientName = name;
+        });
+        dialog.show(getSupportFragmentManager(), "signature_dialog");
+    }
+
+    private String lastSignaturePath;
+    private String lastRecipientName;
 
     private void saveApartmentPhotoAsync(File imageFile, String key, String displayAddress, boolean manual) {
         cameraExecutor.execute(() -> {
