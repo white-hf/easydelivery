@@ -8,6 +8,8 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
@@ -72,30 +74,42 @@ import java.util.Locale;
 
 /**
  * 地图派送界面（内层 Fragment）
- * <p>职责摘要:</p>
+ * <p>
+ * 职责摘要:
+ * </p>
  * <ul>
- *   <li>协调 {@link DeliveryFocusManager}、{@link CameraFollowController} 完成定位→焦点→UI 展示的流程。</li>
- *   <li>负责 Info Pill UI 的渲染/交互（关闭、跳转拍照、显示群组列表）。</li>
- *   <li>维护地图控件与 ViewModel 的绑定：包裹数据刷新、定位权限、相机与手势事件。</li>
+ * <li>协调 {@link DeliveryFocusManager}、{@link CameraFollowController} 完成定位→焦点→UI
+ * 展示的流程。</li>
+ * <li>负责 Info Pill UI 的渲染/交互（关闭、跳转拍照、显示群组列表）。</li>
+ * <li>维护地图控件与 ViewModel 的绑定：包裹数据刷新、定位权限、相机与手势事件。</li>
  * </ul>
- * <p>核心流程:</p>
+ * <p>
+ * 核心流程:
+ * </p>
  * <ol>
- *   <li>ViewModel 推送包裹数据 → Fragment 缓存当前“派送中”快照，用于后续距离排序。</li>
- *   <li>SmartLocationManager 推送定位 → `DeliveryFocusManager.sortByDistance(...)` 计算最近 20 单、自动构建 50m 内聚合列表，用于 Info Pill & zoom。</li>
- *   <li>UI 回调（折叠、展开、恢复跟随）仅影响 Fragment 与 {@link CameraFollowController}，逻辑趋于无状态。</li>
+ * <li>ViewModel 推送包裹数据 → Fragment 缓存当前“派送中”快照，用于后续距离排序。</li>
+ * <li>SmartLocationManager 推送定位 → `DeliveryFocusManager.sortByDistance(...)`
+ * 计算最近 20 单、自动构建 50m 内聚合列表，用于 Info Pill & zoom。</li>
+ * <li>UI 回调（折叠、展开、恢复跟随）仅影响 Fragment 与
+ * {@link CameraFollowController}，逻辑趋于无状态。</li>
  * </ol>
  */
-public class MapInnerFragment extends Fragment implements OnMapReadyCallback, SmartLocationManager.LocationUpdateListener {
+public class MapInnerFragment extends Fragment
+        implements OnMapReadyCallback, SmartLocationManager.LocationUpdateListener {
     private static final String TAG = "MapInnerFragment";
     private static final float DEFAULT_DISTANCE_METERS = 1000f;
     private static final float INFO_PILL_PROXIMITY_THRESHOLD_METERS = 500f;
-    private static final long MAX_LOCATION_AGE_MS = 15_000L;
+    private static final long MAX_LOCATION_AGE_MS = 60_000L;
     private static final long MANUAL_CENTER_HOLD_MS = 3_000L;
     private static final long INSIDE_MANUAL_CENTER_HOLD_MS = 500L;
     private static final long INSIDE_BOOST_DURATION_MS = 5_000L;
     private static final long INSIDE_BOOST_COOLDOWN_MS = 25_000L;
-    private void logD(String msg){
-        try { FileLog.getInstance().debug(TAG, msg); } catch (Throwable ignore) {}
+
+    private void logD(String msg) {
+        try {
+            FileLog.getInstance().debug(TAG, msg);
+        } catch (Throwable ignore) {
+        }
     }
 
     private MapView mapView;
@@ -130,19 +144,22 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                     proximityController.applyAppProfile(newProfile);
                     logD("profile changed -> proximity=" + newProfile);
                 }
-            } catch (Throwable ignore) {}
+            } catch (Throwable ignore) {
+            }
             try {
                 if (cameraController != null) {
                     cameraController.applyAppProfile(newProfile);
                     logD("profile changed -> camera=" + newProfile);
                 }
-            } catch (Throwable ignore) {}
+            } catch (Throwable ignore) {
+            }
             try {
                 if (focusManager != null) {
                     focusManager.applyAppProfile(newProfile);
                     logD("profile changed -> focus=" + newProfile);
                 }
-            } catch (Throwable ignore) {}
+            } catch (Throwable ignore) {
+            }
         }
     };
     private List<DeliveryInfo> currentMapDeliveries = Collections.emptyList();
@@ -165,7 +182,11 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     private MapViewModel mapViewModel;
     // 支持两种数据源：派送中(地图) / 未扫描(扫码)
     private ScanViewModel scanViewModel;
-    private enum DataMode { DELIVERY, UNSCANNED }
+
+    private enum DataMode {
+        DELIVERY, UNSCANNED
+    }
+
     private DataMode currentMode = DataMode.DELIVERY; // 默认派送中
 
     private ActivityResultLauncher<String> requestLocationPermissionLauncher;
@@ -183,21 +204,22 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
 
     // ===== Top-3 主案：Fragment 侧轻量采样/抑制配置 =====
     // 远距降采样：当最近目标很远时，降低 Proximity 评估频率
-    private static final float FAR_DISTANCE_SAMPLE_THRESHOLD_M = 1500f;   // >1.5km 认为“远距”
-    private static final long FAR_SAMPLE_MIN_INTERVAL_MS = 2500L;         // 远距评估最少间隔
-    private static final long NEAR_SAMPLE_MIN_INTERVAL_MS = 800L;         // 近距评估最少间隔
+    private static final float FAR_DISTANCE_SAMPLE_THRESHOLD_M = 1500f; // >1.5km 认为“远距”
+    private static final long FAR_SAMPLE_MIN_INTERVAL_MS = 2500L; // 远距评估最少间隔
+    private static final long NEAR_SAMPLE_MIN_INTERVAL_MS = 800L; // 近距评估最少间隔
 
     // 区域通勤极简：高速穿越空区时，短时间抑制 Proximity 评估
-    private static final float COMMUTE_SWITCH_M = 600f;                   // 未越过 600m 仍认为同一区域
-    private static final long COMMUTE_SUPPRESS_MS = 120_000L;             // 抑制 2 分钟
+    private static final float COMMUTE_SWITCH_M = 600f; // 未越过 600m 仍认为同一区域
+    private static final long COMMUTE_SUPPRESS_MS = 120_000L; // 抑制 2 分钟
 
     // UI 兜底的回差：策略层已有 lock/unlock，这里只做折叠后的最小回差
     private static final float LOCK_HYSTERESIS_EXTRA_M = 80f;
 
     // 运行时状态
-    private long lastProximityEvalMs = 0L;                                // 上次执行 proximity 的时间
-    @Nullable private LatLng commuteAnchorLatLng = null;                  // 区域通勤锚点
-    private long commuteSuppressUntilMs = 0L;                             // 通勤抑制到期时间
+    private long lastProximityEvalMs = 0L; // 上次执行 proximity 的时间
+    @Nullable
+    private LatLng commuteAnchorLatLng = null; // 区域通勤锚点
+    private long commuteSuppressUntilMs = 0L; // 通勤抑制到期时间
     private long lastCommuteSuppressedKey = 0L;
 
     /** Expose for developer panel to apply follow config at runtime. */
@@ -222,7 +244,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
 
     @Nullable
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
+            @Nullable Bundle savedInstanceState) {
         FileLog.i(TAG, "onCreateView: enter");
         View view = inflater.inflate(R.layout.activity_map, container, false);
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
@@ -246,20 +269,24 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
             if (proximityController != null) {
                 proximityController.applyAppProfile(appProfile);
             }
-        } catch (Throwable ignore) {}
+        } catch (Throwable ignore) {
+        }
         try {
             if (cameraController != null) {
                 cameraController.applyAppProfile(appProfile);
             }
-        } catch (Throwable ignore) {}
+        } catch (Throwable ignore) {
+        }
         try {
             if (focusManager != null) {
                 focusManager.applyAppProfile(appProfile);
             }
-        } catch (Throwable ignore) {}
+        } catch (Throwable ignore) {
+        }
         try {
             profileManager.addListener(profileListener);
-        } catch (Throwable ignore) {}
+        } catch (Throwable ignore) {
+        }
 
         // 核心改动：设置所有 LiveData 的观察者
         observeViewModel();
@@ -288,8 +315,14 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         if (btnResumeFollow != null) {
             btnResumeFollow.setVisibility(View.GONE);
             btnResumeFollow.setOnClickListener(v -> onResumeFollowClicked());
-            try { btnResumeFollow.bringToFront(); } catch (Throwable ignore) {}
-            try { btnResumeFollow.setElevation(10f); } catch (Throwable ignore) {}
+            try {
+                btnResumeFollow.bringToFront();
+            } catch (Throwable ignore) {
+            }
+            try {
+                btnResumeFollow.setElevation(10f);
+            } catch (Throwable ignore) {
+            }
         }
 
         if (statusSummaryText != null) {
@@ -346,8 +379,10 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         if (mini != null) {
             ImageButton btnMyLoc = mini.findViewById(R.id.btn_my_loc);
             ImageButton btnMapType = mini.findViewById(R.id.btn_map_type);
-            if (btnMyLoc != null) btnMyLoc.setOnClickListener(v -> centerOnMyLocation(false));
-            if (btnMapType != null) btnMapType.setOnClickListener(v -> toggleMapType(btnMapType));
+            if (btnMyLoc != null)
+                btnMyLoc.setOnClickListener(v -> centerOnMyLocation(false));
+            if (btnMapType != null)
+                btnMapType.setOnClickListener(v -> toggleMapType(btnMapType));
         }
 
         if (mToolbar != null) {
@@ -356,35 +391,41 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void setupToolbar() {
-        if (mToolbar == null) return;
+        if (mToolbar == null)
+            return;
         Menu menu = mToolbar.getMenu();
-        if (menu != null) menu.clear();
+        if (menu != null)
+            menu.clear();
         mToolbar.inflateMenu(R.menu.map_menu);
         updateNavigationMenuItem();
         mToolbar.setNavigationIcon(null);
-            mToolbar.setOnMenuItemClickListener(item -> {
-                int id = item.getItemId();
-                if (id == R.id.menu_refresh) {
-                    currentMode = DataMode.DELIVERY;
-                    try { mapViewModel.requestAndRefreshMarkers(true); } catch (Throwable ignore) {}
-                    if (getParentFragment() instanceof MapHostFragment)
-                        ((MapHostFragment) getParentFragment()).onRequestInTransitList();
-                    Toast.makeText(requireContext(), "刷新派送中...", Toast.LENGTH_SHORT).show();
-                    return true;
-                } else if (id == R.id.menu_unscanned) {
-                    currentMode = DataMode.UNSCANNED;
-                    if (scanViewModel != null) scanViewModel.queryUnscanned();
-                    if (getParentFragment() instanceof MapHostFragment) {
-                        ((MapHostFragment) getParentFragment()).onRequestUnscannedList();
-                    }
-                    Toast.makeText(requireContext(), "查询未扫描...", Toast.LENGTH_SHORT).show();
-                    return true;
-                } else if (id == R.id.menu_nav_mode) {
-                    toggleNavigationMode();
-                    return true;
+        mToolbar.setOnMenuItemClickListener(item -> {
+            int id = item.getItemId();
+            if (id == R.id.menu_refresh) {
+                currentMode = DataMode.DELIVERY;
+                try {
+                    mapViewModel.requestAndRefreshMarkers(true);
+                } catch (Throwable ignore) {
                 }
-                return false;
-            });
+                if (getParentFragment() instanceof MapHostFragment)
+                    ((MapHostFragment) getParentFragment()).onRequestInTransitList();
+                Toast.makeText(requireContext(), "刷新派送中...", Toast.LENGTH_SHORT).show();
+                return true;
+            } else if (id == R.id.menu_unscanned) {
+                currentMode = DataMode.UNSCANNED;
+                if (scanViewModel != null)
+                    scanViewModel.queryUnscanned();
+                if (getParentFragment() instanceof MapHostFragment) {
+                    ((MapHostFragment) getParentFragment()).onRequestUnscannedList();
+                }
+                Toast.makeText(requireContext(), "查询未扫描...", Toast.LENGTH_SHORT).show();
+                return true;
+            } else if (id == R.id.menu_nav_mode) {
+                toggleNavigationMode();
+                return true;
+            }
+            return false;
+        });
     }
 
     private void setupMap(Bundle savedInstanceState) {
@@ -408,8 +449,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                     }
                 });
 
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(requireContext(),
+                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
         } else {
             getLocation();
@@ -439,11 +480,16 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
             proximityCoordinator.setNearbyLimit(20);
             proximityCoordinator.setBoostable(ms -> {
                 if (mSmartLocationManager != null) {
-                    try { mSmartLocationManager.requestBoost(ms); } catch (Throwable ignore) {}
+                    try {
+                        mSmartLocationManager.requestBoost(ms);
+                    } catch (Throwable ignore) {
+                    }
                 }
             });
             proximityCoordinator.setListener(new ProximityCoordinator.Listener() {
-                @Override public void onShow(@NonNull DeliveryInfo target, float distanceMeters, @NonNull List<DeliveryInfo> nearby) {
+                @Override
+                public void onShow(@NonNull DeliveryInfo target, float distanceMeters,
+                        @NonNull List<DeliveryInfo> nearby) {
                     currentPrimaryDelivery = target;
                     currentCloseDeliveries = nearby;
                     currentPrimaryKey = buildPrimaryKey(target);
@@ -452,7 +498,10 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                     commuteSuppressUntilMs = 0L;
                     showInfoPill(target, nearby);
                 }
-                @Override public void onUpdate(@NonNull DeliveryInfo target, float distanceMeters, @NonNull List<DeliveryInfo> nearby) {
+
+                @Override
+                public void onUpdate(@NonNull DeliveryInfo target, float distanceMeters,
+                        @NonNull List<DeliveryInfo> nearby) {
                     currentPrimaryDelivery = target;
                     currentCloseDeliveries = nearby;
                     currentPrimaryKey = buildPrimaryKey(target);
@@ -461,7 +510,9 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                     commuteSuppressUntilMs = 0L;
                     showInfoPill(target, nearby);
                 }
-                @Override public void onHide() {
+
+                @Override
+                public void onHide() {
                     // 隐藏时清当前主键（允许下次策略自由选择）
                     currentPrimaryKey = null;
                     hideInfoPillCompletely();
@@ -502,7 +553,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
             }
         });
         mapViewModel.getUploadSuccessHapticLive().observe(getViewLifecycleOwner(), event -> {
-            if (!isAdded()) return;
+            if (!isAdded())
+                return;
             Boolean shouldVibrate = event.getMessage();
 
             logD("upload success haptic:" + shouldVibrate);
@@ -524,6 +576,30 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
             DeliveryInfo info = event.getMessage();
             if (info != null && proximityCoordinator != null) {
                 logD("deliveryCompletedLive -> onDeliveryCompleted for key=" + buildPrimaryKey(info));
+
+                // Manual location injection optimization
+                if (mLastLocation != null) {
+                    float[] dist = new float[1];
+                    android.location.Location.distanceBetween(mLastLocation.getLatitude(), mLastLocation.getLongitude(),
+                            info.getLatitude(), info.getLongitude(), dist);
+                    if (dist[0] <= 1000f) {
+                        Location manualLoc = new Location("ManualDelivery");
+                        manualLoc.setLatitude(info.getLatitude());
+                        manualLoc.setLongitude(info.getLongitude());
+                        manualLoc.setTime(System.currentTimeMillis());
+                        // Inherit other properties to avoid nulls
+                        manualLoc.setAltitude(mLastLocation.getAltitude());
+                        manualLoc.setAccuracy(mLastLocation.getAccuracy());
+
+                        mLastLocation = manualLoc;
+                        mapViewModel.updateMyLocation(manualLoc);
+                        logD("Manual location injected from delivery: " + info.getLatitude() + ","
+                                + info.getLongitude());
+                    } else {
+                        logD("Manual location skipped: distance " + dist[0] + "m > 1000m");
+                    }
+                }
+
                 clearCommuteSuppression();
                 proximityCoordinator.onDeliveryCompleted(info);
                 requestImmediateProximityRefresh();
@@ -532,19 +608,24 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void updateMapItems(List<DeliveryInfo> items) {
-        if (googleMap == null || clusterManager == null) return;
+        if (googleMap == null || clusterManager == null)
+            return;
         clusterManager.clearItems();
         DeliveryInfo firstItem = null;
         List<DeliveryInfo> sanitized = new ArrayList<>();
         if (items != null) {
             for (DeliveryInfo info : items) {
-                if (info == null) continue;
+                if (info == null)
+                    continue;
                 // 过滤掉正在上传队列中的包裹，保持原有口径
                 try {
-                    if (ResourceMgr.getInstance().getPendingPackagesMgr().exit(info.getOrderSn())) continue;
-                } catch (Throwable ignore) {}
+                    if (ResourceMgr.getInstance().getPendingPackagesMgr().exit(info.getOrderSn()))
+                        continue;
+                } catch (Throwable ignore) {
+                }
                 clusterManager.addItem(info);
-                if (firstItem == null) firstItem = info;
+                if (firstItem == null)
+                    firstItem = info;
                 sanitized.add(info);
             }
         }
@@ -610,7 +691,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void revealStatusThenAutoFade() {
-        if (statusSummaryText == null) return;
+        if (statusSummaryText == null)
+            return;
         statusSummaryText.animate().cancel();
         statusSummaryText.setAlpha(1f);
         statusSummaryText.animate()
@@ -642,7 +724,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                 cameraController.applyAppProfile(profileManager.getCurrent());
                 logD("onMapReady -> apply camera profile " + profileManager.getCurrent());
             }
-        } catch (Throwable ignore) {}
+        } catch (Throwable ignore) {
+        }
         initClusterManager();
         if (savedPosition != null) {
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, googleMap.getCameraPosition().zoom));
@@ -718,7 +801,10 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                 List<DeliveryInfo> snap = scanViewModel.getUnscannedFilteredLive().getValue();
                 updateMapItems(snap);
             }
-        } catch (Throwable ignore) {}
+        } catch (Throwable ignore) {
+        }
+        // Patch 3: Start edge check
+        edgeCheckHandler.postDelayed(edgeCheckRunnable, 2000);
     }
 
     private void showClusterItemListBottomSheet(List<DeliveryInfo> items) {
@@ -739,7 +825,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void showInfoPill(DeliveryInfo info, List<DeliveryInfo> focusGroup) {
-        if (infoPill == null || info == null) return;
+        if (infoPill == null || info == null)
+            return;
         expandInfoPill();
         // 同步主/群组，保证折叠提示一致
         currentPrimaryDelivery = info;
@@ -752,13 +839,17 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         int sameAddressCount = sameAddressGroup.size();
 
         String streetLabel = info.getCivilNumber() > 0 ? info.getCivilNumber() + "号" : "街号未知";
-        String unitLabel = (info.getUnitNumber() == null || info.getUnitNumber().isEmpty()) ? "" : info.getUnitNumber() + "单元";
+        String unitLabel = (info.getUnitNumber() == null || info.getUnitNumber().isEmpty()) ? ""
+                : info.getUnitNumber() + "单元";
         String parcelLabel = info.getRouteNumber() == null ? "包裹号未知" : info.getRouteNumber() + "包裹";
 
         List<String> primaryParts = new ArrayList<>();
-        if (!TextUtils.isEmpty(streetLabel)) primaryParts.add(streetLabel);
-        if (!TextUtils.isEmpty(unitLabel)) primaryParts.add(unitLabel);
-        if (!TextUtils.isEmpty(parcelLabel)) primaryParts.add(parcelLabel);
+        if (!TextUtils.isEmpty(streetLabel))
+            primaryParts.add(streetLabel);
+        if (!TextUtils.isEmpty(unitLabel))
+            primaryParts.add(unitLabel);
+        if (!TextUtils.isEmpty(parcelLabel))
+            primaryParts.add(parcelLabel);
         if (sameAddressCount > 1) {
             primaryParts.add(String.format(Locale.getDefault(), "同址共%d票", sameAddressCount));
         }
@@ -785,22 +876,27 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         List<DeliveryInfo> source = (focusGroup == null || focusGroup.isEmpty())
                 ? (fallback == null ? Collections.emptyList() : Collections.singletonList(fallback))
                 : focusGroup;
-        if (source.isEmpty()) return "";
+        if (source.isEmpty())
+            return "";
 
         List<String> labels = new ArrayList<>();
         for (DeliveryInfo item : source) {
-            if (item == null) continue;
+            if (item == null)
+                continue;
             String label = item.getRouteNumber();
             if (TextUtils.isEmpty(label)) {
                 Long oid = item.getOrderId();
                 label = oid == null ? "" : String.valueOf(oid);
             }
-            if (TextUtils.isEmpty(label)) continue;
+            if (TextUtils.isEmpty(label))
+                continue;
             labels.add(label);
-            if (labels.size() >= 5) break;
+            if (labels.size() >= 5)
+                break;
         }
 
-        if (labels.isEmpty()) return "";
+        if (labels.isEmpty())
+            return "";
 
         String summary = TextUtils.join("、", labels);
         if (focusGroup != null && focusGroup.size() > labels.size()) {
@@ -820,7 +916,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void expandInfoPill() {
-        if (infoPill == null) return;
+        if (infoPill == null)
+            return;
         infoPillCollapsed = false;
         infoPill.setVisibility(View.VISIBLE);
         if (collapsedInfoPill != null) {
@@ -835,13 +932,17 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         currentPrimaryKey = null;
         currentCloseDeliveries = Collections.emptyList();
         lastNearestDistanceMeters = Float.NaN;
-        if (infoPill != null) infoPill.setVisibility(View.GONE);
-        if (collapsedInfoPill != null) collapsedInfoPill.setVisibility(View.GONE);
-        if (collapsedInfoText != null) collapsedInfoText.setText("暂无派送");
+        if (infoPill != null)
+            infoPill.setVisibility(View.GONE);
+        if (collapsedInfoPill != null)
+            collapsedInfoPill.setVisibility(View.GONE);
+        if (collapsedInfoText != null)
+            collapsedInfoText.setText("暂无派送");
     }
 
     private void updateCollapsedHint() {
-        if (collapsedInfoText == null) return;
+        if (collapsedInfoText == null)
+            return;
         if (currentPrimaryDelivery == null) {
             collapsedInfoText.setText("暂无派送");
             return;
@@ -864,7 +965,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private String buildPrimaryKey(@Nullable DeliveryInfo info) {
-        if (info == null) return "";
+        if (info == null)
+            return "";
         if (info.getOrderId() != null) {
             return "ID-" + info.getOrderId();
         }
@@ -878,9 +980,11 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private boolean isCurrentPrimaryStillPending() {
-        if (currentPrimaryKey == null || currentMapDeliveries == null) return false;
+        if (currentPrimaryKey == null || currentMapDeliveries == null)
+            return false;
         for (DeliveryInfo info : currentMapDeliveries) {
-            if (info == null) continue;
+            if (info == null)
+                continue;
             if (currentPrimaryKey.equals(buildPrimaryKey(info))) {
                 return true;
             }
@@ -894,9 +998,11 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void applyBottomMargin(@Nullable View target, int systemInsetPx) {
-        if (target == null) return;
+        if (target == null)
+            return;
         ViewGroup.LayoutParams params = target.getLayoutParams();
-        if (!(params instanceof ViewGroup.MarginLayoutParams)) return;
+        if (!(params instanceof ViewGroup.MarginLayoutParams))
+            return;
         int controlInset = estimateControlInset();
         int desiredBottom = infoPillBaseBottomMarginPx + Math.max(systemInsetPx, controlInset);
         ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) params;
@@ -910,21 +1016,6 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         int extra = 0;
         extra = Math.max(extra, controlInsetFor(collapsedInfoPill));
         return extra;
-    }
-
-    private int controlInsetFor(@Nullable View control) {
-        if (control == null || control.getVisibility() != View.VISIBLE) return 0;
-        int height = control.getHeight();
-        if (height <= 0) {
-            control.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-            height = control.getMeasuredHeight();
-        }
-        ViewGroup.LayoutParams lp = control.getLayoutParams();
-        int margin = 0;
-        if (lp instanceof ViewGroup.MarginLayoutParams) {
-            margin = ((ViewGroup.MarginLayoutParams) lp).bottomMargin;
-        }
-        return height + margin;
     }
 
     private void showCamera(DeliveryInfo info) {
@@ -947,7 +1038,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void centerOnMyLocation(boolean resumeAutoFollow) {
-        if (googleMap == null) return;
+        if (googleMap == null)
+            return;
         Location loc = getBestAvailableLocation();
         if (loc == null) {
             Toast.makeText(requireContext(), "暂无定位", Toast.LENGTH_SHORT).show();
@@ -968,7 +1060,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                     : lastNearestDistanceMeters;
             logD("centerOnMyLocation zoomFromDist=" + distanceMeters);
             float zoom = focusManager.computeZoomForDistance(distanceMeters);
-            boolean alignToCenter = !resumeAutoFollow || currentRegionState == InfoPillProximityController.RegionState.INSIDE;
+            boolean alignToCenter = !resumeAutoFollow
+                    || currentRegionState == InfoPillProximityController.RegionState.INSIDE;
             boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
             cameraController.resumeFollowNow(loc, lastMovementState, zoom, alignToCenter, insideZone);
         }
@@ -977,7 +1070,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     // import: CameraUpdate, CameraUpdateFactory, LatLng, SystemClock, @NonNull
 
     private void toggleMapType(ImageButton btn) {
-        if (googleMap == null) return;
+        if (googleMap == null)
+            return;
         int type = googleMap.getMapType();
         if (type == GoogleMap.MAP_TYPE_NORMAL) {
             googleMap.setMapType(GoogleMap.MAP_TYPE_SATELLITE);
@@ -1004,11 +1098,14 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void updateNavigationMenuItem() {
-        if (mToolbar == null) return;
+        if (mToolbar == null)
+            return;
         android.view.Menu menu = mToolbar.getMenu();
-        if (menu == null) return;
+        if (menu == null)
+            return;
         MenuItem navItem = menu.findItem(R.id.menu_nav_mode);
-        if (navItem == null) return;
+        if (navItem == null)
+            return;
         navItem.setIcon(navigationModeEnabled ? R.drawable.ic_nav_mode_on : R.drawable.ic_nav_mode_off);
         navItem.setTitle(navigationModeEnabled ? "退出导航视图" : "导航视图");
     }
@@ -1021,7 +1118,10 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
             try {
                 showDeveloperPanel();
             } catch (Throwable t) {
-                try { FileLog.getInstance().error(TAG, "Open developer panel failed", t); } catch (Throwable ignore) {}
+                try {
+                    FileLog.getInstance().error(TAG, "Open developer panel failed", t);
+                } catch (Throwable ignore) {
+                }
                 Toast.makeText(requireContext(), "Developer panel unavailable", Toast.LENGTH_SHORT).show();
             }
         } else {
@@ -1029,7 +1129,10 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         }
     }
 
-    /** Show DeveloperPanelBottomSheet; requires the Map fragment as host for runtime config apply. */
+    /**
+     * Show DeveloperPanelBottomSheet; requires the Map fragment as host for runtime
+     * config apply.
+     */
     private void showDeveloperPanel() {
         DeveloperPanelBottomSheet sheet = DeveloperPanelBottomSheet.newInstance();
         sheet.show(getChildFragmentManager(), "DeveloperPanelBottomSheet");
@@ -1045,7 +1148,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         mapViewModel.updateMyLocation(location);
         mLastLocation = location;
         lastMovementState = state;
-        if (googleMap == null || cameraController == null) return;
+        if (googleMap == null || cameraController == null)
+            return;
 
         Location effective = location;
         if (mSmartLocationManager != null) {
@@ -1061,7 +1165,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                 if (shouldEvaluateProximity(effective, state)) {
                     proximityCoordinator.onLocation(effective, state, currentMapDeliveries);
                     // 进入/更新后：若上次手动折叠且仍锁定同一目标，UI 侧增加一点回差以防抖（兜底）
-                    if (infoPillCollapsed && currentPrimaryDelivery != null && !Float.isNaN(lastNearestDistanceMeters)) {
+                    if (infoPillCollapsed && currentPrimaryDelivery != null
+                            && !Float.isNaN(lastNearestDistanceMeters)) {
                         float unlock = INFO_PILL_PROXIMITY_THRESHOLD_METERS + LOCK_HYSTERESIS_EXTRA_M;
                         if (lastNearestDistanceMeters > unlock) {
                             // 超过回差则允许重新弹出（交给策略层），这里仅清除折叠标记
@@ -1072,7 +1177,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                     // 被采样器跳过时，仍可让相机跟随逻辑独立运行（下方执行）
                 }
             }
-        } catch (Throwable ignore) {}
+        } catch (Throwable ignore) {
+        }
 
         if (proximityController != null) {
             currentRegionState = proximityController.getRegionState();
@@ -1090,8 +1196,24 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
         boolean manualHold = isManualCenterHoldActive();
         boolean allowAutoFollow = navigationModeEnabled || (!autoFollowPausedByGesture && !manualHold);
-        boolean shouldForce = navigationModeEnabled || (!cameraController.hasCenteredOnUser() && allowAutoFollow);
-        boolean interacting = navigationModeEnabled ? false : (isUserInteracting || autoFollowPausedByGesture || manualHold);
+        // ===== Patch 1: 开车就强制重置居中标记 + 强制居中 =====
+        boolean isDriving = state == SmartLocationManager.MovementState.SLOW_DRIVING
+                || state == SmartLocationManager.MovementState.NORMAL_DRIVING;
+
+        if (isDriving && cameraController != null) {
+            // 关键：只要开始开车，就认为用户“需要重新跟随”，强制拉回蓝点
+            cameraController.resetHasCenteredOnUser();
+            // 可选：轻微震动反馈（像高德一样，上车后轻震一下表示已恢复跟随）
+            Utils.vibrate(requireContext(), 30);
+        }
+
+        // ===== 修改 shouldForce 判断：开车就强制居中 =====
+        boolean shouldForce = navigationModeEnabled
+                || isDriving // 新增：开车强制
+                || (!cameraController.hasCenteredOnUser() && allowAutoFollow); // 保留首次打开强制
+
+        boolean interacting = navigationModeEnabled ? false
+                : (isUserInteracting || autoFollowPausedByGesture || manualHold);
         logD("camera follow: force=" + shouldForce
                 + ", allow=" + allowAutoFollow
                 + ", interacting=" + interacting
@@ -1104,8 +1226,23 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
                 allowAutoFollow,
                 interacting,
                 insideZone,
-                preferredZoom
-        );
+                preferredZoom);
+    }
+
+    private int controlInsetFor(@Nullable View control) {
+        if (control == null || control.getVisibility() != View.VISIBLE)
+            return 0;
+        int height = control.getHeight();
+        if (height <= 0) {
+            control.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+            height = control.getMeasuredHeight();
+        }
+        ViewGroup.LayoutParams lp = control.getLayoutParams();
+        int margin = 0;
+        if (lp instanceof ViewGroup.MarginLayoutParams) {
+            margin = ((ViewGroup.MarginLayoutParams) lp).bottomMargin;
+        }
+        return height + margin;
     }
 
     private void onResumeFollowClicked() {
@@ -1118,7 +1255,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
             logD("navigation mode active -> ignore pause gesture");
             return;
         }
-        if (autoFollowPausedByGesture) return;
+        if (autoFollowPausedByGesture)
+            return;
         autoFollowPausedByGesture = true;
         autoFollowPausedAtMs = SystemClock.uptimeMillis();
         showResumeFollowButton(); // 像 Google Maps 一样在用户干预时显示
@@ -1133,20 +1271,32 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         hideResumeFollowButton(); // 点击“重新跟随”后隐藏
         logD("auto-follow pause cleared");
     }
-    
+
     private void clearCommuteSuppression() {
         commuteSuppressUntilMs = 0L;
         commuteAnchorLatLng = null;
     }
 
-
     private void showResumeFollowButton() {
-        if (btnResumeFollow == null || navigationModeEnabled) return;
+        if (btnResumeFollow == null || navigationModeEnabled)
+            return;
         // Ensure the button is above MapView/InfoPill and can receive clicks
-        try { btnResumeFollow.bringToFront(); } catch (Throwable ignore) {}
-        try { btnResumeFollow.setClickable(true); } catch (Throwable ignore) {}
-        try { btnResumeFollow.setElevation(10f); } catch (Throwable ignore) {}
-        try { btnResumeFollow.setTranslationZ(24f); } catch (Throwable ignore) {}
+        try {
+            btnResumeFollow.bringToFront();
+        } catch (Throwable ignore) {
+        }
+        try {
+            btnResumeFollow.setClickable(true);
+        } catch (Throwable ignore) {
+        }
+        try {
+            btnResumeFollow.setElevation(10f);
+        } catch (Throwable ignore) {
+        }
+        try {
+            btnResumeFollow.setTranslationZ(24f);
+        } catch (Throwable ignore) {
+        }
         // Only animate when transitioning from GONE/INVISIBLE to VISIBLE
         if (btnResumeFollow.getVisibility() != View.VISIBLE) {
             btnResumeFollow.setAlpha(0f);
@@ -1156,7 +1306,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void hideResumeFollowButton() {
-        if (btnResumeFollow == null || btnResumeFollow.getVisibility() != View.VISIBLE) return;
+        if (btnResumeFollow == null || btnResumeFollow.getVisibility() != View.VISIBLE)
+            return;
         btnResumeFollow.animate()
                 .alpha(0f)
                 .setDuration(180)
@@ -1188,7 +1339,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private boolean isManualCenterHoldActive() {
-        if (manualCenterHoldUntilMs == 0L) return false;
+        if (manualCenterHoldUntilMs == 0L)
+            return false;
         boolean active = SystemClock.uptimeMillis() < manualCenterHoldUntilMs;
         if (!active) {
             manualCenterHoldUntilMs = 0L;
@@ -1197,12 +1349,17 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void requestFreshLocation() {
-        if (mSmartLocationManager == null) return;
-        try { mSmartLocationManager.requestBoost(8_000L); } catch (Throwable ignore) {}
+        if (mSmartLocationManager == null)
+            return;
+        try {
+            mSmartLocationManager.requestBoost(8_000L);
+        } catch (Throwable ignore) {
+        }
     }
 
     private void maybeRecoverAutoFollow(@NonNull SmartLocationManager.MovementState state) {
-        if (!autoFollowPausedByGesture) return;
+        if (!autoFollowPausedByGesture)
+            return;
         if (navigationModeEnabled) {
             logD("navigation mode active -> auto-resume follow");
             clearAutoFollowPause();
@@ -1211,11 +1368,13 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
             }
             return;
         }
-        if (autoFollowPausedAtMs == 0L) return;
+        if (autoFollowPausedAtMs == 0L)
+            return;
         boolean moving = state == SmartLocationManager.MovementState.SLOW_DRIVING
                 || state == SmartLocationManager.MovementState.NORMAL_DRIVING
                 || state == SmartLocationManager.MovementState.WALKING;
-        if (!moving) return;
+        if (!moving)
+            return;
         long now = SystemClock.uptimeMillis();
         if (now - autoFollowPausedAtMs < 5_000L) {
             return;
@@ -1228,35 +1387,46 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     }
 
     private void maybeRequestInsideBoost(@NonNull SmartLocationManager.MovementState state) {
-        if (!insideZoneBoostEnabled) return;
-        if (currentRegionState != InfoPillProximityController.RegionState.INSIDE) return;
-        if (state == SmartLocationManager.MovementState.NORMAL_DRIVING) return;
-        if (mSmartLocationManager == null) return;
+        if (!insideZoneBoostEnabled)
+            return;
+        if (currentRegionState != InfoPillProximityController.RegionState.INSIDE)
+            return;
+        if (state == SmartLocationManager.MovementState.NORMAL_DRIVING)
+            return;
+        if (mSmartLocationManager == null)
+            return;
         long now = SystemClock.uptimeMillis();
-        if (now - lastInsideBoostMs < INSIDE_BOOST_COOLDOWN_MS) return;
+        if (now - lastInsideBoostMs < INSIDE_BOOST_COOLDOWN_MS)
+            return;
         try {
             mSmartLocationManager.requestBoost(INSIDE_BOOST_DURATION_MS);
             lastInsideBoostMs = now;
             logD("inside boost requested for " + INSIDE_BOOST_DURATION_MS + " ms");
-        } catch (Throwable ignore) {}
+        } catch (Throwable ignore) {
+        }
     }
 
     private void requestImmediateProximityRefresh() {
-        if (proximityCoordinator == null || mLastLocation == null) return;
+        if (proximityCoordinator == null || mLastLocation == null)
+            return;
         forceProximityEvaluation = true;
-        logD("requestImmediateProximityRefresh() -> forcing evaluate at loc=" + mLastLocation.getLatitude() + "," + mLastLocation.getLongitude());
+        logD("requestImmediateProximityRefresh() -> forcing evaluate at loc=" + mLastLocation.getLatitude() + ","
+                + mLastLocation.getLongitude());
         proximityCoordinator.onLocation(mLastLocation, lastMovementState, currentMapDeliveries);
     }
 
     @Nullable
     private Location getFreshLocationCandidate(@Nullable Location candidate) {
-        if (candidate == null) return null;
-        if (!isLocationFresh(candidate)) return null;
+        if (candidate == null)
+            return null;
+        if (!isLocationFresh(candidate))
+            return null;
         return new Location(candidate);
     }
 
     private boolean isLocationFresh(@Nullable Location loc) {
-        if (loc == null) return false;
+        if (loc == null)
+            return false;
         long ageMs = Math.abs(System.currentTimeMillis() - loc.getTime());
         return ageMs <= MAX_LOCATION_AGE_MS;
     }
@@ -1287,24 +1457,28 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         }
 
         // 2) 基于最近距离选择采样间隔（lastNearestDistanceMeters 由上一次策略回调更新）
-        final long minInterval = (Float.isNaN(lastNearestDistanceMeters) || lastNearestDistanceMeters > FAR_DISTANCE_SAMPLE_THRESHOLD_M)
-                ? FAR_SAMPLE_MIN_INTERVAL_MS
-                : NEAR_SAMPLE_MIN_INTERVAL_MS;
+        final long minInterval = (Float.isNaN(lastNearestDistanceMeters)
+                || lastNearestDistanceMeters > FAR_DISTANCE_SAMPLE_THRESHOLD_M)
+                        ? FAR_SAMPLE_MIN_INTERVAL_MS
+                        : NEAR_SAMPLE_MIN_INTERVAL_MS;
         if (now - lastProximityEvalMs < minInterval) {
             return false; // 采样间隔未到
         }
 
         // 3) 区域通勤极简：当驾驶且仍未越过切换距离，则进入短时抑制窗口
-        if (state == SmartLocationManager.MovementState.SLOW_DRIVING || state == SmartLocationManager.MovementState.NORMAL_DRIVING) {
+        if (state == SmartLocationManager.MovementState.SLOW_DRIVING
+                || state == SmartLocationManager.MovementState.NORMAL_DRIVING) {
             LatLng here = new LatLng(loc.getLatitude(), loc.getLongitude());
             if (commuteAnchorLatLng == null) {
                 commuteAnchorLatLng = here; // 第一次进入驾驶，设锚点
             } else {
                 float moved = distanceBetweenMeters(here, commuteAnchorLatLng);
-                if (moved < COMMUTE_SWITCH_M && (Float.isNaN(lastNearestDistanceMeters) || lastNearestDistanceMeters > FAR_DISTANCE_SAMPLE_THRESHOLD_M)) {
+                if (moved < COMMUTE_SWITCH_M && (Float.isNaN(lastNearestDistanceMeters)
+                        || lastNearestDistanceMeters > FAR_DISTANCE_SAMPLE_THRESHOLD_M)) {
                     if (now >= commuteSuppressUntilMs) {
                         commuteSuppressUntilMs = now + COMMUTE_SUPPRESS_MS;
-                        logD("proximity commute-suppress start for " + COMMUTE_SUPPRESS_MS + " ms (moved=" + moved + ")");
+                        logD("proximity commute-suppress start for " + COMMUTE_SUPPRESS_MS + " ms (moved=" + moved
+                                + ")");
                     } else {
                         logD("proximity commute-suppress already active until=" + commuteSuppressUntilMs);
                     }
@@ -1328,20 +1502,25 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     @Override
     public void onResume() {
         super.onResume();
-        if (mapView != null) mapView.onResume();
+        if (mapView != null)
+            mapView.onResume();
         requireActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        if (mSmartLocationManager != null) mSmartLocationManager.startLocationUpdates();
+        if (mSmartLocationManager != null)
+            mSmartLocationManager.startLocationUpdates();
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        if (mapView != null) mapView.onPause();
-        if (googleMap != null) savedPosition = googleMap.getCameraPosition().target;
+        if (mapView != null)
+            mapView.onPause();
+        if (googleMap != null)
+            savedPosition = googleMap.getCameraPosition().target;
         if (cameraController != null) {
             cameraController.cancelAnimations();
         }
-        if (mSmartLocationManager != null) mSmartLocationManager.stopLocationUpdates();
+        if (mSmartLocationManager != null)
+            mSmartLocationManager.stopLocationUpdates();
         requireActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
@@ -1349,7 +1528,10 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
     public void onDestroyView() {
         super.onDestroyView();
         if (profileManager != null) {
-            try { profileManager.removeListener(profileListener); } catch (Throwable ignore) {}
+            try {
+                profileManager.removeListener(profileListener);
+            } catch (Throwable ignore) {
+            }
         }
         autoFollowPausedByGesture = false;
         btnResumeFollow = null;
@@ -1368,27 +1550,65 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
         }
         if (proximityCoordinator != null) {
             proximityCoordinator.setListener(null);
-            try { proximityCoordinator.setEtaProvider(null); } catch (Throwable ignore) {}
-            try { proximityCoordinator.setBoostable(null); } catch (Throwable ignore) {}
+            try {
+                proximityCoordinator.setEtaProvider(null);
+            } catch (Throwable ignore) {
+            }
+            try {
+                proximityCoordinator.setBoostable(null);
+            } catch (Throwable ignore) {
+            }
         }
         if (mSmartLocationManager != null) {
-            try { mSmartLocationManager.setLocationUpdateListener(null); } catch (Throwable ignore) {}
+            try {
+                mSmartLocationManager.setLocationUpdateListener(null);
+            } catch (Throwable ignore) {
+            }
         }
         hideInfoPillCompletely();
         currentMapDeliveries = Collections.emptyList();
         nearestDeliveries = Collections.emptyList();
         currentCloseDeliveries = Collections.emptyList();
-        currentPrimaryDelivery = null;
-        currentPrimaryKey = null;
-        lastNearestDistanceMeters = Float.NaN;
 
-        if (mapView != null) mapView.onDestroy();
+        if (mapView != null)
+            mapView.onDestroy();
+        edgeCheckHandler.removeCallbacks(edgeCheckRunnable);
     }
 
     @Override
     public void onLowMemory() {
         super.onLowMemory();
-        if (mapView != null) mapView.onLowMemory();
+        if (mapView != null)
+            mapView.onLowMemory();
     }
 
+    // Patch 3: 边缘检测兜底
+    private final Handler edgeCheckHandler = new Handler(Looper.getMainLooper());
+    private final Runnable edgeCheckRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (googleMap == null || mLastLocation == null || navigationModeEnabled) {
+                edgeCheckHandler.postDelayed(this, 1000);
+                return;
+            }
+
+            LatLng myLatLng = new LatLng(mLastLocation.getLatitude(), mLastLocation.getLongitude());
+            LatLng center = googleMap.getCameraPosition().target;
+            float distance = distanceBetweenMeters(center, myLatLng);
+
+            boolean isDriving = lastMovementState == SmartLocationManager.MovementState.SLOW_DRIVING
+                    || lastMovementState == SmartLocationManager.MovementState.NORMAL_DRIVING;
+
+            // 蓝点离中心 > 80米 且 在开车 → 强制拉回 + 提频
+            if (distance > 80f && isDriving) {
+                logD("边缘兜底触发：蓝点偏离 " + distance + "m，强制居中");
+                centerOnMyLocation(true);
+                if (mSmartLocationManager != null) {
+                    mSmartLocationManager.requestBoost(10_000L);
+                }
+            }
+
+            edgeCheckHandler.postDelayed(this, 1000);
+        }
+    };
 }

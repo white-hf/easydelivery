@@ -21,26 +21,40 @@ import com.hf.easydelivery.core.SmartLocationManager;
 
 /**
  * 智能相机跟随控制器
- * <p>核心职责 / Key responsibilities:</p>
+ * <p>
+ * 核心职责 / Key responsibilities:
+ * </p>
  * <ul>
- *   <li>根据 {@link SmartLocationManager} 提供的定位/速度状态，生成驾驶视角的相机动画（蓝点居于屏幕下方、平滑 zoom/bearing）。</li>
- *   <li>接管“自动跟随”开关，处理手势打断、恢复操作以及“当前位置”按钮强制回中心的场景。</li>
- *   <li>监测蓝点相对视窗的偏移，触发 {@link SmartLocationManager#requestBoostIfEdgeRisk(float, float)} 以提升定位频率。</li>
- *   <li>输出日志记录每次跟随指令，便于定位“蓝点走出屏幕”或跟随失效的问题。</li>
+ * <li>根据 {@link SmartLocationManager} 提供的定位/速度状态，生成驾驶视角的相机动画（蓝点居于屏幕下方、平滑
+ * zoom/bearing）。</li>
+ * <li>接管“自动跟随”开关，处理手势打断、恢复操作以及“当前位置”按钮强制回中心的场景。</li>
+ * <li>监测蓝点相对视窗的偏移，触发
+ * {@link SmartLocationManager#requestBoostIfEdgeRisk(float, float)}
+ * 以提升定位频率。</li>
+ * <li>输出日志记录每次跟随指令，便于定位“蓝点走出屏幕”或跟随失效的问题。</li>
  * </ul>
- * <p>关键策略 / Implementation highlights:</p>
+ * <p>
+ * 关键策略 / Implementation highlights:
+ * </p>
  * <ul>
- *   <li>Driving camera placement：利用地图投影把驾驶点下移到 75% screen height，结合 tilt=45°、最小 zoom=16。</li>
- *   <li>Update throttling：通过上次更新时间、距离与航向变化阈值控制相机刷新，不响应高频抖动。</li>
- *   <li>User interaction：手势开始时暂停自动跟随并记录 `autoFollowDisabled`，按钮点击/超时后再调用 `follow(...)` 强制回归。</li>
- *   <li>Edge boost：估算蓝点和目标视窗点的像素距离，换算成米后请求临时高频定位，确保高速行驶时地图平滑。</li>
+ * <li>Driving camera placement：利用地图投影把驾驶点下移到 75% screen height，结合 tilt=45°、最小
+ * zoom=16。</li>
+ * <li>Update throttling：通过上次更新时间、距离与航向变化阈值控制相机刷新，不响应高频抖动。</li>
+ * <li>User interaction：手势开始时暂停自动跟随并记录 `autoFollowDisabled`，按钮点击/超时后再调用
+ * `follow(...)` 强制回归。</li>
+ * <li>Edge boost：估算蓝点和目标视窗点的像素距离，换算成米后请求临时高频定位，确保高速行驶时地图平滑。</li>
  * </ul>
  */
 public class CameraFollowController {
 
-
     private static final String TAG = "CameraFollowController";
-    private void logD(String msg){ try{ logger.debug(TAG, msg);}catch(Throwable ignore){} }
+
+    private void logD(String msg) {
+        try {
+            logger.debug(TAG, msg);
+        } catch (Throwable ignore) {
+        }
+    }
 
     private static final float DRIVING_MIN_ZOOM = 16.5f;
     private static final float DRIVING_TARGET_SCREEN_FRACTION_Y = 0.65f;
@@ -58,76 +72,83 @@ public class CameraFollowController {
     private long suppressFollowUntilMs = 0L;
 
     // ==== Auto-Follow Strategy (Basic/Standard/Advanced) ====
-    public enum FollowProfile { BASIC, STANDARD, ADVANCED }
+    public enum FollowProfile {
+        BASIC, STANDARD, ADVANCED
+    }
 
     // ==== Follow Config (Phase 1 externalization) ====
     public static final class FollowConfig {
-        public long stdIntervalMs = 800L;     // STANDARD base interval
-        public float stdDistM = 5f;           // STANDARD base distance
-        public float stdHeadingDeg = 10f;     // STANDARD base heading delta
+        public long stdIntervalMs = 800L; // STANDARD base interval
+        public float stdDistM = 5f; // STANDARD base distance
+        public float stdHeadingDeg = 10f; // STANDARD base heading delta
 
-        public long basicIntervalMs = 1000L;  // BASIC base interval
-        public float basicDistM = 10f;        // BASIC base distance
-        public float basicHeadingDeg = 15f;   // BASIC base heading delta
+        public long basicIntervalMs = 1000L; // BASIC base interval
+        public float basicDistM = 10f; // BASIC base distance
+        public float basicHeadingDeg = 15f; // BASIC base heading delta
     }
 
     private static final FollowConfig FOLLOW_CONFIG = new FollowConfig();
 
-
     @NonNull
-    public static FollowConfig getFollowConfig() { return FOLLOW_CONFIG; }
+    public static FollowConfig getFollowConfig() {
+        return FOLLOW_CONFIG;
+    }
 
     public static void applyFollowConfig(@NonNull FollowConfig cfg) {
         FileLog.getInstance().debug(TAG, "applyFollowConfig() start");
-        if (cfg == null) return;
+        if (cfg == null)
+            return;
         FOLLOW_CONFIG.stdIntervalMs = cfg.stdIntervalMs;
         FOLLOW_CONFIG.stdDistM = cfg.stdDistM;
         FOLLOW_CONFIG.stdHeadingDeg = cfg.stdHeadingDeg;
         FOLLOW_CONFIG.basicIntervalMs = cfg.basicIntervalMs;
         FOLLOW_CONFIG.basicDistM = cfg.basicDistM;
         FOLLOW_CONFIG.basicHeadingDeg = cfg.basicHeadingDeg;
-        FileLog.getInstance().debug(TAG, "applyFollowConfig() done stdInterval="+FOLLOW_CONFIG.stdIntervalMs
-                + ", stdDist="+FOLLOW_CONFIG.stdDistM
-                + ", stdHeading="+FOLLOW_CONFIG.stdHeadingDeg
-                + ", basicInterval="+FOLLOW_CONFIG.basicIntervalMs
-                + ", basicDist="+FOLLOW_CONFIG.basicDistM
-                + ", basicHeading="+FOLLOW_CONFIG.basicHeadingDeg);
+        FileLog.getInstance().debug(TAG, "applyFollowConfig() done stdInterval=" + FOLLOW_CONFIG.stdIntervalMs
+                + ", stdDist=" + FOLLOW_CONFIG.stdDistM
+                + ", stdHeading=" + FOLLOW_CONFIG.stdHeadingDeg
+                + ", basicInterval=" + FOLLOW_CONFIG.basicIntervalMs
+                + ", basicDist=" + FOLLOW_CONFIG.basicDistM
+                + ", basicHeading=" + FOLLOW_CONFIG.basicHeadingDeg);
     }
 
     private interface FollowStrategy {
         boolean allowCameraMove(boolean force,
-                               boolean autoFollowEnabled,
-                               boolean isUserInteracting,
-                               boolean driving,
-                               boolean insideZoneLowSpeed);
+                boolean autoFollowEnabled,
+                boolean isUserInteracting,
+                boolean driving,
+                boolean insideZoneLowSpeed);
+
         boolean shouldUpdateCamera(@NonNull Location location,
-                                   @NonNull SmartLocationManager.MovementState state,
-                                   long lastUpdateUptime,
-                                   @Nullable LatLng lastTarget,
-                                   float lastBearing,
-                                   boolean hasCentered);
+                @NonNull SmartLocationManager.MovementState state,
+                long lastUpdateUptime,
+                @Nullable LatLng lastTarget,
+                float lastBearing,
+                boolean hasCentered);
     }
 
     // STANDARD strategy: mirrors current behavior, now uses FOLLOW_CONFIG
     private final FollowStrategy standardFollow = new FollowStrategy() {
         @Override
         public boolean allowCameraMove(boolean force,
-                                       boolean autoFollowEnabled,
-                                       boolean isUserInteracting,
-                                       boolean driving,
-                                       boolean insideZoneLowSpeed) {
-            if (force) return true;
-            if (!autoFollowEnabled) return false;
+                boolean autoFollowEnabled,
+                boolean isUserInteracting,
+                boolean driving,
+                boolean insideZoneLowSpeed) {
+            if (force)
+                return true;
+            if (!autoFollowEnabled)
+                return false;
             return !isUserInteracting;
         }
 
         @Override
         public boolean shouldUpdateCamera(@NonNull Location location,
-                                          @NonNull SmartLocationManager.MovementState state,
-                                          long lastUpdateUptime,
-                                          @Nullable LatLng lastTarget,
-                                          float lastBearing,
-                                          boolean hasCentered) {
+                @NonNull SmartLocationManager.MovementState state,
+                long lastUpdateUptime,
+                @Nullable LatLng lastTarget,
+                float lastBearing,
+                boolean hasCentered) {
             long now = SystemClock.uptimeMillis();
             boolean timeOk = (now - lastUpdateUptime) > FOLLOW_CONFIG.stdIntervalMs;
 
@@ -142,42 +163,49 @@ public class CameraFollowController {
             boolean headingOk = false;
             if (location.hasBearing() && !Float.isNaN(lastBearing)) {
                 float delta = Math.abs(location.getBearing() - lastBearing);
-                if (delta > 180f) delta = 360f - delta;
+                if (delta > 180f)
+                    delta = 360f - delta;
                 headingOk = delta > FOLLOW_CONFIG.stdHeadingDeg;
             }
             if (!isDrivingState(state) && distanceOk) {
                 headingOk = true;
             }
 
-            FileLog.getInstance().debug(TAG, "[STD] gates timeOk="+timeOk+", distOk="+distanceOk+", headOk="+headingOk);
+            FileLog.getInstance().debug(TAG,
+                    "[STD] gates timeOk=" + timeOk + ", distOk=" + distanceOk + ", headOk=" + headingOk);
 
             boolean driving = isDrivingState(state);
-            if (!timeOk && !distanceOk && !headingOk) return false;
-            if (driving) return timeOk && (distanceOk || headingOk);
+            if (!timeOk && !distanceOk && !headingOk)
+                return false;
+            if (driving)
+                return timeOk && (distanceOk || headingOk);
             return !hasCentered || (timeOk && distanceOk);
         }
     };
 
-    // BASIC strategy: more conservative thresholds (battery friendly), now uses FOLLOW_CONFIG
+    // BASIC strategy: more conservative thresholds (battery friendly), now uses
+    // FOLLOW_CONFIG
     private final FollowStrategy basicFollow = new FollowStrategy() {
         @Override
         public boolean allowCameraMove(boolean force,
-                                       boolean autoFollowEnabled,
-                                       boolean isUserInteracting,
-                                       boolean driving,
-                                       boolean insideZoneLowSpeed) {
-            if (force) return true;
-            if (!autoFollowEnabled) return false;
+                boolean autoFollowEnabled,
+                boolean isUserInteracting,
+                boolean driving,
+                boolean insideZoneLowSpeed) {
+            if (force)
+                return true;
+            if (!autoFollowEnabled)
+                return false;
             return !isUserInteracting;
         }
 
         @Override
         public boolean shouldUpdateCamera(@NonNull Location location,
-                                          @NonNull SmartLocationManager.MovementState state,
-                                          long lastUpdateUptime,
-                                          @Nullable LatLng lastTarget,
-                                          float lastBearing,
-                                          boolean hasCentered) {
+                @NonNull SmartLocationManager.MovementState state,
+                long lastUpdateUptime,
+                @Nullable LatLng lastTarget,
+                float lastBearing,
+                boolean hasCentered) {
             long now = SystemClock.uptimeMillis();
             boolean timeOk = (now - lastUpdateUptime) > FOLLOW_CONFIG.basicIntervalMs;
 
@@ -192,18 +220,22 @@ public class CameraFollowController {
             boolean headingOk = false;
             if (location.hasBearing() && !Float.isNaN(lastBearing)) {
                 float delta = Math.abs(location.getBearing() - lastBearing);
-                if (delta > 180f) delta = 360f - delta;
+                if (delta > 180f)
+                    delta = 360f - delta;
                 headingOk = delta > FOLLOW_CONFIG.basicHeadingDeg;
             }
             if (!isDrivingState(state) && distanceOk) {
                 headingOk = true;
             }
 
-            FileLog.getInstance().debug(TAG, "[BASIC] gates timeOk="+timeOk+", distOk="+distanceOk+", headOk="+headingOk);
+            FileLog.getInstance().debug(TAG,
+                    "[BASIC] gates timeOk=" + timeOk + ", distOk=" + distanceOk + ", headOk=" + headingOk);
 
             boolean driving = isDrivingState(state);
-            if (!timeOk && !distanceOk && !headingOk) return false;
-            if (driving) return timeOk && (distanceOk || headingOk);
+            if (!timeOk && !distanceOk && !headingOk)
+                return false;
+            if (driving)
+                return timeOk && (distanceOk || headingOk);
             return !hasCentered || (timeOk && distanceOk);
         }
     };
@@ -213,7 +245,7 @@ public class CameraFollowController {
     private FollowStrategy followStrategy = standardFollow;
 
     public void setFollowProfile(@NonNull FollowProfile profile) {
-        logD("setFollowProfile("+profile+")");
+        logD("setFollowProfile(" + profile + ")");
         this.followProfile = profile;
         switch (profile) {
             case BASIC:
@@ -230,8 +262,9 @@ public class CameraFollowController {
 
     /**
      * Bridge for external ProfileManager:
-     *  POWERSAVER → BASIC (battery friendly)
-     *  ADVANCED   → STANDARD (current default behavior; can be mapped to ADVANCED in future)
+     * POWERSAVER → BASIC (battery friendly)
+     * ADVANCED → STANDARD (current default behavior; can be mapped to ADVANCED in
+     * future)
      */
     public void applyAppProfile(@NonNull ProfileManager.AppProfile appProfile) {
         FollowProfile mapped = (appProfile == ProfileManager.AppProfile.POWERSAVER)
@@ -265,8 +298,8 @@ public class CameraFollowController {
     private boolean navigationModeEnabled = false;
 
     // --- Phase 3: jitter gating ---
-    private static final float MIN_BEARING_DELTA_DEG = 2f;   // skip tiny bearing changes
-    private static final float MIN_PIXEL_DELTA = 2f;         // skip tiny pixel drifts
+    private static final float MIN_BEARING_DELTA_DEG = 2f; // skip tiny bearing changes
+    private static final float MIN_PIXEL_DELTA = 2f; // skip tiny pixel drifts
 
     public CameraFollowController(@NonNull GoogleMap googleMap, @NonNull MapView mapView) {
         this.googleMap = googleMap;
@@ -321,7 +354,10 @@ public class CameraFollowController {
         logD("onUserGesture(): auto-follow paused by user");
     }
 
-    /** Called when user taps on map or performs a light intervention that should pause auto-follow. */
+    /**
+     * Called when user taps on map or performs a light intervention that should
+     * pause auto-follow.
+     */
     public void onMapClickIntervene() {
         pausedByUser = true;
         logD("onMapClickIntervene(): auto-follow paused by user");
@@ -334,8 +370,8 @@ public class CameraFollowController {
 
     /** Resume auto-follow and recenter the camera. */
     public void resumeFollow(@NonNull Location location,
-                             @NonNull SmartLocationManager.MovementState state,
-                             @Nullable Float preferredZoom) {
+            @NonNull SmartLocationManager.MovementState state,
+            @Nullable Float preferredZoom) {
         float zoom = (preferredZoom != null) ? preferredZoom : DRIVING_MIN_ZOOM;
         pausedByUser = false;
         logD("resumeFollow(): clearing paused flag and forcing recenter, zoom=" + zoom);
@@ -366,15 +402,17 @@ public class CameraFollowController {
     }
 
     public boolean follow(@NonNull Location location,
-                          @NonNull SmartLocationManager.MovementState state,
-                          boolean force,
-                          boolean autoFollowEnabled,
-                          boolean isUserInteracting,
-                          boolean insideDeliveryZone,
-                          float preferredFollowZoom) {
+            @NonNull SmartLocationManager.MovementState state,
+            boolean force,
+            boolean autoFollowEnabled,
+            boolean isUserInteracting,
+            boolean insideDeliveryZone,
+            float preferredFollowZoom) {
 
-        logD("follow() enter force="+force+", auto="+autoFollowEnabled+", interacting="+isUserInteracting+", prefZoom="+preferredFollowZoom);
-        if (SystemClock.uptimeMillis() < suppressFollowUntilMs) return true;
+        logD("follow() enter force=" + force + ", auto=" + autoFollowEnabled + ", interacting=" + isUserInteracting
+                + ", prefZoom=" + preferredFollowZoom);
+        if (SystemClock.uptimeMillis() < suppressFollowUntilMs)
+            return true;
 
         boolean navMode = navigationModeEnabled;
         if (navMode) {
@@ -400,16 +438,25 @@ public class CameraFollowController {
                 force = true;
             }
         }
-        boolean allowCameraMove = followStrategy.allowCameraMove(force, autoFollowEnabled, isUserInteracting, driving, lowSpeedInside);
-        boolean canUpdateCamera = force || followStrategy.shouldUpdateCamera(location, state, lastCameraUpdateUptime, lastCameraTargetLatLng, lastCameraBearing, hasCenteredOnUser);
+        boolean allowCameraMove = followStrategy.allowCameraMove(force, autoFollowEnabled, isUserInteracting, driving,
+                lowSpeedInside);
+        boolean canUpdateCamera = force || followStrategy.shouldUpdateCamera(location, state, lastCameraUpdateUptime,
+                lastCameraTargetLatLng, lastCameraBearing, hasCenteredOnUser);
 
         if (lowSpeedInside) {
             canUpdateCamera = true;
         }
 
-        if (!allowCameraMove) { logD("follow() blocked: allowCameraMove=false"); return false; }
-        if (!canUpdateCamera && !force) { logD("follow() blocked: canUpdateCamera=false & not forced"); return false; }
-        if (!navMode && !driving && !lowSpeedInside && !force) { logD("follow() blocked: not driving/inside and not forced"); return false; }
+        if (!allowCameraMove) {
+            logD("follow() blocked: allowCameraMove=false");
+            return false;
+        }
+        if (!canUpdateCamera && !force) {
+            logD("follow() blocked: canUpdateCamera=false & not forced");
+            return false;
+        }
+        // if (!navMode && !driving && !lowSpeedInside && !force) { logD("follow()
+        // blocked: not driving/inside and not forced"); return false; }
 
         CameraPosition targetCamera;
         if (navMode) {
@@ -420,7 +467,8 @@ public class CameraFollowController {
             targetCamera = buildDrivingCamera(location, preferredFollowZoom);
         } else if (!hasCenteredOnUser || force) {
             targetCamera = buildCenteredCamera(location);
-        } else if (!isUserInteracting && followStrategy.shouldUpdateCamera(location, state, lastCameraUpdateUptime, lastCameraTargetLatLng, lastCameraBearing, hasCenteredOnUser)) {
+        } else if (!isUserInteracting && followStrategy.shouldUpdateCamera(location, state, lastCameraUpdateUptime,
+                lastCameraTargetLatLng, lastCameraBearing, hasCenteredOnUser)) {
             targetCamera = buildCenteredCamera(location);
         } else {
             return false;
@@ -428,25 +476,30 @@ public class CameraFollowController {
 
         logD("follow() targetCamera computed zoom=" + targetCamera.zoom + ", bearing=" + targetCamera.bearing);
 
-        if (targetCamera == null) return false;
+        if (targetCamera == null)
+            return false;
 
         logD("followLocation driving=" + driving + " force=" + force
                 + " zoom->" + targetCamera.zoom + " bearing->" + targetCamera.bearing
                 + " autoFollowEnabled=" + autoFollowEnabled + " interacting=" + isUserInteracting);
 
-        // Skip micro-updates: small pixel drift & tiny bearing delta & near-identical zoom
+        // Skip micro-updates: small pixel drift & tiny bearing delta & near-identical
+        // zoom
         if (lastCameraTargetLatLng != null) {
             float px = 0f;
             try {
                 Point pA = googleMap.getProjection().toScreenLocation(lastCameraTargetLatLng);
                 Point pB = googleMap.getProjection().toScreenLocation(targetCamera.target);
                 px = (float) Math.hypot(pA.x - pB.x, pA.y - pB.y);
-            } catch (Exception ignore) {}
-            float bearingDelta = Math.abs(targetCamera.bearing - (Float.isNaN(lastCameraBearing) ? targetCamera.bearing : lastCameraBearing));
-            if (bearingDelta > 180f) bearingDelta = 360f - bearingDelta;
+            } catch (Exception ignore) {
+            }
+            float bearingDelta = Math.abs(
+                    targetCamera.bearing - (Float.isNaN(lastCameraBearing) ? targetCamera.bearing : lastCameraBearing));
+            if (bearingDelta > 180f)
+                bearingDelta = 360f - bearingDelta;
             float zoomDelta = Math.abs(targetCamera.zoom - googleMap.getCameraPosition().zoom);
             if (px < MIN_PIXEL_DELTA && bearingDelta < MIN_BEARING_DELTA_DEG && zoomDelta < 0.01f && !force) {
-                logD("follow() micro update skipped: px="+px+", bearingΔ="+bearingDelta+", zoomΔ="+zoomDelta);
+                logD("follow() micro update skipped: px=" + px + ", bearingΔ=" + bearingDelta + ", zoomΔ=" + zoomDelta);
                 return false;
             }
         }
@@ -459,18 +512,17 @@ public class CameraFollowController {
         lastLocationLatLng = new LatLng(location.getLatitude(), location.getLongitude());
         if (smartLocationManager != null && driving) {
             float offset = estimateEdgeOffsetMeters(location);
-            logD("edgeBoost offsetM="+offset+", speed="+location.getSpeed());
+            logD("edgeBoost offsetM=" + offset + ", speed=" + location.getSpeed());
             smartLocationManager.requestBoostIfEdgeRisk(offset, location.getSpeed());
         }
         return true;
     }
 
     public void centerOn(@NonNull Location location,
-                         @NonNull SmartLocationManager.MovementState state,
-                         float preferredFollowZoom) {
+            @NonNull SmartLocationManager.MovementState state,
+            float preferredFollowZoom) {
         follow(location, state, true, true, false, false, preferredFollowZoom);
     }
-
 
     @Nullable
     private CameraPosition buildDrivingCamera(@NonNull Location location, float preferredFollowZoom) {
@@ -513,7 +565,8 @@ public class CameraFollowController {
                 ? userPreferredBearing
                 : current.bearing;
         float tilt = Math.max(current.tilt, BROWSE_TILT_DEGREES);
-        logD("buildCenteredCamera zoom="+ (current.zoom < 15f ? 15f : current.zoom) + ", bearingSrc=" + (Float.isNaN(userPreferredBearing) ? "camera" : "user"));
+        logD("buildCenteredCamera zoom=" + (current.zoom < 15f ? 15f : current.zoom) + ", bearingSrc="
+                + (Float.isNaN(userPreferredBearing) ? "camera" : "user"));
         return new CameraPosition.Builder(current)
                 .target(target)
                 .zoom(zoom)
@@ -540,10 +593,14 @@ public class CameraFollowController {
 
     private double computeLookAheadMeters(@NonNull Location location) {
         float kmh = location.hasSpeed() ? (location.getSpeed() * 3.6f) : 0f;
-        if (kmh < 10f) return 35d;
-        if (kmh < 30f) return 55d;
-        if (kmh < 60f) return 85d;
-        if (kmh < 90f) return 110d;
+        if (kmh < 10f)
+            return 35d;
+        if (kmh < 30f)
+            return 55d;
+        if (kmh < 60f)
+            return 85d;
+        if (kmh < 90f)
+            return 110d;
         return 140d;
     }
 
@@ -558,13 +615,14 @@ public class CameraFollowController {
             CameraPosition interpolated = interpolateCamera(start, targetCamera, t);
             googleMap.moveCamera(CameraUpdateFactory.newCameraPosition(interpolated));
         });
-        logD("animateCameraTo start duration=350ms targetZoom="+targetCamera.zoom+", targetBearing="+targetCamera.bearing);
+        logD("animateCameraTo start duration=350ms targetZoom=" + targetCamera.zoom + ", targetBearing="
+                + targetCamera.bearing);
         cameraAnimator.start();
     }
 
     private CameraPosition interpolateCamera(@NonNull CameraPosition start,
-                                             @NonNull CameraPosition end,
-                                             float t) {
+            @NonNull CameraPosition end,
+            float t) {
         t = Math.max(0f, Math.min(1f, t));
         double startLat = start.target.latitude;
         double startLng = start.target.longitude;
@@ -588,7 +646,8 @@ public class CameraFollowController {
             deltaBearing -= Math.signum(deltaBearing) * 360f;
         }
         float bearing = bearingStart + deltaBearing * t;
-        if (bearing < 0f) bearing += 360f;
+        if (bearing < 0f)
+            bearing += 360f;
 
         return new CameraPosition(new LatLng(lat, lng), zoom, tilt, bearing);
     }
@@ -602,12 +661,14 @@ public class CameraFollowController {
             Point point = googleMap.getProjection().toScreenLocation(latLng);
             int width = mapView.getWidth();
             int height = mapView.getHeight();
-            float fraction = navigationModeEnabled ? NAVIGATION_TARGET_SCREEN_FRACTION_Y : DRIVING_TARGET_SCREEN_FRACTION_Y;
+            float fraction = navigationModeEnabled ? NAVIGATION_TARGET_SCREEN_FRACTION_Y
+                    : DRIVING_TARGET_SCREEN_FRACTION_Y;
             Point targetPoint = new Point(width / 2, (int) (height * fraction));
             float dx = point.x - targetPoint.x;
             float dy = point.y - targetPoint.y;
             float pixelDistance = (float) Math.hypot(dx, dy);
-            if (pixelDistance <= 0f) return 0f;
+            if (pixelDistance <= 0f)
+                return 0f;
 
             Point refA = new Point(targetPoint.x, targetPoint.y);
             Point refB = new Point(targetPoint.x + 100, targetPoint.y);
@@ -628,7 +689,8 @@ public class CameraFollowController {
 
     private float normalizeBearing(float bearing) {
         float normalized = bearing % 360f;
-        if (normalized < 0f) normalized += 360f;
+        if (normalized < 0f)
+            normalized += 360f;
         return normalized;
     }
 
@@ -640,7 +702,8 @@ public class CameraFollowController {
             return normalizeBearing(location.getBearing());
         }
         if (lastLocationLatLng != null) {
-            double heading = SphericalUtil.computeHeading(lastLocationLatLng, new LatLng(location.getLatitude(), location.getLongitude()));
+            double heading = SphericalUtil.computeHeading(lastLocationLatLng,
+                    new LatLng(location.getLatitude(), location.getLongitude()));
             if (!Double.isNaN(heading)) {
                 return normalizeBearing((float) heading);
             }
@@ -659,23 +722,28 @@ public class CameraFollowController {
 
     /** Phase 3 convenience: apply unified focus decision to camera. */
     public void applyDecision(@NonNull Location loc,
-                              @NonNull SmartLocationManager.MovementState mv,
-                              boolean interacting,
-                              boolean allowAutoFollow,
-                              @NonNull DeliveryFocusManager.FocusDecision decision) {
+            @NonNull SmartLocationManager.MovementState mv,
+            boolean interacting,
+            boolean allowAutoFollow,
+            @NonNull DeliveryFocusManager.FocusDecision decision) {
         boolean shouldForce = (decision.shouldForceCameraFollow() && allowAutoFollow)
                 || (!hasCenteredOnUser() && allowAutoFollow)
                 || (decision.isFocusChanged() && allowAutoFollow);
-        logD("applyDecision allow="+allowAutoFollow+", force="+shouldForce+", prefZoom="+decision.getPreferredZoom());
-        follow(loc, mv, shouldForce, allowAutoFollow || decision.shouldForceCameraFollow(), interacting, false, decision.getPreferredZoom());
+        logD("applyDecision allow=" + allowAutoFollow + ", force=" + shouldForce + ", prefZoom="
+                + decision.getPreferredZoom());
+        follow(loc, mv, shouldForce, allowAutoFollow || decision.shouldForceCameraFollow(), interacting, false,
+                decision.getPreferredZoom());
     }
 
     public void resumeFollowNow(@NonNull Location loc,
-                                @NonNull SmartLocationManager.MovementState state,
-                                float preferredZoom,
-                                boolean alignToCenter,
-                                boolean insideDeliveryZone) {
-        try { googleMap.stopAnimation(); } catch (Throwable ignore) {}
+            @NonNull SmartLocationManager.MovementState state,
+            float preferredZoom,
+            boolean alignToCenter,
+            boolean insideDeliveryZone) {
+        try {
+            googleMap.stopAnimation();
+        } catch (Throwable ignore) {
+        }
         boolean useCentered = alignToCenter
                 || !isDrivingState(state)
                 || (insideDeliveryZone && state != SmartLocationManager.MovementState.NORMAL_DRIVING);
@@ -687,14 +755,20 @@ public class CameraFollowController {
             try {
                 googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(target, preferredZoom));
             } catch (Throwable t) {
-                try { googleMap.moveCamera(CameraUpdateFactory.newLatLng(target)); } catch (Throwable ignore) {}
+                try {
+                    googleMap.moveCamera(CameraUpdateFactory.newLatLng(target));
+                } catch (Throwable ignore) {
+                }
             }
         } else {
             try {
                 googleMap.moveCamera(CameraUpdateFactory.newCameraPosition(targetCamera));
             } catch (Throwable t) {
                 LatLng fallback = new LatLng(loc.getLatitude(), loc.getLongitude());
-                try { googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(fallback, targetCamera.zoom)); } catch (Throwable ignore) {}
+                try {
+                    googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(fallback, targetCamera.zoom));
+                } catch (Throwable ignore) {
+                }
             }
         }
         hasCenteredOnUser = true;

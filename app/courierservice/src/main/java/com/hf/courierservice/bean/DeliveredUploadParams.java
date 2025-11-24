@@ -3,7 +3,8 @@ package com.hf.courierservice.bean;
 import java.util.Map;
 
 /**
- * This class represents the parameters for the delivered packages upload request.
+ * This class represents the parameters for the delivered packages upload
+ * request.
  */
 public class DeliveredUploadParams {
     private String url;
@@ -19,7 +20,8 @@ public class DeliveredUploadParams {
     private String recipientName;
     private Integer deliveryResult;
     private Integer failedReason;
-
+    private String driverId;
+    private String imageFieldName = "pod_images[]";
 
     // Getters and Setters
     public void setOrderId(Long orderId) {
@@ -33,7 +35,6 @@ public class DeliveredUploadParams {
     public void setLatitude(Double latitude) {
         this.latitude = latitude;
     }
-
 
     public Long getOrderId() {
         return orderId;
@@ -117,5 +118,21 @@ public class DeliveredUploadParams {
 
     public void setTrackingId(String trackingId) {
         this.trackingId = trackingId;
+    }
+
+    public String getDriverId() {
+        return driverId;
+    }
+
+    public void setDriverId(String driverId) {
+        this.driverId = driverId;
+    }
+
+    public String getImageFieldName() {
+        return imageFieldName;
+    }
+
+    public void setImageFieldName(String imageFieldName) {
+        this.imageFieldName = imageFieldName;
     }
 }

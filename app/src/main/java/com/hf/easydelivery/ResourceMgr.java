@@ -10,7 +10,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
-
 import androidx.preference.PreferenceManager;
 import com.android.volley.RequestQueue;
 
@@ -71,6 +70,7 @@ public class ResourceMgr {
     public PendingPackagesMgr getPendingPackagesMgr() {
         return mPendingPackagesMgr;
     }
+
     public ICourierService getCourierService() {
         return mCourierService;
     }
@@ -81,9 +81,11 @@ public class ResourceMgr {
     public Context getCtx() {
         return ctx;
     }
+
     public RequestQueue getRequestQueue() {
         return requestQueue;
     }
+
     public ConfigurationManager getConfigurationManager() {
         return mConfigurationManager;
     }
@@ -92,7 +94,9 @@ public class ResourceMgr {
         this.ctx = ctx;
 
         FileLog.getInstance().init(ctx);
-        requestQueue = Volley.newRequestQueue(ctx);;
+        requestQueue = Volley.newRequestQueue(ctx);
+        ;
+        mMainHandler = new Handler(Looper.getMainLooper());
 
         publisher = new Publisher();
         mMydb = new MyDb();
@@ -101,18 +105,17 @@ public class ResourceMgr {
         mDeliveryinfoMgr = new DeliveryinfoMgr();
         mPendingPackagesMgr = new PendingPackagesMgr();
 
-        mConfigurationManager = new ConfigurationManager(ctx , "config.json");
+        mConfigurationManager = new ConfigurationManager(ctx, "config.json");
 
         try {
             mCourierService = CourierServiceFactory.createCourierService();
             mCourierService.init(ctx);
-            
+
         } catch (Exception e) {
-            Utils.showOnUi(ctx , ctx.getString(R.string.str_courierservice_failure));
+            Utils.showOnUi(ctx, ctx.getString(R.string.str_courierservice_failure));
             throw new RuntimeException(e);
         }
 
-        mMainHandler = new Handler(Looper.getMainLooper());
         setBatchId();
     }
 
@@ -183,7 +186,6 @@ public class ResourceMgr {
         }
     }
 
-
     public static synchronized ResourceMgr getInstance() {
         if (instance == null) {
             instance = new ResourceMgr();
@@ -193,7 +195,8 @@ public class ResourceMgr {
     }
 
     public void requestLoginRedirect() {
-        if (ctx == null) return;
+        if (ctx == null)
+            return;
         if (loginRedirecting.getAndSet(true)) {
             return;
         }
@@ -215,4 +218,3 @@ public class ResourceMgr {
         });
     }
 }
-

@@ -32,7 +32,8 @@ import androidx.core.content.FileProvider;
  * 仿照 iOS Logger 结构。
  */
 public class FileLog {
-    // We now write logs to the public Downloads collection via MediaStore (Android 10+),
+    // We now write logs to the public Downloads collection via MediaStore (Android
+    // 10+),
     // falling back to app-private files for older OS or failure cases.
     public final static String LOG_DISPLAY_NAME = "easydelivery.log"; // filename shown in Downloads
     private static final String PREFS_NAME = "filelog_prefs";
@@ -59,6 +60,7 @@ public class FileLog {
 
     /**
      * 设置是否同步输出到 Logcat。
+     * 
      * @param enable 是否输出到 Logcat
      */
     public void setLogToConsole(boolean enable) {
@@ -69,11 +71,11 @@ public class FileLog {
 
     /**
      * 获取 FileLog 单例对象。
+     * 
      * @return FileLog 单例
      */
-    public static synchronized FileLog getInstance()
-    {
-        if(instance == null) {
+    public static synchronized FileLog getInstance() {
+        if (instance == null) {
             instance = new FileLog();
         }
         return instance;
@@ -81,6 +83,7 @@ public class FileLog {
 
     /**
      * 初始化日志文件。必须在使用前调用。
+     * 
      * @param context Android 上下文
      * @return 是否初始化成功
      */
@@ -106,9 +109,11 @@ public class FileLog {
             }
             // Fallback: app-private file
             File logDir = new File(appCtx.getFilesDir(), "logs");
-            if (!logDir.exists()) logDir.mkdirs();
+            if (!logDir.exists())
+                logDir.mkdirs();
             mFile = new File(logDir, LOG_DISPLAY_NAME);
-            if (!mFile.exists()) mFile.createNewFile();
+            if (!mFile.exists())
+                mFile.createNewFile();
             mRaf = new RandomAccessFile(mFile, "rw");
             mRaf.seek(mFile.length());
             currentSizeBytes = mFile.length();
@@ -128,14 +133,17 @@ public class FileLog {
                 Uri u = Uri.parse(saved);
                 // sanity check: can we open it?
                 try (OutputStream test = cr.openOutputStream(u, "wa")) {
-                    if (test != null) return u;
-                } catch (Exception ignore) { }
+                    if (test != null)
+                        return u;
+                } catch (Exception ignore) {
+                }
             }
             // query existing by DISPLAY_NAME in Downloads
             Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
             String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=?";
-            String[] selArgs = new String[]{ LOG_DISPLAY_NAME };
-            try (android.database.Cursor c = cr.query(collection, new String[]{ MediaStore.MediaColumns._ID }, sel, selArgs, null)) {
+            String[] selArgs = new String[] { LOG_DISPLAY_NAME };
+            try (android.database.Cursor c = cr.query(collection, new String[] { MediaStore.MediaColumns._ID }, sel,
+                    selArgs, null)) {
                 if (c != null && c.moveToFirst()) {
                     long id = c.getLong(0);
                     Uri existing = Uri.withAppendedPath(collection, String.valueOf(id));
@@ -160,7 +168,8 @@ public class FileLog {
     }
 
     private void writeLine(String line) throws IOException {
-        if (line == null) return;
+        if (line == null)
+            return;
         byte[] data = line.getBytes(StandardCharsets.UTF_8);
         rotateIfNeeded(data.length);
         if (mWriter != null) {
@@ -173,19 +182,23 @@ public class FileLog {
     }
 
     private long queryMediaStoreSize() {
-        if (mLogUri == null || appCtx == null) return 0L;
+        if (mLogUri == null || appCtx == null)
+            return 0L;
         try (android.database.Cursor c = appCtx.getContentResolver().query(mLogUri,
-                new String[]{MediaStore.MediaColumns.SIZE}, null, null, null)) {
+                new String[] { MediaStore.MediaColumns.SIZE }, null, null, null)) {
             if (c != null && c.moveToFirst()) {
                 return c.getLong(0);
             }
-        } catch (Exception ignore) { }
+        } catch (Exception ignore) {
+        }
         return 0L;
     }
 
     private void rotateIfNeeded(int nextBytes) throws IOException {
-        if (MAX_LOG_BYTES <= 0) return;
-        if (currentSizeBytes + nextBytes <= MAX_LOG_BYTES) return;
+        if (MAX_LOG_BYTES <= 0)
+            return;
+        if (currentSizeBytes + nextBytes <= MAX_LOG_BYTES)
+            return;
         if (mWriter != null && mLogUri != null) {
             resetMediaStoreStream();
         } else if (mRaf != null) {
@@ -197,9 +210,11 @@ public class FileLog {
 
     private void resetMediaStoreStream() throws IOException {
         closeCurrentWriter();
-        if (appCtx == null || mLogUri == null) return;
+        if (appCtx == null || mLogUri == null)
+            return;
         ParcelFileDescriptor pfd = appCtx.getContentResolver().openFileDescriptor(mLogUri, "rw");
-        if (pfd == null) return;
+        if (pfd == null)
+            return;
         FileOutputStream fos = new ParcelFileDescriptor.AutoCloseOutputStream(pfd);
         fos.getChannel().truncate(0);
         fos.getChannel().position(0);
@@ -213,18 +228,21 @@ public class FileLog {
             if (mWriter != null) {
                 mWriter.close();
             }
-        } catch (IOException ignore) {}
+        } catch (IOException ignore) {
+        }
         try {
             if (mOs != null) {
                 mOs.close();
             }
-        } catch (IOException ignore) {}
+        } catch (IOException ignore) {
+        }
         mWriter = null;
         mOs = null;
     }
 
     /**
      * 写入日志（兼容旧接口，等价于 info(DEFAULT_TAG, content)）。
+     * 
      * @param content 日志内容
      */
     public void writeLog(String content) {
@@ -235,19 +253,22 @@ public class FileLog {
 
     /**
      * 输出 info 级别日志。
+     * 
      * @param tag 日志标签
      * @param msg 日志内容
      */
     public void info(String tag, String msg) {
         writeLogToFile("INFO", tag, msg);
-        if (logToConsole) Log.i(tag, msg);
+        if (logToConsole)
+            Log.i(tag, msg);
     }
 
     /**
      * 输出 info 级别格式化日志。
-     * @param tag 日志标签
+     * 
+     * @param tag    日志标签
      * @param format 格式字符串
-     * @param args 参数
+     * @param args   参数
      */
     public void info(String tag, String format, Object... args) {
         String msg = String.format(format, args);
@@ -256,6 +277,7 @@ public class FileLog {
 
     /**
      * 输出 info 级别日志，使用默认 TAG。
+     * 
      * @param msg 日志内容
      */
     public void info(String msg) {
@@ -264,8 +286,9 @@ public class FileLog {
 
     /**
      * 输出 info 级别格式化日志，使用默认 TAG。
+     * 
      * @param format 格式字符串
-     * @param args 参数
+     * @param args   参数
      */
     public void info(String format, Object... args) {
         info(DEFAULT_TAG, format, args);
@@ -273,19 +296,22 @@ public class FileLog {
 
     /**
      * 输出 debug 级别日志。
+     * 
      * @param tag 日志标签
      * @param msg 日志内容
      */
     public void debug(String tag, String msg) {
         writeLogToFile("DEBUG", tag, msg);
-        if (logToConsole) Log.d(tag, msg);
+        if (logToConsole)
+            Log.d(tag, msg);
     }
 
     /**
      * 输出 debug 级别格式化日志。
-     * @param tag 日志标签
+     * 
+     * @param tag    日志标签
      * @param format 格式字符串
-     * @param args 参数
+     * @param args   参数
      */
     public void debug(String tag, String format, Object... args) {
         String msg = String.format(format, args);
@@ -294,6 +320,7 @@ public class FileLog {
 
     /**
      * 输出 debug 级别日志，使用默认 TAG。
+     * 
      * @param msg 日志内容
      */
     public void debug(String msg) {
@@ -302,8 +329,9 @@ public class FileLog {
 
     /**
      * 输出 debug 级别格式化日志，使用默认 TAG。
+     * 
      * @param format 格式字符串
-     * @param args 参数
+     * @param args   参数
      */
     public void debug(String format, Object... args) {
         debug(DEFAULT_TAG, format, args);
@@ -311,19 +339,22 @@ public class FileLog {
 
     /**
      * 输出 warning 级别日志。
+     * 
      * @param tag 日志标签
      * @param msg 日志内容
      */
     public void warning(String tag, String msg) {
         writeLogToFile("WARNING", tag, msg);
-        if (logToConsole) Log.w(tag, msg);
+        if (logToConsole)
+            Log.w(tag, msg);
     }
 
     /**
      * 输出 warning 级别格式化日志。
-     * @param tag 日志标签
+     * 
+     * @param tag    日志标签
      * @param format 格式字符串
-     * @param args 参数
+     * @param args   参数
      */
     public void warning(String tag, String format, Object... args) {
         String msg = String.format(format, args);
@@ -332,6 +363,7 @@ public class FileLog {
 
     /**
      * 输出 warning 级别日志，使用默认 TAG。
+     * 
      * @param msg 日志内容
      */
     public void warning(String msg) {
@@ -340,8 +372,9 @@ public class FileLog {
 
     /**
      * 输出 warning 级别格式化日志，使用默认 TAG。
+     * 
      * @param format 格式字符串
-     * @param args 参数
+     * @param args   参数
      */
     public void warning(String format, Object... args) {
         warning(DEFAULT_TAG, format, args);
@@ -349,19 +382,22 @@ public class FileLog {
 
     /**
      * 输出 error 级别日志。
+     * 
      * @param tag 日志标签
      * @param msg 日志内容
      */
     public void error(String tag, String msg) {
         writeLogToFile("ERROR", tag, msg);
-        if (logToConsole) Log.e(tag, msg);
+        if (logToConsole)
+            Log.e(tag, msg);
     }
 
     /**
      * 输出 error 级别格式化日志。
-     * @param tag 日志标签
+     * 
+     * @param tag    日志标签
      * @param format 格式字符串
-     * @param args 参数
+     * @param args   参数
      */
     public void error(String tag, String format, Object... args) {
         String msg = String.format(format, args);
@@ -370,6 +406,7 @@ public class FileLog {
 
     /**
      * 输出 error 级别日志，使用默认 TAG。
+     * 
      * @param msg 日志内容
      */
     public void error(String msg) {
@@ -378,8 +415,9 @@ public class FileLog {
 
     /**
      * 输出 error 级别格式化日志，使用默认 TAG。
+     * 
      * @param format 格式字符串
-     * @param args 参数
+     * @param args   参数
      */
     public void error(String format, Object... args) {
         error(DEFAULT_TAG, format, args);
@@ -390,15 +428,19 @@ public class FileLog {
     public static void d(String tag, String msg) {
         getInstance().debug(tag, msg);
     }
+
     public static void i(String tag, String msg) {
         getInstance().info(tag, msg);
     }
+
     public static void w(String tag, String msg) {
         getInstance().warning(tag, msg);
     }
+
     public static void e(String tag, String msg) {
         getInstance().error(tag, msg);
     }
+
     public static void e(String tag, String msg, Throwable tr) {
         getInstance().error(tag, msg + "\n" + Log.getStackTraceString(tr));
     }
@@ -407,15 +449,17 @@ public class FileLog {
 
     /**
      * 写入日志到文件，格式：时间 | LEVEL | TAG | 内容
-     * @param level 日志级别
-     * @param tag 日志标签
+     * 
+     * @param level   日志级别
+     * @param tag     日志标签
      * @param content 日志内容
      */
     private void writeLogToFile(String level, String tag, String content) {
         if (content == null || content.isEmpty())
             return;
         Date d = new Date();
-        String strContent = String.format("%tF %tT | %s | %s | %s\n", d, d, level, tag == null ? DEFAULT_TAG : tag, content);
+        String strContent = String.format("%tF %tT | %s | %s | %s\n", d, d, level, tag == null ? DEFAULT_TAG : tag,
+                content);
         try {
             writeLine(strContent);
         } catch (Exception e) {
@@ -425,6 +469,7 @@ public class FileLog {
 
     /**
      * 删除指定路径的日志文件。
+     * 
      * @param path 日志文件路径
      */
     public void delLogFile(String path) {
@@ -451,7 +496,8 @@ public class FileLog {
             Log.e("FileLog", "close writer/stream failed", e);
         }
         try {
-            if (mRaf != null) mRaf.close();
+            if (mRaf != null)
+                mRaf.close();
         } catch (IOException e) {
             Log.e("FileLog", "close mRaf failed", e);
         }
@@ -465,7 +511,8 @@ public class FileLog {
      * 获取日志分享所需的 Uri。
      */
     public Uri getShareUri() {
-        if (appCtx == null) return null;
+        if (appCtx == null)
+            return null;
         if (mLogUri == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             mLogUri = restoreOrCreateDownloadsUri(appCtx);
         }
@@ -486,8 +533,10 @@ public class FileLog {
     }
 
     private File ensureLegacyFile() {
-        if (appCtx == null) return null;
-        if (mFile != null) return mFile;
+        if (appCtx == null)
+            return null;
+        if (mFile != null)
+            return mFile;
         File logDir = new File(appCtx.getFilesDir(), "logs");
         if (!logDir.exists()) {
             logDir.mkdirs();
@@ -497,8 +546,10 @@ public class FileLog {
     }
 
     public String getLogLocationHint() {
-        if (mLogUri != null) return mLogUri.toString();
-        if (mFile != null) return mFile.getAbsolutePath();
+        if (mLogUri != null)
+            return mLogUri.toString();
+        if (mFile != null)
+            return mFile.getAbsolutePath();
         return "";
     }
 }

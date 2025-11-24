@@ -40,6 +40,13 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import android.app.ProgressDialog;
+
+import com.hf.courierservice.bean.DeliveredUploadParams;
+import com.hf.uniuni.CourierService;
+import com.hf.easydelivery.api.RetryDeliveryRspCb;
+import com.hf.easydelivery.ResourceMgr;
+import com.hf.easydelivery.core.PendingPackagesMgr;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 import androidx.constraintlayout.widget.ConstraintLayout;
@@ -305,7 +312,7 @@ public class CameraActivity extends AppCompatActivity
 
         smsButton.setOnClickListener(v -> showSmsBottomSheet());
         phoneButton.setOnClickListener(v -> makeCall());
-        failButton.setOnClickListener(v -> showFailReasonDialog());
+        failButton.setOnClickListener(v -> showFailOptionsDialog());
         okButton.setOnClickListener(v -> {
             if (!hasEnoughPhotos(null)) {
                 return;
@@ -803,10 +810,18 @@ public class CameraActivity extends AppCompatActivity
             case WAYBILL:
                 return CaptureIntent.WAYBILL;
             case DROP_OFF:
+                // Removed sensor logic to prevent premature switch to BUILDING
+                // if (!Float.isNaN(lastPitchDegrees) && Math.abs(lastPitchDegrees) > 35f) {
+                // return CaptureIntent.BUILDING;
+                // }
                 return CaptureIntent.DROP_OFF;
             case BUILDING:
-            default:
+                // if (!Float.isNaN(lastPitchDegrees) && Math.abs(lastPitchDegrees) < 15f) {
+                // return CaptureIntent.WAYBILL;
+                // }
                 return CaptureIntent.BUILDING;
+            default:
+                return captureStage;
         }
     }
 
@@ -852,9 +867,6 @@ public class CameraActivity extends AppCompatActivity
         captureStage = nextStageAfter(completedIntent);
         if (captureStage != CaptureIntent.WAYBILL) {
             clearBarcodeHint();
-        }
-        if (captureStage == CaptureIntent.BUILDING) {
-            maybeAutoFillApartmentPhoto();
         }
         FileLog.getInstance().debug(TAG, "advanceStageForPreview -> " + intentLabel(captureStage));
         applyProximityZoom(true);
@@ -1258,7 +1270,75 @@ public class CameraActivity extends AppCompatActivity
         updateOkButtonState();
     }
 
-    private void showFailReasonDialog() {
+    private void showFailOptionsDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("Delivery Failed")
+                .setItems(new String[] { "Retry Delivery", "Delivery Failed" }, (dialog, which) -> {
+                    if (which == 0) {
+                        handleRetryDelivery();
+                    } else {
+                        showFailReasonSelectionDialog();
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void handleRetryDelivery() {
+        if (!hasEnoughPhotos(null))
+            return;
+        warnIfFarFromTarget();
+
+        DeliveryInfo infoSnapshot = deliveryInfo;
+        if (infoSnapshot == null && mOrderId != null) {
+            infoSnapshot = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
+            deliveryInfo = infoSnapshot;
+        }
+        if (infoSnapshot == null) {
+            Toast.makeText(this, "Package info missing", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        ProgressDialog pd = new ProgressDialog(this);
+        pd.setMessage("Retrying delivery...");
+        pd.setCancelable(false);
+        pd.show();
+
+        DeliveredUploadParams params = new DeliveredUploadParams();
+        params.setOrderId(infoSnapshot.getOrderId());
+        params.setLongitude(currentLongitude);
+        params.setLatitude(currentLatitude);
+        params.setRecipientName("");
+        params.setImageFiles(serializeImagePaths());
+
+        ResourceMgr.LoginInfo loginInfo = ResourceMgr.getInstance().getLoginInfo();
+        if (loginInfo != null) {
+            params.setDriverId(String.valueOf(loginInfo.loginId));
+        }
+
+        CourierService service = new CourierService();
+        service.retryDelivery(params,
+                new RetryDeliveryRspCb(infoSnapshot.getOrderSn(), new RetryDeliveryRspCb.Callback() {
+                    @Override
+                    public void onSuccess() {
+                        runOnUiThread(() -> {
+                            pd.dismiss();
+                            Toast.makeText(CameraActivity.this, "Retry success!", Toast.LENGTH_SHORT).show();
+                            submitPackage(0, null, PendingPackagesMgr.PackageStatus.UPLOADED.getStatus());
+                        });
+                    }
+
+                    @Override
+                    public void onFail(String error) {
+                        runOnUiThread(() -> {
+                            pd.dismiss();
+                            Toast.makeText(CameraActivity.this, "Retry failed: " + error, Toast.LENGTH_SHORT).show();
+                        });
+                    }
+                }));
+    }
+
+    private void showFailReasonSelectionDialog() {
         String[] labels = getResources().getStringArray(R.array.delivery_fail_reason_labels);
         String[] codes = getResources().getStringArray(R.array.delivery_fail_reason_codes);
         if (labels == null || labels.length == 0) {
@@ -1305,6 +1385,10 @@ public class CameraActivity extends AppCompatActivity
     }
 
     private void submitPackage(int deliveryResult, @Nullable Integer failReasonCode) {
+        submitPackage(deliveryResult, failReasonCode, PendingPackagesMgr.PackageStatus.Pending.getStatus());
+    }
+
+    private void submitPackage(int deliveryResult, @Nullable Integer failReasonCode, String status) {
         DeliveryInfo infoSnapshot = deliveryInfo;
         if (infoSnapshot == null && mOrderId != null) {
             infoSnapshot = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
@@ -1325,7 +1409,7 @@ public class CameraActivity extends AppCompatActivity
                 : (!Double.isNaN(targetLongitude) ? targetLongitude : null);
         packageEntity.latitude = latToSave;
         packageEntity.longitude = lngToSave;
-        packageEntity.status = PendingPackagesMgr.PackageStatus.Pending.getStatus();
+        packageEntity.status = status;
         packageEntity.deliveryResult = deliveryResult;
         packageEntity.failedReason = failReasonCode;
         packageEntity.recipientName = infoSnapshot.getName();
@@ -1805,19 +1889,6 @@ public class CameraActivity extends AppCompatActivity
         if (apartmentPhotoService == null || deliveryInfo == null) {
             return;
         }
-        if (captureStage != CaptureIntent.BUILDING) {
-            return;
-        }
-        if (apartmentKeyData != null && !apartmentKeyData.isApartment) {
-            return;
-        }
-        if (activeAutoApartmentMatch != null) {
-            return;
-        }
-        int filledCount = (int) mImageFiles.stream().filter(Objects::nonNull).count();
-        if (filledCount < IMAGE_COUNT || filledCount >= MAX_PHOTOS) {
-            return;
-        }
         MatchResult match = apartmentPhotoService.findMatch(deliveryInfo);
         if (match == null) {
             return;
@@ -1831,7 +1902,14 @@ public class CameraActivity extends AppCompatActivity
             return;
         activeAutoApartmentMatch = match;
         apartmentAutoFilePaths.add(file.getAbsolutePath());
-        addThumbnail(file, true);
+
+        // Fix: Place in the last slot (index 2) for building photo
+        int targetIndex = MAX_PHOTOS - 1;
+        if (mImageFiles.get(targetIndex) == null) {
+            mImageFiles.set(targetIndex, file);
+            updateThumbnailView(targetIndex, file);
+            updateOkButtonState();
+        }
     }
 
     private int findImageIndexByPath(String path) {
@@ -1869,18 +1947,20 @@ public class CameraActivity extends AppCompatActivity
         String preset = TextUtils.isEmpty(keyData.displayAddress)
                 ? keyData.key
                 : keyData.displayAddress;
-        showApartmentConfirmDialog(imageFile, preset, false);
+        // Pass the structured key as hiddenKey
+        showApartmentConfirmDialog(imageFile, preset, keyData.key, false);
     }
 
     private void promptManualAddressKey(File imageFile) {
         String suggested = apartmentPhotoService != null && deliveryInfo != null
                 ? apartmentPhotoService.suggestManualBase(deliveryInfo.getAddress())
                 : "";
-        showApartmentConfirmDialog(imageFile, suggested, true);
+        showApartmentConfirmDialog(imageFile, suggested, null, true);
     }
 
     private void showApartmentConfirmDialog(File imageFile,
             @Nullable String initialText,
+            @Nullable String hiddenKey,
             boolean manualSource) {
         runOnUiThread(() -> {
             final EditText input = new EditText(this);
@@ -1902,7 +1982,15 @@ public class CameraActivity extends AppCompatActivity
                     Toast.makeText(this, R.string.camera_apartment_manual_error, Toast.LENGTH_SHORT).show();
                     return;
                 }
-                String normalized = ApartmentAddressKeyBuilder.manualKeyFromInput(raw);
+
+                String normalized;
+                // If hiddenKey is provided and user didn't change the text, use hiddenKey
+                if (hiddenKey != null && initialText != null && raw.equals(initialText.trim())) {
+                    normalized = hiddenKey;
+                } else {
+                    normalized = ApartmentAddressKeyBuilder.manualKeyFromInput(raw);
+                }
+
                 if (TextUtils.isEmpty(normalized)) {
                     Toast.makeText(this, R.string.camera_apartment_manual_error, Toast.LENGTH_SHORT).show();
                     return;
@@ -1913,6 +2001,109 @@ public class CameraActivity extends AppCompatActivity
             dialog.show();
         });
     }
+
+    private void addSignatureButton() {
+        try {
+            // Find the info bar container (CardView) or its child layout
+            ViewGroup infoLayout = (ViewGroup) infoBar.getChildAt(0); // Assuming CardView has one child
+
+            // Create signature button
+            android.widget.ImageView signatureBtn = new android.widget.ImageView(this);
+            signatureBtn.setImageResource(android.R.drawable.ic_menu_edit); // Use a pencil/edit icon
+            signatureBtn.setColorFilter(ContextCompat.getColor(this, R.color.colorPrimary)); // Use app primary color
+
+            // Layout params
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    (int) (32 * getResources().getDisplayMetrics().density),
+                    (int) (32 * getResources().getDisplayMetrics().density));
+            params.gravity = android.view.Gravity.CENTER_VERTICAL;
+            params.setMarginStart((int) (8 * getResources().getDisplayMetrics().density));
+
+            signatureBtn.setLayoutParams(params);
+            signatureBtn.setOnClickListener(v -> showSignatureDialog());
+
+            // Add to the layout (assuming horizontal or relative layout in info bar)
+            // Ideally we should add it to a specific container, but for now appending to
+            // the main info layout
+            // If the layout is vertical, this might look bad. Let's try to find a better
+            // spot or add it dynamically.
+            // A safer bet is to add it to the 'tvAddress' or create a new container.
+            // Given the constraints, let's try adding it to the end of the infoLayout if
+            // it's horizontal,
+            // or just rely on a floating action button or similar if layout is complex.
+            // Let's try adding it to the infoLayout.
+            if (infoLayout instanceof LinearLayout) {
+                infoLayout.addView(signatureBtn);
+            } else if (infoLayout instanceof androidx.constraintlayout.widget.ConstraintLayout) {
+                // If constraint layout, we might need to clone constraints.
+                // Simplification: Add a floating button on top of the info bar
+                FrameLayout root = findViewById(android.R.id.content);
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(params.width, params.height);
+                lp.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+                lp.topMargin = (int) (16 * getResources().getDisplayMetrics().density); // Adjust based on info bar
+                                                                                        // height
+                lp.rightMargin = (int) (16 * getResources().getDisplayMetrics().density);
+                addContentView(signatureBtn, lp);
+            } else {
+                infoLayout.addView(signatureBtn);
+            }
+
+        } catch (Exception e) {
+            FileLog.getInstance().error(TAG, "Failed to add signature button", e);
+        }
+    }
+
+    private void showSignatureDialog() {
+        if (deliveryInfo == null)
+            return;
+        SignatureDialogFragment dialog = SignatureDialogFragment.newInstance(deliveryInfo.getName());
+        dialog.setOnSignatureCompletedListener((path, recipientName) -> {
+            lastSignaturePath = path;
+            lastRecipientName = recipientName;
+
+            // Auto-fill signature to the 2nd slot (index 1)
+            if (path != null) {
+                File file = new File(path);
+                if (file.exists()) {
+                    // Ensure list has enough capacity or set specifically
+                    if (mImageFiles.size() <= 1) {
+                        // If less than 2 items, add nulls until index 1 is reachable
+                        while (mImageFiles.size() < 2) {
+                            mImageFiles.add(null);
+                        }
+                    }
+                    // Set at index 1
+                    mImageFiles.set(1, file);
+                    updateThumbnailView(1, file);
+                    updateOkButtonState();
+                }
+            }
+        });
+        dialog.show(getSupportFragmentManager(), "signature_dialog");
+    }
+
+    private void updateThumbnailView(int index, File file) {
+        if (index < 0 || index >= mImageViews.size())
+            return;
+
+        int tw = getResources().getDimensionPixelSize(R.dimen.thumbnail_width);
+        int th = getResources().getDimensionPixelSize(R.dimen.thumbnail_height);
+        if (tw <= 0)
+            tw = (int) (64 * getResources().getDisplayMetrics().density);
+        if (th <= 0)
+            th = (int) (64 * getResources().getDisplayMetrics().density);
+
+        Bitmap thumb = BitmapUtils.decodeSampledBitmapFromFile(file.getAbsolutePath(), tw, th);
+        ImageView iv = mImageViews.get(index);
+        iv.setImageBitmap(thumb);
+        iv.setScaleX(0.7f);
+        iv.setScaleY(0.7f);
+        iv.setAlpha(0f);
+        iv.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(200).start();
+    }
+
+    private String lastSignaturePath;
+    private String lastRecipientName;
 
     private void saveApartmentPhotoAsync(File imageFile, String key, String displayAddress, boolean manual) {
         cameraExecutor.execute(() -> {

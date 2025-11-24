@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey;
 
 import com.google.android.gms.maps.model.LatLng;
 import com.hf.easydelivery.common.Utils;
+import com.hf.courierservice.bean.Dispatch_type;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -57,16 +58,25 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @Ignore
     private String streetName = "";
 
+    @Ignore
+    private Integer state = 0;
 
     @Ignore
-    private Integer state  = 0;
+    private Dispatch_type dispatchType;
 
+    public Dispatch_type getDispatchType() {
+        return dispatchType;
+    }
+
+    public void setDispatchType(Dispatch_type dispatchType) {
+        this.dispatchType = dispatchType;
+    }
 
     public String getOrderSn() {
         return orderSn;
     }
-    public Integer getCivilNumber()
-    {
+
+    public Integer getCivilNumber() {
         return civilNumber;
     }
 
@@ -89,7 +99,7 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
         packageEntity.recipientName = name;
         packageEntity.deliveryResult = 0;
         packageEntity.failedReason = null;
-        //packageEntity.status = String.valueOf(state);
+        // packageEntity.status = String.valueOf(state);
 
         return packageEntity;
     }
@@ -154,7 +164,8 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
         if (streetNumber != null && !streetNumber.isEmpty()) {
             try {
                 civilNumber = Integer.parseInt(streetNumber.replaceAll("[^0-9]", ""));
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         }
 
         String extractedUnit = addressInfo.getApartmentNumber();
@@ -192,13 +203,13 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
     @NonNull
     @Override
     public LatLng getPosition() {
-        return new LatLng(latitude ,  longitude);
+        return new LatLng(latitude, longitude);
     }
 
     @Nullable
     @Override
     public String getTitle() {
-            return routeNumber;
+        return routeNumber;
     }
 
     @Nullable

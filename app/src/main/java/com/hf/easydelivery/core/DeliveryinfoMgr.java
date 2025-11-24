@@ -26,10 +26,11 @@ import java.util.List;
 import android.location.Location;
 import android.util.Pair;
 
-
 /**
- * This class manages the delivery info,including getting the delivery info from the server,
- * saving the delivery info to the database, and loading the delivery info from the database.
+ * This class manages the delivery info,including getting the delivery info from
+ * the server,
+ * saving the delivery info to the database, and loading the delivery info from
+ * the database.
  * It is a key class for running without network.
  */
 public class DeliveryinfoMgr implements Subscriber {
@@ -40,8 +41,7 @@ public class DeliveryinfoMgr implements Subscriber {
 
     private long scanBatchId;
 
-    private int  scanBatchStatus;
-
+    private int scanBatchStatus;
 
     static public class DistanceCalculator {
         private static final double EARTH_RADIUS = 6371e3; // in meters
@@ -73,17 +73,20 @@ public class DeliveryinfoMgr implements Subscriber {
         return scanBatchStatus;
     }
 
-// ...
+    // ...
 
     /**
-     * Find the nearest package to the given location, return Pair<DeliveryInfo, distance>.
-     * @param loc Current location
+     * Find the nearest package to the given location, return Pair<DeliveryInfo,
+     * distance>.
+     * 
+     * @param loc          Current location
      * @param lastLocation 可选，可用于速度/方向判断，这里只用loc
-     * @param minDistance 最小距离，单位米（只返回大于此距离的包裹）
+     * @param minDistance  最小距离，单位米（只返回大于此距离的包裹）
      * @return Pair<DeliveryInfo, Double> 最近包裹和距离（单位米），没有则返回 (null, null)
      */
     public Pair<DeliveryInfo, Double> findNearestPackage(Location loc, Location lastLocation, double minDistance) {
-        if (loc == null) return new Pair<>(null, null);
+        if (loc == null)
+            return new Pair<>(null, null);
 
         DeliveryInfo nearest = null;
         double nearestDistance = Double.MAX_VALUE;
@@ -91,14 +94,14 @@ public class DeliveryinfoMgr implements Subscriber {
         for (DeliveryInfo deliveryInfo : listDeliveryInfo) {
             double distance = DistanceCalculator.haversine(
                     loc.getLatitude(), loc.getLongitude(),
-                    deliveryInfo.getLatitude(), deliveryInfo.getLongitude()
-            );
+                    deliveryInfo.getLatitude(), deliveryInfo.getLongitude());
             if (distance > minDistance && distance < nearestDistance) {
                 nearest = deliveryInfo;
                 nearestDistance = distance;
             }
         }
-        if (nearest == null) return new Pair<>(null, null);
+        if (nearest == null)
+            return new Pair<>(null, null);
         return new Pair<>(nearest, nearestDistance);
     }
 
@@ -107,7 +110,7 @@ public class DeliveryinfoMgr implements Subscriber {
     public DeliveryinfoMgr() {
         batchId = ResourceMgr.getInstance().getProperty(ITEM_CURRENT_BATCH_ID);
 
-        ResourceMgr.getInstance().getPublisher().subscribe(EventConstant.EVENT_LOGIN , this);
+        ResourceMgr.getInstance().getPublisher().subscribe(EventConstant.EVENT_LOGIN, this);
         listDeliveryInfo = new ArrayList<>();
     }
 
@@ -115,22 +118,21 @@ public class DeliveryinfoMgr implements Subscriber {
         if (orderId == null)
             return null;
 
-        return listDeliveryInfo.stream().filter(pkg->pkg.getOrderId().equals(orderId)).findFirst().orElse(null);
+        return listDeliveryInfo.stream().filter(pkg -> pkg.getOrderId().equals(orderId)).findFirst().orElse(null);
     }
 
     public final DeliveryInfo getByTrackingNo(String trackingNo) {
         if (trackingNo == null || trackingNo.isEmpty())
             return null;
 
-        return listDeliveryInfo.stream().filter(pkg->pkg.getOrderSn().equals(trackingNo)).findFirst().orElse(null);
+        return listDeliveryInfo.stream().filter(pkg -> pkg.getOrderSn().equals(trackingNo)).findFirst().orElse(null);
     }
-
 
     public final DeliveryInfo getByRouteId(String routeId) {
         if (routeId == null)
             return null;
 
-        return listDeliveryInfo.stream().filter(pkg->pkg.getRouteNumber().equals(routeId)).findFirst().orElse(null);
+        return listDeliveryInfo.stream().filter(pkg -> pkg.getRouteNumber().equals(routeId)).findFirst().orElse(null);
     }
 
     public Boolean exit(Long orderId) {
@@ -138,7 +140,8 @@ public class DeliveryinfoMgr implements Subscriber {
             return Boolean.FALSE;
         }
 
-        DeliveryInfo deliveryInfo = listDeliveryInfo.stream().filter(pkg -> pkg.getOrderId().equals(orderId)).findFirst().orElse(null);
+        DeliveryInfo deliveryInfo = listDeliveryInfo.stream().filter(pkg -> pkg.getOrderId().equals(orderId))
+                .findFirst().orElse(null);
         if (deliveryInfo != null)
             return Boolean.TRUE;
 
@@ -157,8 +160,8 @@ public class DeliveryinfoMgr implements Subscriber {
 
         listDeliveryInfo.clear();
         try {
-                ResourceMgr.getInstance().getDbHandler().post(() -> {
-                    deliveryInfoDao.delete(batchId, driverId);
+            ResourceMgr.getInstance().getDbHandler().post(() -> {
+                deliveryInfoDao.delete(batchId, driverId);
             });
         } catch (Exception e) {
             Log.e(ResourceMgr.TAG, "clear delivery info failed " + e.getMessage());
@@ -167,16 +170,15 @@ public class DeliveryinfoMgr implements Subscriber {
 
     /**
      * Get the delivery info from the server, it should be called after user login.
+     * 
      * @param driverId
      */
-    public void getDeliveryInfo(Integer driverId , Boolean bDeliveryTask)
-    {
+    public void getDeliveryInfo(Integer driverId, Boolean bDeliveryTask) {
         ICourierService courierService = ResourceMgr.getInstance().getCourierService();
         assert courierService != null;
 
-        courierService.getPackageList(String.valueOf(driverId) , bDeliveryTask , new GetPackageListRspCb(this));
+        courierService.getPackageList(String.valueOf(driverId), bDeliveryTask, new GetPackageListRspCb(this));
     }
-
 
     /**
      * Map server DeliveringListData to DeliveryInfo (no side effects).
@@ -197,17 +199,20 @@ public class DeliveryinfoMgr implements Subscriber {
         info.setOrderSn(d.getTracking_no());
         info.setOrderId(d.getOrder_id());
         info.setState(d.getState());
+        info.setDispatchType(d.getDispatch_type());
         return info;
     }
 
     /**
-     * Save the delivery info to the database, and app always load the delivery info from the database,
-     * therefore, app can use without the network. But we need another interface to sync the delivery info
+     * Save the delivery info to the database, and app always load the delivery info
+     * from the database,
+     * therefore, app can use without the network. But we need another interface to
+     * sync the delivery info
      * with server.
+     * 
      * @param d
      */
-    public void saveDeliveringListData(DeliveringListData d)
-    {
+    public void saveDeliveringListData(DeliveringListData d) {
         Short driverId = ResourceMgr.getInstance().getLoginInfo().loginId.shortValue();
         if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
             return;
@@ -229,7 +234,7 @@ public class DeliveryinfoMgr implements Subscriber {
      * Load the delivery info from the database and save it to the local cache.
      * It should be called every time the app is started.
      */
-    public void loadDeliveryInfo(IResponseCallBack<List<DeliveryInfo>> callBack){
+    public void loadDeliveryInfo(IResponseCallBack<List<DeliveryInfo>> callBack) {
         Short driverId = ResourceMgr.getInstance().getLoginInfo().loginId.shortValue();
 
         if (batchId == null || batchId.isEmpty() || driverId == null || driverId < 1) {
@@ -238,9 +243,9 @@ public class DeliveryinfoMgr implements Subscriber {
 
         DeliveryInfoDao deliveryInfoDao = ResourceMgr.getInstance().getmMydb().getDeliveryInfoDao();
 
-        ResourceMgr.getInstance().getDbHandler().post(()->{
+        ResourceMgr.getInstance().getDbHandler().post(() -> {
             try {
-                List<DeliveryInfo> records = deliveryInfoDao.findByBatchNumber(batchId , driverId);
+                List<DeliveryInfo> records = deliveryInfoDao.findByBatchNumber(batchId, driverId);
 
                 for (DeliveryInfo r : records) {
                     addDeliveryInfo(r);
@@ -248,21 +253,21 @@ public class DeliveryinfoMgr implements Subscriber {
 
                 if (callBack != null)
                     callBack.onComplete(new Result.Success<List<DeliveryInfo>>(listDeliveryInfo));
-            }catch(Exception e)
-            {
+            } catch (Exception e) {
                 if (callBack != null)
                     callBack.onFail(e);
             }
         });
     }
 
-    protected void addDeliveryInfo(DeliveryInfo p)
-    {
+    protected void addDeliveryInfo(DeliveryInfo p) {
         listDeliveryInfo.add(p);
     }
 
     /**
-     * Find the nearest package to the current location. It should be called after one package is delivered, then show the next package.
+     * Find the nearest package to the current location. It should be called after
+     * one package is delivered, then show the next package.
+     * 
      * @param currentLat
      * @param currentLon
      * @param minDistance
@@ -273,7 +278,8 @@ public class DeliveryinfoMgr implements Subscriber {
         double minDistanceFound = Double.MAX_VALUE;
 
         for (DeliveryInfo deliveryInfo : listDeliveryInfo) {
-            double distance = DistanceCalculator.haversine(currentLat, currentLon, deliveryInfo.getLatitude(), deliveryInfo.getLongitude());
+            double distance = DistanceCalculator.haversine(currentLat, currentLon, deliveryInfo.getLatitude(),
+                    deliveryInfo.getLongitude());
             if (distance > minDistance && distance < minDistanceFound) {
                 nearestPackage = deliveryInfo;
                 break;
@@ -283,22 +289,21 @@ public class DeliveryinfoMgr implements Subscriber {
         return nearestPackage;
     }
 
-    public void fechScanBatchId()
-    {
+    public void fechScanBatchId() {
         ICourierService courierService = ResourceMgr.getInstance().getCourierService();
         assert courierService != null;
 
         final ResourceMgr.LoginInfo loginInfo = ResourceMgr.getInstance().getLoginInfo();
-        courierService.fetchDriverReport(loginInfo.warehouseId, loginInfo.loginId, Utils.getCurrentDate(), new IResponseCallBack<List<ScanBatchReportData>>() {
+        courierService.fetchDriverReport(loginInfo.warehouseId, loginInfo.loginId, Utils.getCurrentDate(),
+                new IResponseCallBack<List<ScanBatchReportData>>() {
                     @Override
                     public void onComplete(Result<List<ScanBatchReportData>> result) {
-                        Result.Success<List<ScanBatchReportData>> su = (Result.Success<List<ScanBatchReportData>>)result;
+                        Result.Success<List<ScanBatchReportData>> su = (Result.Success<List<ScanBatchReportData>>) result;
                         List<ScanBatchReportData> lst = su.data;
-                        if (!lst.isEmpty())
-                        {
+                        if (!lst.isEmpty()) {
                             scanBatchId = lst.get(0).getScan_batch_id();
                             scanBatchStatus = lst.get(0).getScan_batch_status();
-                        }else {
+                        } else {
                             FileLog.getInstance().writeLog("Can't fetch the scanbatchid for " + loginInfo.loginId);
                             scanBatchId = 0;
                             scanBatchStatus = 1;
@@ -307,26 +312,28 @@ public class DeliveryinfoMgr implements Subscriber {
 
                     @Override
                     public void onFail(Exception result) {
-                        FileLog.getInstance().writeLog("Failed to fetch the scanbatchid for " + loginInfo.loginId + result.getMessage());
+                        FileLog.getInstance().writeLog(
+                                "Failed to fetch the scanbatchid for " + loginInfo.loginId + result.getMessage());
                     }
-                }
-        );
+                });
     }
 
     /**
      * called when user login
+     * 
      * @param event
      */
     @Override
     public void receive(Event event) {
 
         fechScanBatchId();
-        String userId = (String)event.getMessage();
-        getDeliveryInfo(Integer.parseInt(userId) , true);
+        String userId = (String) event.getMessage();
+        getDeliveryInfo(Integer.parseInt(userId), true);
     }
 
     /**
-     * Minimal-change scanning manager: reuse DeliveryinfoMgr networking & memory, skip DB.
+     * Minimal-change scanning manager: reuse DeliveryinfoMgr networking & memory,
+     * skip DB.
      * 用于“未扫描包裹”列表管理：仅内存，不持久化。
      */
     public static class ScanPackagesMgr extends DeliveryinfoMgr {
@@ -365,17 +372,16 @@ public class DeliveryinfoMgr implements Subscriber {
             ICourierService courierService = ResourceMgr.getInstance().getCourierService();
             assert courierService != null;
 
-            courierService.getPackageList(String.valueOf(driverId) , bDeliveryTask , new GetPackageListRspCb(this));
+            courierService.getPackageList(String.valueOf(driverId), bDeliveryTask, new GetPackageListRspCb(this));
         }
 
         /** 登录事件到来时：只拉未扫描数据与扫描批次信息 */
         @Override
         public void receive(Event event) {
-          // do nothing when receiving login event
+            // do nothing when receiving login event
         }
 
-        public void fetch(Integer userId)
-        {
+        public void fetch(Integer userId) {
             fechScanBatchId();
             getDeliveryInfo(userId, false);
         }
