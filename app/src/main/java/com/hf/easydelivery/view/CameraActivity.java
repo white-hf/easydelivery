@@ -803,17 +803,10 @@ public class CameraActivity extends AppCompatActivity
             case WAYBILL:
                 return CaptureIntent.WAYBILL;
             case DROP_OFF:
-                if (!Float.isNaN(lastPitchDegrees) && Math.abs(lastPitchDegrees) > 35f) {
-                    return CaptureIntent.BUILDING;
-                }
                 return CaptureIntent.DROP_OFF;
             case BUILDING:
-                // if (!Float.isNaN(lastPitchDegrees) && Math.abs(lastPitchDegrees) < 15f) {
-                // return CaptureIntent.WAYBILL;
-                // }
-                return CaptureIntent.BUILDING;
             default:
-                return captureStage;
+                return CaptureIntent.BUILDING;
         }
     }
 
@@ -859,6 +852,9 @@ public class CameraActivity extends AppCompatActivity
         captureStage = nextStageAfter(completedIntent);
         if (captureStage != CaptureIntent.WAYBILL) {
             clearBarcodeHint();
+        }
+        if (captureStage == CaptureIntent.BUILDING) {
+            maybeAutoFillApartmentPhoto();
         }
         FileLog.getInstance().debug(TAG, "advanceStageForPreview -> " + intentLabel(captureStage));
         applyProximityZoom(true);
@@ -1807,6 +1803,19 @@ public class CameraActivity extends AppCompatActivity
 
     private void maybeAutoFillApartmentPhoto() {
         if (apartmentPhotoService == null || deliveryInfo == null) {
+            return;
+        }
+        if (captureStage != CaptureIntent.BUILDING) {
+            return;
+        }
+        if (apartmentKeyData != null && !apartmentKeyData.isApartment) {
+            return;
+        }
+        if (activeAutoApartmentMatch != null) {
+            return;
+        }
+        int filledCount = (int) mImageFiles.stream().filter(Objects::nonNull).count();
+        if (filledCount < IMAGE_COUNT || filledCount >= MAX_PHOTOS) {
             return;
         }
         MatchResult match = apartmentPhotoService.findMatch(deliveryInfo);

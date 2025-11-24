@@ -65,6 +65,10 @@ public class ApartmentPhotoService {
 
     public boolean hasPhotoForKey(@Nullable String key) {
         if (TextUtils.isEmpty(key)) return false;
+        if (isStructuredKey(key)) {
+            ApartmentPhotoEntity entity = findEntityByStructuredKey(key);
+            return entity != null && !TextUtils.isEmpty(entity.filePath);
+        }
         ApartmentPhotoEntity entity = repository.findByKey(key);
         return entity != null && !TextUtils.isEmpty(entity.filePath);
     }
@@ -74,7 +78,10 @@ public class ApartmentPhotoService {
         if (info == null) return null;
         ApartmentAddressKeyBuilder.KeyData keyData = buildKeyData(info);
         if (!TextUtils.isEmpty(keyData.key)) {
-            MatchResult match = validateEntity(repository.findByKey(keyData.key), false);
+            ApartmentPhotoEntity entity = isStructuredKey(keyData.key)
+                    ? findEntityByStructuredKey(keyData.key)
+                    : repository.findByKey(keyData.key);
+            MatchResult match = validateEntity(entity, false);
             if (match != null) {
                 repository.updateLastUsed(match.entity.id, System.currentTimeMillis());
                 return match;
@@ -85,14 +92,14 @@ public class ApartmentPhotoService {
 
     private MatchResult fuzzyMatch(@Nullable String fullAddress) {
         if (TextUtils.isEmpty(fullAddress)) return null;
-        String normalized = fullAddress.toLowerCase(Locale.US);
+        String normalizedAddress = fullAddress.toLowerCase(Locale.US);
         List<ApartmentPhotoEntity> all = repository.listAll();
         if (all == null || all.isEmpty()) return null;
         for (ApartmentPhotoEntity entity : all) {
             if (entity == null || TextUtils.isEmpty(entity.addressKey)) continue;
-            if (!ApartmentPhotoEntity.SOURCE_MANUAL.equals(entity.source)) continue;
-            String key = entity.addressKey.toLowerCase(Locale.US);
-            if (normalized.contains(key)) {
+            String key = entity.addressKey.toLowerCase(Locale.US).trim();
+            if (key.isEmpty()) continue;
+            if (normalizedAddress.contains(key)) {
                 MatchResult match = validateEntity(entity, true);
                 if (match != null) {
                     repository.updateLastUsed(match.entity.id, System.currentTimeMillis());
@@ -131,7 +138,9 @@ public class ApartmentPhotoService {
             if (dest.exists()) dest.delete();
             return false;
         }
-        ApartmentPhotoEntity existing = repository.findByKey(addressKey);
+        ApartmentPhotoEntity existing = isStructuredKey(addressKey)
+                ? findEntityByStructuredKey(addressKey)
+                : repository.findByKey(addressKey);
         ApartmentPhotoEntity entity = existing != null ? existing : new ApartmentPhotoEntity();
         entity.addressKey = addressKey;
         entity.displayAddress = displayAddress;
@@ -197,5 +206,69 @@ public class ApartmentPhotoService {
             }
         }
         return paths;
+    }
+
+    private static boolean isStructuredKey(@Nullable String key) {
+        return !TextUtils.isEmpty(key) && key.contains("|");
+    }
+
+    private static class KeyParts {
+        final String city;
+        final String street;
+        final String number;
+
+        KeyParts(String city, String street, String number) {
+            this.city = city;
+            this.street = street;
+            this.number = number;
+        }
+    }
+
+    @Nullable
+    private KeyParts parseKeyParts(@Nullable String key) {
+        if (TextUtils.isEmpty(key)) {
+            return null;
+        }
+        String[] parts = key.split("\\|", -1);
+        if (parts.length != 3) {
+            return null;
+        }
+        return new KeyParts(parts[0], parts[1], parts[2]);
+    }
+
+    @Nullable
+    private ApartmentPhotoEntity findEntityByStructuredKey(@Nullable String key) {
+        if (TextUtils.isEmpty(key)) {
+            return null;
+        }
+        ApartmentPhotoEntity direct = repository.findByKey(key);
+        if (direct != null) {
+            return direct;
+        }
+        KeyParts target = parseKeyParts(key);
+        if (target == null || TextUtils.isEmpty(target.street) || TextUtils.isEmpty(target.number)) {
+            return null;
+        }
+        List<ApartmentPhotoEntity> all = repository.listAll();
+        if (all == null || all.isEmpty()) {
+            return null;
+        }
+        for (ApartmentPhotoEntity entity : all) {
+            if (entity == null || TextUtils.isEmpty(entity.addressKey)) {
+                continue;
+            }
+            KeyParts entityParts = parseKeyParts(entity.addressKey);
+            if (entityParts == null) {
+                continue;
+            }
+            if (TextUtils.isEmpty(entityParts.street) || TextUtils.isEmpty(entityParts.number)) {
+                continue;
+            }
+            if (entityParts.street.equalsIgnoreCase(target.street)
+                    && entityParts.number.equalsIgnoreCase(target.number)) {
+                return entity;
+            }
+        }
+        return null;
     }
 }
