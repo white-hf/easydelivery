@@ -25,7 +25,7 @@ public class SignatureView extends View {
     private void init() {
         paint = new Paint();
         paint.setAntiAlias(true);
-        paint.setColor(Color.BLACK);
+        paint.setColor(Color.WHITE);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeJoin(Paint.Join.ROUND);
         paint.setStrokeWidth(10f);
@@ -38,6 +38,7 @@ public class SignatureView extends View {
         if (w > 0 && h > 0) {
             bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             canvas = new Canvas(bitmap);
+            canvas.drawColor(Color.DKGRAY);
         }
     }
 
@@ -77,7 +78,7 @@ public class SignatureView extends View {
     public void clear() {
         path.reset();
         if (bitmap != null) {
-            bitmap.eraseColor(Color.TRANSPARENT);
+            bitmap.eraseColor(Color.DKGRAY);
             if (canvas != null) {
                 canvas.setBitmap(bitmap);
             }

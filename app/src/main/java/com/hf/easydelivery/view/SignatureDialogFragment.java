@@ -100,9 +100,9 @@ public class SignatureDialogFragment extends DialogFragment {
             File cacheDir = getContext().getExternalCacheDir();
             if (cacheDir == null)
                 cacheDir = getContext().getCacheDir();
-            File file = new File(cacheDir, "signature_" + System.currentTimeMillis() + ".png");
+            File file = new File(cacheDir, "signature_" + System.currentTimeMillis() + ".jpg");
             FileOutputStream fos = new FileOutputStream(file);
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, fos);
             fos.close();
             return file.getAbsolutePath();
         } catch (IOException e) {

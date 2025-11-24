@@ -1912,19 +1912,7 @@ public class CameraActivity extends AppCompatActivity
         int targetIndex = MAX_PHOTOS - 1;
         if (mImageFiles.get(targetIndex) == null) {
             mImageFiles.set(targetIndex, file);
-            int tw = getResources().getDimensionPixelSize(R.dimen.thumbnail_width);
-            int th = getResources().getDimensionPixelSize(R.dimen.thumbnail_height);
-            if (tw <= 0)
-                tw = (int) (64 * getResources().getDisplayMetrics().density);
-            if (th <= 0)
-                th = (int) (64 * getResources().getDisplayMetrics().density);
-            Bitmap thumb = BitmapUtils.decodeSampledBitmapFromFile(file.getAbsolutePath(), tw, th);
-            ImageView iv = mImageViews.get(targetIndex);
-            iv.setImageBitmap(thumb);
-            iv.setScaleX(0.7f);
-            iv.setScaleY(0.7f);
-            iv.setAlpha(0f);
-            iv.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(200).start();
+            updateThumbnailView(targetIndex, file);
             updateOkButtonState();
         }
     }
@@ -2074,22 +2062,49 @@ public class CameraActivity extends AppCompatActivity
         if (deliveryInfo == null)
             return;
         SignatureDialogFragment dialog = SignatureDialogFragment.newInstance(deliveryInfo.getName());
-        dialog.setOnSignatureCompletedListener((path, name) -> {
-            FileLog.getInstance().debug(TAG, "Signature saved: " + path + ", Name: " + name);
-            Toast.makeText(this, "Signature saved", Toast.LENGTH_SHORT).show();
-            // TODO: Store this path for upload.
-            // The requirement says "record signature image for upload after photo
-            // completion".
-            // We can store it in a member variable or add it to the package entity.
-            // For now, we just log it as requested "upload logic not modified yet".
-            // We could potentially add it to mImageFiles if we wanted to treat it as a
-            // photo,
-            // but the requirement implies a separate flow or just "recording" it.
-            // Let's store it in a temporary variable if needed later.
+        dialog.setOnSignatureCompletedListener((path, recipientName) -> {
             lastSignaturePath = path;
-            lastRecipientName = name;
+            lastRecipientName = recipientName;
+
+            // Auto-fill signature to the 2nd slot (index 1)
+            if (path != null) {
+                File file = new File(path);
+                if (file.exists()) {
+                    // Ensure list has enough capacity or set specifically
+                    if (mImageFiles.size() <= 1) {
+                        // If less than 2 items, add nulls until index 1 is reachable
+                        while (mImageFiles.size() < 2) {
+                            mImageFiles.add(null);
+                        }
+                    }
+                    // Set at index 1
+                    mImageFiles.set(1, file);
+                    updateThumbnailView(1, file);
+                    updateOkButtonState();
+                }
+            }
         });
         dialog.show(getSupportFragmentManager(), "signature_dialog");
+    }
+
+    private void updateThumbnailView(int index, File file) {
+        if (index < 0 || index >= mImageViews.size())
+            return;
+
+        int tw = getResources().getDimensionPixelSize(R.dimen.thumbnail_width);
+        int th = getResources().getDimensionPixelSize(R.dimen.thumbnail_height);
+        if (tw <= 0)
+            tw = (int) (64 * getResources().getDisplayMetrics().density);
+        if (th <= 0)
+            th = (int) (64 * getResources().getDisplayMetrics().density);
+
+        Bitmap thumb = BitmapUtils.decodeSampledBitmapFromFile(file.getAbsolutePath(), tw, th);
+        ImageView iv = mImageViews.get(index);
+        iv.setImageBitmap(thumb);
+        iv.setScaleX(0.7f);
+        iv.setScaleY(0.7f);
+        iv.setAlpha(0f);
+        iv.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(200).start();
     }
 
     private String lastSignaturePath;
