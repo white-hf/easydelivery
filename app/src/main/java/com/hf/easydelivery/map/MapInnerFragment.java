@@ -210,7 +210,8 @@ public class MapInnerFragment extends Fragment
 
     // 区域通勤极简：高速穿越空区时，短时间抑制 Proximity 评估
     private static final float COMMUTE_SWITCH_M = 600f; // 未越过 600m 仍认为同一区域
-    private static final long COMMUTE_SUPPRESS_MS = 120_000L; // 抑制 2 分钟
+    // 通勤抑制：已缩短为 15s，近距/步行时会被即时解除
+    private static final long COMMUTE_SUPPRESS_MS = 15_000L;
 
     // UI 兜底的回差：策略层已有 lock/unlock，这里只做折叠后的最小回差
     private static final float LOCK_HYSTERESIS_EXTRA_M = 80f;
@@ -1186,7 +1187,15 @@ public class MapInnerFragment extends Fragment
             currentRegionState = InfoPillProximityController.RegionState.IN_TRANSIT;
         }
         maybeRequestInsideBoost(state);
-        maybeRecoverAutoFollow(state);
+        // 未扫描包裹视图下不自动恢复/拉回相机，保持用户查看列表的视角
+        if (currentMode != DataMode.UNSCANNED) {
+            maybeRecoverAutoFollow(state);
+        }
+
+        // 未扫描模式：仅更新标记/信息，不做自动跟随
+        if (currentMode == DataMode.UNSCANNED && !navigationModeEnabled) {
+            return;
+        }
 
         // 2) Phase 1/2 回退路径：无需 FocusDecision（Phase 3 未接入时生效）
         float distanceMeters = Float.isNaN(lastNearestDistanceMeters)
@@ -1439,60 +1448,86 @@ public class MapInnerFragment extends Fragment
     }
 
     /**
-     * Top-3：决定本次是否需要触发 Proximity 评估（远距降采样 + 区域通勤极简）。
-     * 仅影响 ProximityCoordinator 的 onLocation 调用频率，不改变相机跟随。
+     * Top-3：决定本次是否需要触发 Proximity 评估。
+     * 【已修改】增加社区短途保护 + 步行立即解锁，彻底解决社区派送不跟手问题。
      */
     private boolean shouldEvaluateProximity(@NonNull Location loc, @NonNull SmartLocationManager.MovementState state) {
         final long now = System.currentTimeMillis();
+        
+        // 0. 强制评估标志（例如刚送完一单，需要立即刷新）
         if (forceProximityEvaluation) {
             forceProximityEvaluation = false;
             lastProximityEvalMs = now;
             return true;
         }
 
-        // 1) 若处于通勤抑制窗口，直接跳过
+        // ==================================================================================
+        // 【核心修改区 START】
+        // ==================================================================================
+        
+        // 1. 社区短途保护：如果离最近的包裹很近 (< 500米)，直接允许评估，绝不抑制！
+        boolean isShortDistance = !Float.isNaN(lastNearestDistanceMeters) && lastNearestDistanceMeters < 500f;
+        
+        // 2. 状态保护：如果是步行或停车，立即解锁。
+        boolean isSlowOrStopped = (state == SmartLocationManager.MovementState.STATIONARY
+                || state == SmartLocationManager.MovementState.WALKING);
+
+        if (isShortDistance || isSlowOrStopped) {
+            // 立即清除抑制状态，确保 InfoPill 和 Zoom 能响应
+            commuteAnchorLatLng = null;
+            commuteSuppressUntilMs = 0L;
+            
+            // 依然遵循最小采样间隔(800ms)，防止 UI 刷新过快闪烁
+            if (now - lastProximityEvalMs < NEAR_SAMPLE_MIN_INTERVAL_MS) {
+                return false;
+            }
+            lastProximityEvalMs = now;
+            return true;
+        }
+        // ==================================================================================
+        // 【核心修改区 END】
+        // ==================================================================================
+
+        // --- 以下是长距离驾驶(>500m)的抑制逻辑 ---
+
+        // 3. 若处于通勤抑制窗口，跳过
         if (now < commuteSuppressUntilMs) {
             logD("proximity skip: commute-suppressed until=" + commuteSuppressUntilMs);
             return false;
         }
 
-        // 2) 基于最近距离选择采样间隔（lastNearestDistanceMeters 由上一次策略回调更新）
+        // 4. 采样间隔检查
         final long minInterval = (Float.isNaN(lastNearestDistanceMeters)
                 || lastNearestDistanceMeters > FAR_DISTANCE_SAMPLE_THRESHOLD_M)
                         ? FAR_SAMPLE_MIN_INTERVAL_MS
                         : NEAR_SAMPLE_MIN_INTERVAL_MS;
         if (now - lastProximityEvalMs < minInterval) {
-            return false; // 采样间隔未到
+            return false;
         }
 
-        // 3) 区域通勤极简：当驾驶且仍未越过切换距离，则进入短时抑制窗口
+        // 5. 区域通勤极简：当驾驶且仍未越过切换距离，则进入短时抑制窗口
         if (state == SmartLocationManager.MovementState.SLOW_DRIVING
                 || state == SmartLocationManager.MovementState.NORMAL_DRIVING) {
             LatLng here = new LatLng(loc.getLatitude(), loc.getLongitude());
             if (commuteAnchorLatLng == null) {
-                commuteAnchorLatLng = here; // 第一次进入驾驶，设锚点
+                commuteAnchorLatLng = here;
             } else {
                 float moved = distanceBetweenMeters(here, commuteAnchorLatLng);
-                if (moved < COMMUTE_SWITCH_M && (Float.isNaN(lastNearestDistanceMeters)
-                        || lastNearestDistanceMeters > FAR_DISTANCE_SAMPLE_THRESHOLD_M)) {
+                // 只有移动距离很小，才抑制
+                if (moved < COMMUTE_SWITCH_M) {
                     if (now >= commuteSuppressUntilMs) {
                         commuteSuppressUntilMs = now + COMMUTE_SUPPRESS_MS;
                         logD("proximity commute-suppress start for " + COMMUTE_SUPPRESS_MS + " ms (moved=" + moved
                                 + ")");
-                    } else {
-                        logD("proximity commute-suppress already active until=" + commuteSuppressUntilMs);
                     }
                     return false;
                 }
-                // 越过切换距离，更新锚点，允许评估
+                // 越过切换距离，更新锚点
                 if (moved >= COMMUTE_SWITCH_M) {
                     commuteAnchorLatLng = here;
                     commuteSuppressUntilMs = 0L;
                 }
             }
-        } else {
-            // 非驾驶则清空通勤锚点
-            commuteAnchorLatLng = null;
         }
 
         lastProximityEvalMs = now;

@@ -82,6 +82,9 @@ public class CameraFollowController {
         public float stdDistM = 5f; // STANDARD base distance
         public float stdHeadingDeg = 10f; // STANDARD base heading delta
 
+        // Walking sensitivity: when not driving, require only a small move to refresh
+        public float stdDistWalkingM = 1.5f;
+
         public long basicIntervalMs = 1000L; // BASIC base interval
         public float basicDistM = 10f; // BASIC base distance
         public float basicHeadingDeg = 15f; // BASIC base heading delta
@@ -159,6 +162,9 @@ public class CameraFollowController {
                 distance = distanceResults[0];
             }
             boolean distanceOk = distance > FOLLOW_CONFIG.stdDistM;
+            if (!isDrivingState(state)) {
+                distanceOk = distance > FOLLOW_CONFIG.stdDistWalkingM;
+            }
 
             boolean headingOk = false;
             if (location.hasBearing() && !Float.isNaN(lastBearing)) {

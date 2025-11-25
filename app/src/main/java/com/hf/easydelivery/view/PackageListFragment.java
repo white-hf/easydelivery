@@ -289,7 +289,25 @@ public class PackageListFragment extends Fragment {
     }
 
     private void sortByRouteNumber(List<DeliveryInfo> list) {
-        list.sort((a, b) -> safeString(a.getRouteNumber()).compareTo(safeString(b.getRouteNumber())));
+        list.sort((a, b) -> {
+            Long na = parseLongSafe(a.getRouteNumber());
+            Long nb = parseLongSafe(b.getRouteNumber());
+            if (na != null && nb != null) {
+                return na.compareTo(nb);
+            }
+            return safeString(a.getRouteNumber()).compareTo(safeString(b.getRouteNumber()));
+        });
+    }
+
+    @Nullable
+    private Long parseLongSafe(String value) {
+        if (value == null)
+            return null;
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private String safeString(String value) {
