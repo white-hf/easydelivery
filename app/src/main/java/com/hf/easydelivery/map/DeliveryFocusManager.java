@@ -70,16 +70,25 @@ DeliveryFocusManager 的执行流程可以概括为：输入 -> 计算 -> 输出
 public class DeliveryFocusManager {
 
     private static final String TAG = "DeliveryFocusManager";
-    private static void logI(String msg) { try { FileLog.i(TAG, msg); } catch (Throwable ignore) {} }
+
+    private static void logI(String msg) {
+        try {
+            FileLog.i(TAG, msg);
+        } catch (Throwable ignore) {
+        }
+    }
 
     // Pretty printer for distance logs: hide sentinel/absurd values
     private static String prettyDist(float d) {
-        if (Float.isNaN(d) || d <= 0f || d >= 1e7f) return "none";
+        if (Float.isNaN(d) || d <= 0f || d >= 1e7f)
+            return "none";
         float capped = Math.min(d, 9_999_999f);
         return String.format(java.util.Locale.US, "%.1f", capped);
     }
+
     // Throttle zoom logs to only print when it meaningfully changes
     private float lastZoomLogged = Float.NaN;
+
     private void maybeLogZoom(String ctx, float distanceMeters, float zoom) {
         if (Float.isNaN(lastZoomLogged) || Math.abs(zoom - lastZoomLogged) >= 0.2f) {
             logI("zoom[" + ctx + "] d=" + prettyDist(distanceMeters) + " -> " + zoom);
@@ -90,6 +99,7 @@ public class DeliveryFocusManager {
     public static final class InfoGroup {
         public final List<DeliveryInfo> sameAddress;
         public final int nearbyCount;
+
         InfoGroup(List<DeliveryInfo> sameAddress, int nearbyCount) {
             this.sameAddress = sameAddress;
             this.nearbyCount = nearbyCount;
@@ -99,9 +109,9 @@ public class DeliveryFocusManager {
     private static final Comparator<DeliveryInfo> ADDRESS_COMPARATOR = (a, b) -> compareDeliveriesForAddress(a, b);
 
     public static final float DEFAULT_FOLLOW_ZOOM = 17f;
-    private static final float CLOSE_DISTANCE_METERS = 90f;         // CLOSE_DISTANCE_METERS: 强贴近（站点前/楼下）
-    private static final float APPROACH_DISTANCE_METERS = 260f;     // APPROACH_DISTANCE_METERS: 逐步接近（最后一段）
-    private static final float LEAVE_DISTANCE_METERS = 360f;        // LEAVE_DISTANCE_METERS: 离开回到巡航视角
+    private static final float CLOSE_DISTANCE_METERS = 90f; // CLOSE_DISTANCE_METERS: 强贴近（站点前/楼下）
+    private static final float APPROACH_DISTANCE_METERS = 260f; // APPROACH_DISTANCE_METERS: 逐步接近（最后一段）
+    private static final float LEAVE_DISTANCE_METERS = 360f; // LEAVE_DISTANCE_METERS: 离开回到巡航视角
 
     public enum ZoomProfile {
         STANDARD,
@@ -118,10 +128,11 @@ public class DeliveryFocusManager {
         public float closeZoom;
         public float approachZoom;
 
-        public ZoomConfig() { }
+        public ZoomConfig() {
+        }
 
         public ZoomConfig(float closeMeters, float approachMeters, float leaveMeters,
-                          float defaultZoom, float closeZoom, float approachZoom) {
+                float defaultZoom, float closeZoom, float approachZoom) {
             this.closeMeters = closeMeters;
             this.approachMeters = approachMeters;
             this.leaveMeters = leaveMeters;
@@ -138,45 +149,53 @@ public class DeliveryFocusManager {
             LEAVE_DISTANCE_METERS,
             DEFAULT_FOLLOW_ZOOM,
             18.7f,
-            17.5f
-    );
+            17.5f);
 
     /** Returns a live view of the current zoom config (for diagnostics/UI). */
     @NonNull
     public static ZoomConfig getZoomConfig() {
-        logI("getZoomConfig() close=" + ZOOM_CONFIG.closeMeters + ", approach=" + ZOOM_CONFIG.approachMeters + ", leave=" + ZOOM_CONFIG.leaveMeters + ", defZoom=" + ZOOM_CONFIG.defaultZoom);
+        logI("getZoomConfig() close=" + ZOOM_CONFIG.closeMeters + ", approach=" + ZOOM_CONFIG.approachMeters
+                + ", leave=" + ZOOM_CONFIG.leaveMeters + ", defZoom=" + ZOOM_CONFIG.defaultZoom);
         return ZOOM_CONFIG;
     }
 
-    /** Apply a new config at runtime; any nulls are ignored (not applicable for primitives). */
+    /**
+     * Apply a new config at runtime; any nulls are ignored (not applicable for
+     * primitives).
+     */
     public static void applyZoomConfig(@NonNull ZoomConfig cfg) {
-        logI("applyZoomConfig(...) before -> close=" + ZOOM_CONFIG.closeMeters + ", approach=" + ZOOM_CONFIG.approachMeters + ", leave=" + ZOOM_CONFIG.leaveMeters + ", defZoom=" + ZOOM_CONFIG.defaultZoom);
-        if (cfg == null) return;
+        logI("applyZoomConfig(...) before -> close=" + ZOOM_CONFIG.closeMeters + ", approach="
+                + ZOOM_CONFIG.approachMeters + ", leave=" + ZOOM_CONFIG.leaveMeters + ", defZoom="
+                + ZOOM_CONFIG.defaultZoom);
+        if (cfg == null)
+            return;
         ZOOM_CONFIG.closeMeters = cfg.closeMeters;
         ZOOM_CONFIG.approachMeters = cfg.approachMeters;
         ZOOM_CONFIG.leaveMeters = cfg.leaveMeters;
         ZOOM_CONFIG.defaultZoom = cfg.defaultZoom;
         ZOOM_CONFIG.closeZoom = cfg.closeZoom;
         ZOOM_CONFIG.approachZoom = cfg.approachZoom;
-        logI("applyZoomConfig(...) after  -> close=" + ZOOM_CONFIG.closeMeters + ", approach=" + ZOOM_CONFIG.approachMeters + ", leave=" + ZOOM_CONFIG.leaveMeters + ", defZoom=" + ZOOM_CONFIG.defaultZoom);
+        logI("applyZoomConfig(...) after  -> close=" + ZOOM_CONFIG.closeMeters + ", approach="
+                + ZOOM_CONFIG.approachMeters + ", leave=" + ZOOM_CONFIG.leaveMeters + ", defZoom="
+                + ZOOM_CONFIG.defaultZoom);
     }
 
     // ==== Proximity Config (Top-3 scheduling: sampling / lock / commute) ====
     public static final class ProximityConfig {
         // Distance threshold to consider we are in "far commute" mode
-        public float farDistMeters = 3000f;            // 3km
+        public float farDistMeters = 3000f; // 3km
         // Min re-evaluation intervals when far, by movement state
-        public long farSampleDrivingMs = 6000L;        // 6s
-        public long farSampleWalkingMs = 10000L;       // 10s
-        public long farSampleStationaryMs = 12000L;    // 12s
+        public long farSampleDrivingMs = 6000L; // 6s
+        public long farSampleWalkingMs = 10000L; // 10s
+        public long farSampleStationaryMs = 12000L; // 12s
         // Default min interval when near
-        public long nearSampleDefaultMs = 1500L;       // 1.5s
+        public long nearSampleDefaultMs = 1500L; // 1.5s
         // Lock / hysteresis around the primary focus to reduce jitter
-        public float lockEnterMeters = 300f;           // lock when <= 300m
-        public float lockExitHysteresisMeters = 150f;  // unlock when > 300m + 150m
+        public float lockEnterMeters = 300f; // lock when <= 300m
+        public float lockExitHysteresisMeters = 150f; // unlock when > 300m + 150m
         // Area commute suppression to skip evaluations while cruising between zones
-        public float commuteSwitchMeters = 1200f;      // switch zone if moved >= 1.2km
-        public long commuteSuppressMs = 20000L;        // suppress evaluations for 20s
+        public float commuteSwitchMeters = 1200f; // switch zone if moved >= 1.2km
+        public long commuteSuppressMs = 20000L; // suppress evaluations for 20s
     }
 
     // Backing proximity config instance with sane defaults
@@ -201,15 +220,15 @@ public class DeliveryFocusManager {
 
         // PowerSaver：更远才视为“远距”，评估频度更低，通勤抑制更积极
         ProximityConfig ps = new ProximityConfig();
-        ps.farDistMeters = 5000f;               // 5km 才认为远距，减少频繁切换
-        ps.farSampleDrivingMs = 10000L;         // 驾车 10s/次
-        ps.farSampleWalkingMs = 15000L;         // 步行 15s/次
-        ps.farSampleStationaryMs = 20000L;      // 静止 20s/次
-        ps.nearSampleDefaultMs = 2500L;         // 近距也放宽到 2.5s/次
-        ps.lockEnterMeters = 350f;              // 锁定阈值略放大，减抖动
-        ps.lockExitHysteresisMeters = 200f;     // 回退更宽
-        ps.commuteSwitchMeters = 1500f;         // 切区位移更大
-        ps.commuteSuppressMs = 30000L;          // 抑制窗口更长 30s
+        ps.farDistMeters = 5000f; // 5km 才认为远距，减少频繁切换
+        ps.farSampleDrivingMs = 10000L; // 驾车 10s/次
+        ps.farSampleWalkingMs = 15000L; // 步行 15s/次
+        ps.farSampleStationaryMs = 20000L; // 静止 20s/次
+        ps.nearSampleDefaultMs = 2500L; // 近距也放宽到 2.5s/次
+        ps.lockEnterMeters = 350f; // 锁定阈值略放大，减抖动
+        ps.lockExitHysteresisMeters = 200f; // 回退更宽
+        ps.commuteSwitchMeters = 1500f; // 切区位移更大
+        ps.commuteSuppressMs = 30000L; // 抑制窗口更长 30s
         PROXIMITY_PRESET_POWERSAVER = ps;
     }
 
@@ -226,20 +245,26 @@ public class DeliveryFocusManager {
         dst.commuteSuppressMs = src.commuteSuppressMs;
     }
 
-    /** Returns the current proximity (Top-3 scheduling) configuration for diagnostics/UI. */
+    /**
+     * Returns the current proximity (Top-3 scheduling) configuration for
+     * diagnostics/UI.
+     */
     @NonNull
     public static ProximityConfig getProximityConfig() {
         logI("getProximityConfig() farDist=" + PROXIMITY_CONFIG.farDistMeters
-                + ", intervals(far d/w/s)=" + PROXIMITY_CONFIG.farSampleDrivingMs + "/" + PROXIMITY_CONFIG.farSampleWalkingMs + "/" + PROXIMITY_CONFIG.farSampleStationaryMs
+                + ", intervals(far d/w/s)=" + PROXIMITY_CONFIG.farSampleDrivingMs + "/"
+                + PROXIMITY_CONFIG.farSampleWalkingMs + "/" + PROXIMITY_CONFIG.farSampleStationaryMs
                 + ", nearInterval=" + PROXIMITY_CONFIG.nearSampleDefaultMs
                 + ", lock=" + PROXIMITY_CONFIG.lockEnterMeters + "+" + PROXIMITY_CONFIG.lockExitHysteresisMeters
-                + ", commute(switch/suppress)=" + PROXIMITY_CONFIG.commuteSwitchMeters + "/" + PROXIMITY_CONFIG.commuteSuppressMs);
+                + ", commute(switch/suppress)=" + PROXIMITY_CONFIG.commuteSwitchMeters + "/"
+                + PROXIMITY_CONFIG.commuteSuppressMs);
         return PROXIMITY_CONFIG;
     }
 
     /** Apply a new proximity config at runtime (all fields copied). */
     public static void applyProximityConfig(@NonNull ProximityConfig cfg) {
-        if (cfg == null) return;
+        if (cfg == null)
+            return;
         logI("applyProximityConfig(...) before -> farDist=" + PROXIMITY_CONFIG.farDistMeters
                 + ", nearInterval=" + PROXIMITY_CONFIG.nearSampleDefaultMs);
         PROXIMITY_CONFIG.farDistMeters = cfg.farDistMeters;
@@ -257,8 +282,8 @@ public class DeliveryFocusManager {
 
     /**
      * Bridge for external ProfileManager:
-     *  - ADVANCED   → 恢复/应用高级预设（当前默认）
-     *  - POWERSAVER → 应用更省电的阈值与采样节流
+     * - ADVANCED → 恢复/应用高级预设（当前默认）
+     * - POWERSAVER → 应用更省电的阈值与采样节流
      *
      * 可多次调用（开发者面板热切换），立即覆盖运行时配置。
      */
@@ -279,18 +304,19 @@ public class DeliveryFocusManager {
         float compute(float distanceMeters);
     }
 
-
     // STANDARD strategy: mirrors the existing three-segment curve
     private static final class StandardZoomStrategy implements ZoomStrategy {
-        @Override public float compute(float distanceMeters) {
+        @Override
+        public float compute(float distanceMeters) {
             final float close = ZOOM_CONFIG.closeMeters;
             final float approach = ZOOM_CONFIG.approachMeters;
             final float leave = ZOOM_CONFIG.leaveMeters;
             final float defZoom = ZOOM_CONFIG.defaultZoom;
-            final float closeZoom = ZOOM_CONFIG.closeZoom;      // was 18.7f
+            final float closeZoom = ZOOM_CONFIG.closeZoom; // was 18.7f
             final float approachZoom = ZOOM_CONFIG.approachZoom; // was 17.5f
 
-            if (distanceMeters <= close) return closeZoom;
+            if (distanceMeters <= close)
+                return closeZoom;
             if (distanceMeters <= approach) {
                 float ratio = (distanceMeters - close) / (approach - close);
                 return closeZoom + clamp(ratio, 0f, 1f) * (approachZoom - closeZoom);
@@ -303,11 +329,15 @@ public class DeliveryFocusManager {
         }
     }
 
-
-    // BASIC strategy: currently identical to STANDARD (safe rollout). Can diverge later.
+    // BASIC strategy: currently identical to STANDARD (safe rollout). Can diverge
+    // later.
     private static final class BasicZoomStrategy implements ZoomStrategy {
         private final ZoomStrategy delegate = new StandardZoomStrategy();
-        @Override public float compute(float distanceMeters) { return delegate.compute(distanceMeters); }
+
+        @Override
+        public float compute(float distanceMeters) {
+            return delegate.compute(distanceMeters);
+        }
     }
 
     // Registry of strategies (no switch/case needed to extend)
@@ -323,17 +353,20 @@ public class DeliveryFocusManager {
     private static final ZoomStrategy DEFAULT_ZOOM_STRATEGY = ZOOM_STRATEGIES.get(ZoomProfile.STANDARD);
 
     // ==== Distance ranking strategy (Phase 2 optional) ====
-    public enum DistanceRankProfile { SIMPLE, BALANCED, ADVANCED }
+    public enum DistanceRankProfile {
+        SIMPLE, BALANCED, ADVANCED
+    }
 
     public interface DistanceRankStrategy {
         @NonNull
         List<DeliveryInfo> rank(@NonNull Location location,
-                                 @NonNull List<DeliveryInfo> deliveries,
-                                 int limit);
+                @NonNull List<DeliveryInfo> deliveries,
+                int limit);
     }
 
     private static final Map<DistanceRankProfile, DistanceRankStrategy> DISTANCE_RANK_STRATEGIES = new HashMap<>();
-    private static DistanceRankProfile distanceRankProfile = DistanceRankProfile.SIMPLE; // default preserves current behavior
+    private static DistanceRankProfile distanceRankProfile = DistanceRankProfile.SIMPLE; // default preserves current
+                                                                                         // behavior
     private static DistanceRankStrategy distanceRankStrategy;
 
     /** Region thresholds for InfoPill/Proximity logic. */
@@ -352,20 +385,23 @@ public class DeliveryFocusManager {
         logI("setDistanceRankProfile(" + profile + ")");
         distanceRankProfile = profile;
         DistanceRankStrategy s = DISTANCE_RANK_STRATEGIES.get(profile);
-        if (s == null) s = new SimpleDistanceRankStrategy();
+        if (s == null)
+            s = new SimpleDistanceRankStrategy();
         distanceRankStrategy = s;
     }
 
     static {
         DISTANCE_RANK_STRATEGIES.put(DistanceRankProfile.SIMPLE, new SimpleDistanceRankStrategy());
         DISTANCE_RANK_STRATEGIES.put(DistanceRankProfile.BALANCED, new TwoStageTopKDistanceRankStrategy());
-        DISTANCE_RANK_STRATEGIES.put(DistanceRankProfile.ADVANCED, new TwoStageTopKDistanceRankStrategy()); // alias for now
+        DISTANCE_RANK_STRATEGIES.put(DistanceRankProfile.ADVANCED, new TwoStageTopKDistanceRankStrategy()); // alias for
+                                                                                                            // now
         distanceRankStrategy = DISTANCE_RANK_STRATEGIES.get(DistanceRankProfile.SIMPLE);
         logI("DISTANCE_RANK_STRATEGIES initialized: " + DISTANCE_RANK_STRATEGIES.keySet());
     }
 
     public void applyRegionConfig(@NonNull RegionConfig cfg) {
-        if (cfg == null) return;
+        if (cfg == null)
+            return;
         REGION_CONFIG.showRadiusMeters = cfg.showRadiusMeters;
         REGION_CONFIG.hideRadiusMeters = Math.max(cfg.hideRadiusMeters, REGION_CONFIG.showRadiusMeters);
         REGION_CONFIG.clusterRadiusMeters = Math.max(cfg.clusterRadiusMeters, REGION_CONFIG.hideRadiusMeters);
@@ -382,6 +418,7 @@ public class DeliveryFocusManager {
     public static final class DeliveryWithDistance {
         final DeliveryInfo info;
         final double distanceMeters;
+
         DeliveryWithDistance(DeliveryInfo info, double distanceMeters) {
             this.info = info;
             this.distanceMeters = distanceMeters;
@@ -391,23 +428,28 @@ public class DeliveryFocusManager {
     public static final class NearestResult {
         public final DeliveryInfo delivery;
         public final float distanceMeters;
+
         private NearestResult(@Nullable DeliveryInfo delivery, float distanceMeters) {
             this.delivery = delivery;
             this.distanceMeters = distanceMeters;
         }
+
         public static NearestResult empty() {
             return new NearestResult(null, Float.MAX_VALUE);
         }
+
         public static NearestResult of(@NonNull DeliveryInfo delivery, float distanceMeters) {
             return new NearestResult(delivery, distanceMeters);
         }
     }
+
     // Strategy 1: SIMPLE — current precise-all then sort behavior
     private static final class SimpleDistanceRankStrategy implements DistanceRankStrategy {
-        @NonNull @Override
+        @NonNull
+        @Override
         public List<DeliveryInfo> rank(@NonNull Location location,
-                                       @NonNull List<DeliveryInfo> deliveries,
-                                       int limit) {
+                @NonNull List<DeliveryInfo> deliveries,
+                int limit) {
             logI("[SIMPLE] rank() start: in=" + deliveries.size() + ", limit=" + limit);
             if (deliveries.isEmpty() || limit <= 0) {
                 logI("[SIMPLE] rank() done: out=0");
@@ -415,15 +457,16 @@ public class DeliveryFocusManager {
             }
             List<DeliveryInfo> filtered = new ArrayList<>();
             for (DeliveryInfo info : deliveries) {
-                if (info == null || !isCoordinateValid(info)) continue;
+                if (info == null || !isCoordinateValid(info))
+                    continue;
                 filtered.add(info);
             }
             if (filtered.isEmpty()) {
                 logI("[SIMPLE] rank() done: out=0");
                 return Collections.emptyList();
             }
-            filtered.sort(Comparator.comparingDouble(info ->
-                    distanceMeters(location.getLatitude(), location.getLongitude(),
+            filtered.sort(
+                    Comparator.comparingDouble(info -> distanceMeters(location.getLatitude(), location.getLongitude(),
                             info.getLatitude(), info.getLongitude())));
             if (filtered.size() > limit) {
                 logI("[SIMPLE] rank() done: out=" + limit);
@@ -434,14 +477,16 @@ public class DeliveryFocusManager {
         }
     }
 
-    // Strategy 2: BALANCED — approximate preselect (top-K by planar approx) then precise sort
+    // Strategy 2: BALANCED — approximate preselect (top-K by planar approx) then
+    // precise sort
     private static final class TwoStageTopKDistanceRankStrategy implements DistanceRankStrategy {
         private static final int DEFAULT_K_APPROX = 100; // preselect size before precise
 
-        @NonNull @Override
+        @NonNull
+        @Override
         public List<DeliveryInfo> rank(@NonNull Location location,
-                                       @NonNull List<DeliveryInfo> deliveries,
-                                       int limit) {
+                @NonNull List<DeliveryInfo> deliveries,
+                int limit) {
             logI("[BALANCED] rank() start: in=" + deliveries.size() + ", limit=" + limit);
             if (deliveries.isEmpty() || limit <= 0) {
                 logI("[BALANCED] approx empty -> out=0");
@@ -454,13 +499,22 @@ public class DeliveryFocusManager {
             final double baseLat = location.getLatitude();
             final double baseLon = location.getLongitude();
 
-            class ApproxItem { final DeliveryInfo info; final double d2; ApproxItem(DeliveryInfo i, double d2){this.info=i; this.d2=d2;} }
+            class ApproxItem {
+                final DeliveryInfo info;
+                final double d2;
+
+                ApproxItem(DeliveryInfo i, double d2) {
+                    this.info = i;
+                    this.d2 = d2;
+                }
+            }
             ArrayList<ApproxItem> approx = new ArrayList<>();
             for (DeliveryInfo info : deliveries) {
-                if (info == null || !isCoordinateValid(info)) continue;
-                double dy = (info.getLatitude() - baseLat) * 110_540.0;           // meters/°lat
+                if (info == null || !isCoordinateValid(info))
+                    continue;
+                double dy = (info.getLatitude() - baseLat) * 110_540.0; // meters/°lat
                 double dx = (info.getLongitude() - baseLon) * (111_320.0 * cosLat0); // meters/°lon adjusted by cos(lat)
-                double d2 = dx*dx + dy*dy;
+                double d2 = dx * dx + dy * dy;
                 approx.add(new ApproxItem(info, d2));
             }
             // continue to emptiness check
@@ -471,7 +525,8 @@ public class DeliveryFocusManager {
 
             approx.sort(Comparator.comparingDouble(a -> a.d2));
             final int k = Math.max(limit * 2, DEFAULT_K_APPROX);
-            if (approx.size() > k) approx.subList(k, approx.size()).clear();
+            if (approx.size() > k)
+                approx.subList(k, approx.size()).clear();
             logI("[BALANCED] approx topK k=" + Math.max(limit * 2, DEFAULT_K_APPROX) + ", kept=" + approx.size());
 
             // Precise pass for preselected candidates
@@ -481,7 +536,8 @@ public class DeliveryFocusManager {
             for (ApproxItem a : approx) {
                 float d = distanceMeters(location.getLatitude(), location.getLongitude(),
                         a.info.getLatitude(), a.info.getLongitude());
-                if (d == Float.MAX_VALUE) continue;
+                if (d == Float.MAX_VALUE)
+                    continue;
                 scored.add(new DeliveryWithDistance(a.info, d));
             }
             if (scored.isEmpty()) {
@@ -490,41 +546,47 @@ public class DeliveryFocusManager {
             }
             scored.sort(Comparator.comparingDouble(o -> o.distanceMeters));
             int cut = (limit > 0 && scored.size() > limit) ? limit : scored.size();
-            for (int i = 0; i < cut; i++) precise.add(scored.get(i).info);
+            for (int i = 0; i < cut; i++)
+                precise.add(scored.get(i).info);
             logI("[BALANCED] rank() done: preciseOut=" + (cut));
             return precise;
         }
     }
 
     /**
-     * Returns up to {@code limit} deliveries sorted by their straight-line distance from the given
+     * Returns up to {@code limit} deliveries sorted by their straight-line distance
+     * from the given
      * location. Null/invalid coordinates are ignored.
      */
     @NonNull
     public List<DeliveryInfo> sortByDistance(@Nullable Location location,
-                                             @Nullable List<DeliveryInfo> deliveries,
-                                             int limit) {
-        logI("sortByDistance() start: deliveries=" + (deliveries == null ? 0 : deliveries.size()) + ", limit=" + limit + ", loc=" + (location == null ? "null" : (location.getLatitude()+","+location.getLongitude())));
+            @Nullable List<DeliveryInfo> deliveries,
+            int limit) {
+        logI("sortByDistance() start: deliveries=" + (deliveries == null ? 0 : deliveries.size()) + ", limit=" + limit
+                + ", loc=" + (location == null ? "null" : (location.getLatitude() + "," + location.getLongitude())));
         if (location == null || deliveries == null || deliveries.isEmpty() || limit <= 0) {
             return Collections.emptyList();
         }
         List<DeliveryInfo> out = distanceRankStrategy.rank(location, deliveries, limit);
-        logI("sortByDistance() done: resultSize=" + (out == null ? 0 : out.size()) + ", strategy=" + distanceRankProfile);
+        logI("sortByDistance() done: resultSize=" + (out == null ? 0 : out.size()) + ", strategy="
+                + distanceRankProfile);
         return out == null ? Collections.emptyList() : out;
     }
 
     public NearestResult findNearest(@Nullable Location location,
-                                     @Nullable List<DeliveryInfo> deliveries) {
+            @Nullable List<DeliveryInfo> deliveries) {
         if (location == null || deliveries == null || deliveries.isEmpty()) {
             return NearestResult.empty();
         }
         DeliveryInfo nearest = null;
         float nearestDist = Float.MAX_VALUE;
         for (DeliveryInfo info : deliveries) {
-            if (info == null || !isCoordinateValid(info)) continue;
+            if (info == null || !isCoordinateValid(info))
+                continue;
             float d = distanceMeters(location.getLatitude(), location.getLongitude(),
                     info.getLatitude(), info.getLongitude());
-            if (Float.isNaN(d)) continue;
+            if (Float.isNaN(d))
+                continue;
             if (d < nearestDist) {
                 nearestDist = d;
                 nearest = info;
@@ -537,20 +599,24 @@ public class DeliveryFocusManager {
     }
 
     /**
-     * Returns the sublist of {@code sorted} deliveries that fall within {@code radiusMeters} of the
-     * first (nearest) delivery. The input is expected to already be sorted by distance.
+     * Returns the sublist of {@code sorted} deliveries that fall within
+     * {@code radiusMeters} of the
+     * first (nearest) delivery. The input is expected to already be sorted by
+     * distance.
      */
     @NonNull
     public List<DeliveryInfo> collectWithinRadius(@Nullable List<DeliveryInfo> sorted,
-                                                  float radiusMeters) {
-        logI("collectWithinRadius() start: sorted=" + (sorted == null ? 0 : sorted.size()) + ", radius=" + radiusMeters);
+            float radiusMeters) {
+        logI("collectWithinRadius() start: sorted=" + (sorted == null ? 0 : sorted.size()) + ", radius="
+                + radiusMeters);
         if (sorted == null || sorted.isEmpty()) {
             return Collections.emptyList();
         }
         DeliveryInfo anchor = sorted.get(0);
         List<DeliveryInfo> result = new ArrayList<>();
         for (DeliveryInfo candidate : sorted) {
-            if (candidate == null) continue;
+            if (candidate == null)
+                continue;
             float dist = distanceBetween(anchor, candidate);
             if (dist <= radiusMeters) {
                 result.add(candidate);
@@ -563,7 +629,7 @@ public class DeliveryFocusManager {
     }
 
     public InfoGroup buildInfoGroup(@Nullable DeliveryInfo anchor,
-                                    @Nullable List<DeliveryInfo> nearby) {
+            @Nullable List<DeliveryInfo> nearby) {
         int nearbyCount = (nearby == null) ? 0 : nearby.size();
         List<DeliveryInfo> sameAddress = new ArrayList<>();
         if (anchor != null) {
@@ -571,7 +637,8 @@ public class DeliveryFocusManager {
                     ? Collections.singletonList(anchor)
                     : nearby;
             for (DeliveryInfo candidate : candidates) {
-                if (candidate == null) continue;
+                if (candidate == null)
+                    continue;
                 if (isSameAddress(anchor, candidate)) {
                     sameAddress.add(candidate);
                 }
@@ -597,8 +664,10 @@ public class DeliveryFocusManager {
     }
 
     /**
-     * Computes a camera zoom recommendation based purely on the nearest distance. The curve mirrors
-     * the previous behaviour (tight zoom up close, gentle pull-back as distance grows) but remains
+     * Computes a camera zoom recommendation based purely on the nearest distance.
+     * The curve mirrors
+     * the previous behaviour (tight zoom up close, gentle pull-back as distance
+     * grows) but remains
      * stateless.
      */
     public float computeZoomForDistance(float distanceMeters) {
@@ -607,9 +676,44 @@ public class DeliveryFocusManager {
         return z;
     }
 
+    /**
+     * Computes the zoom level required to fit a given distance within the screen
+     * height.
+     * Uses the Web Mercator projection formula:
+     * Resolution (meters/pixel) = 156543.03392 * cos(lat) / 2^zoom
+     * We want: Resolution * (ScreenDimension * Padding) >= Distance
+     *
+     * @param distanceMeters        Distance to the target.
+     * @param latitude              Current latitude (affects scale).
+     * @param screenDimensionPixels Screen dimension (usually height) in pixels.
+     * @param paddingFactor         Fraction of screen to use (e.g., 0.5 for half
+     *                              screen).
+     * @return The calculated zoom level, clamped to [14, 19].
+     */
+    public static float computeZoomToFit(double distanceMeters, double latitude, int screenDimensionPixels,
+            float paddingFactor) {
+        if (distanceMeters <= 10)
+            return 19f; // Too close, just max zoom
+        if (screenDimensionPixels <= 0)
+            return DEFAULT_FOLLOW_ZOOM;
+
+        // Earth circumference / 256 pixels
+        final double EQUATOR_METERS_PER_PIXEL = 156543.03392;
+        double metersPerPixel = distanceMeters / (screenDimensionPixels * paddingFactor);
+        double cosLat = Math.cos(Math.toRadians(latitude));
+
+        // 2^zoom = (EQUATOR * cosLat) / metersPerPixel
+        // zoom = log2( (EQUATOR * cosLat) / metersPerPixel )
+        double zoom = Math.log((EQUATOR_METERS_PER_PIXEL * cosLat) / metersPerPixel) / Math.log(2);
+
+        // Clamp to reasonable bounds
+        return (float) Math.max(14.0, Math.min(zoom, 19.0));
+    }
+
     public float computeZoomForDistance(float distanceMeters, @NonNull ZoomProfile profile) {
         ZoomStrategy s = ZOOM_STRATEGIES.get(profile);
-        if (s == null) s = DEFAULT_ZOOM_STRATEGY;
+        if (s == null)
+            s = DEFAULT_ZOOM_STRATEGY;
         float z = s.compute(distanceMeters);
         maybeLogZoom("profile=" + profile, distanceMeters, z);
         return z;
@@ -636,7 +740,8 @@ public class DeliveryFocusManager {
     }
 
     private static boolean isSameAddress(DeliveryInfo a, DeliveryInfo b) {
-        if (a == null || b == null) return false;
+        if (a == null || b == null)
+            return false;
         AddressKey keyA = buildAddressKey(a);
         AddressKey keyB = buildAddressKey(b);
         return keyA.street.equals(keyB.street)
@@ -650,15 +755,20 @@ public class DeliveryFocusManager {
         AddressKey keyA = buildAddressKey(a);
         AddressKey keyB = buildAddressKey(b);
         int cmp = keyA.street.compareTo(keyB.street);
-        if (cmp != 0) return cmp;
+        if (cmp != 0)
+            return cmp;
         cmp = Integer.compare(keyA.civil, keyB.civil);
-        if (cmp != 0) return cmp;
+        if (cmp != 0)
+            return cmp;
         cmp = Integer.compare(keyA.unit.emptyFlag, keyB.unit.emptyFlag);
-        if (cmp != 0) return cmp;
+        if (cmp != 0)
+            return cmp;
         cmp = Integer.compare(keyA.unit.numeric, keyB.unit.numeric);
-        if (cmp != 0) return cmp;
+        if (cmp != 0)
+            return cmp;
         cmp = keyA.unit.raw.compareTo(keyB.unit.raw);
-        if (cmp != 0) return cmp;
+        if (cmp != 0)
+            return cmp;
         String routeA = safeString(a.getRouteNumber());
         String routeB = safeString(b.getRouteNumber());
         return routeA.compareTo(routeB);
@@ -679,7 +789,8 @@ public class DeliveryFocusManager {
         if (TextUtils.isEmpty(street) && info.getAddress() != null) {
             street = info.getAddress();
         }
-        if (street == null) street = "";
+        if (street == null)
+            street = "";
         return street.toLowerCase(java.util.Locale.US)
                 .replaceAll("[^a-z0-9]", " ")
                 .replaceAll("\\s+", " ")
@@ -709,9 +820,11 @@ public class DeliveryFocusManager {
     }
 
     private static int parseFirstNumber(String text) {
-        if (TextUtils.isEmpty(text)) return Integer.MAX_VALUE;
+        if (TextUtils.isEmpty(text))
+            return Integer.MAX_VALUE;
         String digits = text.replaceAll("[^0-9]", "");
-        if (digits.isEmpty()) return Integer.MAX_VALUE;
+        if (digits.isEmpty())
+            return Integer.MAX_VALUE;
         try {
             return Integer.parseInt(digits);
         } catch (NumberFormatException ex) {
@@ -728,6 +841,7 @@ public class DeliveryFocusManager {
         final int emptyFlag;
         final int numeric;
         final String raw;
+
         UnitKey(int emptyFlag, int numeric, String raw) {
             this.emptyFlag = emptyFlag;
             this.numeric = numeric;
@@ -739,6 +853,7 @@ public class DeliveryFocusManager {
         final String street;
         final int civil;
         final UnitKey unit;
+
         AddressKey(String street, int civil, UnitKey unit) {
             this.street = street;
             this.civil = civil;
@@ -758,18 +873,24 @@ public class DeliveryFocusManager {
     private boolean infoPillDismissedByUser = false;
 
     // ==== Top-3 runtime state ====
-    private long lastEvalMs = 0L;                 // 上次评估时间（节流）
-    private long suppressUntilMs = 0L;            // 通勤抑制窗口截止
-    private Double commuteAnchorLat = null;       // 通勤锚点（跨区判断）
+    private long lastEvalMs = 0L; // 上次评估时间（节流）
+    private long suppressUntilMs = 0L; // 通勤抑制窗口截止
+    private Double commuteAnchorLat = null; // 通勤锚点（跨区判断）
     private Double commuteAnchorLon = null;
-    private String lockedPrimaryKey = null;       // 焦点锁定键（<= lockEnterMeters 锁定）
+    private String lockedPrimaryKey = null; // 焦点锁定键（<= lockEnterMeters 锁定）
     private float lastNearestDistanceMeters = Float.NaN; // 上次最近距离（用于节流和zoom提示）
 
     // --- SyncResult: for updateDeliveries
     public static final class SyncResult {
         private final boolean focusCleared;
-        public SyncResult(boolean cleared) { this.focusCleared = cleared; }
-        public boolean isFocusCleared() { return focusCleared; }
+
+        public SyncResult(boolean cleared) {
+            this.focusCleared = cleared;
+        }
+
+        public boolean isFocusCleared() {
+            return focusCleared;
+        }
     }
 
     @NonNull
@@ -779,8 +900,12 @@ public class DeliveryFocusManager {
         boolean stillExists = false;
         if (currentFocus != null && safe != null) {
             for (DeliveryInfo di : safe) {
-                if (di == null) continue;
-                if (equalsId(di, currentFocus)) { stillExists = true; break; }
+                if (di == null)
+                    continue;
+                if (equalsId(di, currentFocus)) {
+                    stillExists = true;
+                    break;
+                }
             }
         }
         if (!stillExists) {
@@ -808,18 +933,44 @@ public class DeliveryFocusManager {
         private DeliveryInfo focus;
         private List<DeliveryInfo> focusGroup = Collections.emptyList();
 
-        public boolean shouldShowInfoPill() { return show; }
-        public boolean shouldHideInfoPill() { return hide; }
-        public boolean shouldUpdateInfoPill() { return update; }
-        public boolean shouldForceCameraFollow() { return forceCameraFollow; }
-        public boolean isFocusChanged() { return focusChanged; }
-        public float getPreferredZoom() { return preferredZoom; }
-        @Nullable public DeliveryInfo getFocus() { return focus; }
-        @NonNull public List<DeliveryInfo> getFocusGroup() { return focusGroup == null ? Collections.emptyList() : focusGroup; }
+        public boolean shouldShowInfoPill() {
+            return show;
+        }
+
+        public boolean shouldHideInfoPill() {
+            return hide;
+        }
+
+        public boolean shouldUpdateInfoPill() {
+            return update;
+        }
+
+        public boolean shouldForceCameraFollow() {
+            return forceCameraFollow;
+        }
+
+        public boolean isFocusChanged() {
+            return focusChanged;
+        }
+
+        public float getPreferredZoom() {
+            return preferredZoom;
+        }
+
+        @Nullable
+        public DeliveryInfo getFocus() {
+            return focus;
+        }
+
+        @NonNull
+        public List<DeliveryInfo> getFocusGroup() {
+            return focusGroup == null ? Collections.emptyList() : focusGroup;
+        }
     }
 
     @NonNull
-    public FocusDecision onLocationUpdate(@NonNull Location location, @NonNull SmartLocationManager.MovementState state) {
+    public FocusDecision onLocationUpdate(@NonNull Location location,
+            @NonNull SmartLocationManager.MovementState state) {
         FocusDecision d = new FocusDecision();
         if (currentDeliveries == null || currentDeliveries.isEmpty()) {
             d.hide = true;
@@ -829,7 +980,8 @@ public class DeliveryFocusManager {
         }
 
         // 使用上次最近距离作为节流提示；未知则按远距处理
-        final float nearestHint = Float.isNaN(lastNearestDistanceMeters) ? (PROXIMITY_CONFIG.farDistMeters + 1f) : lastNearestDistanceMeters;
+        final float nearestHint = Float.isNaN(lastNearestDistanceMeters) ? (PROXIMITY_CONFIG.farDistMeters + 1f)
+                : lastNearestDistanceMeters;
         if (!shouldEvaluate(location, state, nearestHint)) {
             d.preferredZoom = Float.isNaN(lastNearestDistanceMeters)
                     ? DEFAULT_FOLLOW_ZOOM
@@ -859,7 +1011,7 @@ public class DeliveryFocusManager {
 
         // Info-pill gating
         float showThreshold = ZOOM_CONFIG.approachMeters; // ~260m 默认
-        float hideThreshold = ZOOM_CONFIG.leaveMeters;    // ~360m 默认
+        float hideThreshold = ZOOM_CONFIG.leaveMeters; // ~360m 默认
 
         if (distance <= showThreshold && !infoPillDismissedByUser) {
             d.show = true;
@@ -885,7 +1037,9 @@ public class DeliveryFocusManager {
     }
 
     @Nullable
-    public DeliveryInfo getCurrentFocus() { return currentFocus; }
+    public DeliveryInfo getCurrentFocus() {
+        return currentFocus;
+    }
 
     @NonNull
     public List<DeliveryInfo> getCurrentFocusGroupInfos() {
@@ -893,11 +1047,14 @@ public class DeliveryFocusManager {
     }
 
     public float getPreferredFollowZoom() {
-        if (Float.isNaN(lastDistanceToFocus)) return DEFAULT_FOLLOW_ZOOM;
+        if (Float.isNaN(lastDistanceToFocus))
+            return DEFAULT_FOLLOW_ZOOM;
         return computeZoomForDistance(lastDistanceToFocus);
     }
 
-    public void onInfoPillDismissedByUser() { infoPillDismissedByUser = true; }
+    public void onInfoPillDismissedByUser() {
+        infoPillDismissedByUser = true;
+    }
 
     public void resetAll() {
         currentDeliveries = Collections.emptyList();
@@ -914,27 +1071,31 @@ public class DeliveryFocusManager {
     }
 
     private boolean equalsId(@NonNull DeliveryInfo a, @NonNull DeliveryInfo b) {
-        if (a == b) return true;
+        if (a == b)
+            return true;
         Long idA = a.getOrderId();
         Long idB = b.getOrderId();
-        if (idA != null && idB != null) return idA.equals(idB);
+        if (idA != null && idB != null)
+            return idA.equals(idB);
         String snA = a.getOrderSn();
         String snB = b.getOrderSn();
         return snA != null && snA.equals(snB);
     }
 
-
     // ==== Top-3 helpers for proximity gating ====
     private static String keyOf(@NonNull DeliveryInfo info) {
         Long id = info.getOrderId();
-        if (id != null) return "ID:" + id;
+        if (id != null)
+            return "ID:" + id;
         String sn = info.getOrderSn();
-        if (sn != null) return "SN:" + sn;
+        if (sn != null)
+            return "SN:" + sn;
         return "@" + System.identityHashCode(info);
     }
 
     private static float distanceMeters(@NonNull Location a, @NonNull DeliveryInfo b) {
-        if (b == null || !isCoordinateValid(b)) return Float.MAX_VALUE;
+        if (b == null || !isCoordinateValid(b))
+            return Float.MAX_VALUE;
         return distanceMeters(a.getLatitude(), a.getLongitude(), b.getLatitude(), b.getLongitude());
     }
 
@@ -957,8 +1118,8 @@ public class DeliveryFocusManager {
      * nearestHintMeters 可为空（NaN）则按远距处理。
      */
     private boolean shouldEvaluate(@NonNull Location loc,
-                                   @NonNull SmartLocationManager.MovementState mv,
-                                   float nearestHintMeters) {
+            @NonNull SmartLocationManager.MovementState mv,
+            float nearestHintMeters) {
         final long now = SystemClock.uptimeMillis();
 
         // 1) 通勤抑制窗口
@@ -984,8 +1145,7 @@ public class DeliveryFocusManager {
             } else {
                 float moved = distanceMeters(
                         loc.getLatitude(), loc.getLongitude(),
-                        commuteAnchorLat, commuteAnchorLon
-                );
+                        commuteAnchorLat, commuteAnchorLon);
                 if (moved < PROXIMITY_CONFIG.commuteSwitchMeters) {
                     suppressUntilMs = now + PROXIMITY_CONFIG.commuteSuppressMs;
                     lastEvalMs = now; // 记一次尝试

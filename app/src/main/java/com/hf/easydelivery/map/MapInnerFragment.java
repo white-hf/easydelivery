@@ -1202,6 +1202,29 @@ public class MapInnerFragment extends Fragment
                 ? DEFAULT_DISTANCE_METERS
                 : lastNearestDistanceMeters;
         float preferredZoom = focusManager.computeZoomForDistance(distanceMeters);
+
+        // ===== Patch 2: Stationary/Walking Dynamic Zoom =====
+        // If standing still, ensure the next package is visible on screen
+        boolean isStationaryOrWalking = state == SmartLocationManager.MovementState.STATIONARY
+                || state == SmartLocationManager.MovementState.WALKING;
+
+        if (isStationaryOrWalking && !Float.isNaN(lastNearestDistanceMeters) && mapView != null
+                && mapView.getHeight() > 0) {
+            // Calculate zoom to fit distance in 60% of screen height (leaving space for UI)
+            float zoomToFit = DeliveryFocusManager.computeZoomToFit(
+                    lastNearestDistanceMeters,
+                    effective.getLatitude(),
+                    mapView.getHeight(),
+                    0.6f);
+            // If dynamic zoom is wider (smaller number) than the default close-up zoom
+            // (18.8f), use it.
+            // But don't zoom out too far (e.g. keep at least 15.0f).
+            if (zoomToFit < 18.8f) {
+                preferredZoom = Math.max(15.0f, zoomToFit);
+                logD("Dynamic Zoom applied: dist=" + lastNearestDistanceMeters + "m -> zoom=" + preferredZoom);
+            }
+        }
+
         boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
         boolean manualHold = isManualCenterHoldActive();
         boolean allowAutoFollow = navigationModeEnabled || (!autoFollowPausedByGesture && !manualHold);
@@ -1422,6 +1445,10 @@ public class MapInnerFragment extends Fragment
         logD("requestImmediateProximityRefresh() -> forcing evaluate at loc=" + mLastLocation.getLatitude() + ","
                 + mLastLocation.getLongitude());
         proximityCoordinator.onLocation(mLastLocation, lastMovementState, currentMapDeliveries);
+
+        // Force immediate camera update to apply new zoom based on new nearest package
+        // This bypasses the GPS update interval (which might be long if stationary)
+        onLocationUpdate(mLastLocation, lastMovementState);
     }
 
     @Nullable
@@ -1453,7 +1480,7 @@ public class MapInnerFragment extends Fragment
      */
     private boolean shouldEvaluateProximity(@NonNull Location loc, @NonNull SmartLocationManager.MovementState state) {
         final long now = System.currentTimeMillis();
-        
+
         // 0. 强制评估标志（例如刚送完一单，需要立即刷新）
         if (forceProximityEvaluation) {
             forceProximityEvaluation = false;
@@ -1464,10 +1491,10 @@ public class MapInnerFragment extends Fragment
         // ==================================================================================
         // 【核心修改区 START】
         // ==================================================================================
-        
+
         // 1. 社区短途保护：如果离最近的包裹很近 (< 500米)，直接允许评估，绝不抑制！
         boolean isShortDistance = !Float.isNaN(lastNearestDistanceMeters) && lastNearestDistanceMeters < 500f;
-        
+
         // 2. 状态保护：如果是步行或停车，立即解锁。
         boolean isSlowOrStopped = (state == SmartLocationManager.MovementState.STATIONARY
                 || state == SmartLocationManager.MovementState.WALKING);
@@ -1476,7 +1503,7 @@ public class MapInnerFragment extends Fragment
             // 立即清除抑制状态，确保 InfoPill 和 Zoom 能响应
             commuteAnchorLatLng = null;
             commuteSuppressUntilMs = 0L;
-            
+
             // 依然遵循最小采样间隔(800ms)，防止 UI 刷新过快闪烁
             if (now - lastProximityEvalMs < NEAR_SAMPLE_MIN_INTERVAL_MS) {
                 return false;
