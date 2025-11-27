@@ -1227,7 +1227,7 @@ public class MapInnerFragment extends Fragment
 
         // ===== Patch 2: Stationary/Walking Dynamic Zoom =====
         // If standing still, ensure the next package is visible on screen
-        boolean isStationaryOrWalking = state == SmartLocationManager.MovementState.STATIONARY
+         isStationaryOrWalking = state == SmartLocationManager.MovementState.STATIONARY
                 || state == SmartLocationManager.MovementState.WALKING;
 
         if (isStationaryOrWalking && !Float.isNaN(lastNearestDistanceMeters) && mapView != null
