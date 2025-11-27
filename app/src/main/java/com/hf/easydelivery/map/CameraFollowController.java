@@ -289,7 +289,8 @@ public class CameraFollowController {
 
     @Nullable
     private ValueAnimator cameraAnimator;
-    private boolean hasCenteredOnUser = false;
+    // 是否曾经进入过“真实驾驶”模式（速度超过阈值），用于控制居中策略
+    private boolean hasEverEnteredDrivingMode = false;
     // Paused-by-user state (map gestures or light intervention)
     private boolean pausedByUser = false;
     private long lastCameraUpdateUptime = 0L;
@@ -346,12 +347,13 @@ public class CameraFollowController {
         capturingUserBearing = false;
     }
 
+    // 兼容旧接口：返回是否曾进入驾驶模式（对应旧 hasCenteredOnUser 语义）
     public boolean hasCenteredOnUser() {
-        return hasCenteredOnUser;
+        return hasEverEnteredDrivingMode;
     }
 
     public void resetHasCenteredOnUser() {
-        hasCenteredOnUser = false;
+        hasEverEnteredDrivingMode = false;
     }
 
     /** Called when user performs a map gesture (pan/zoom/rotate). */
@@ -380,7 +382,9 @@ public class CameraFollowController {
             @Nullable Float preferredZoom) {
         float zoom = (preferredZoom != null) ? preferredZoom : DRIVING_MIN_ZOOM;
         pausedByUser = false;
-        logD("resumeFollow(): clearing paused flag and forcing recenter, zoom=" + zoom);
+        hasEverEnteredDrivingMode = false;
+        logD("resumeFollow(): clearing paused flag and forcing recenter, zoom=" + zoom
+                + ", reset hasEverEnteredDrivingMode=false");
         // Force a recenter with allowAutoFollow=true and interacting=false
         follow(location, state, true, true, false, false, zoom);
     }
@@ -403,7 +407,7 @@ public class CameraFollowController {
         lastCameraTargetLatLng = null;
         lastCameraBearing = Float.NaN;
         lastCameraUpdateUptime = 0L;
-        hasCenteredOnUser = false;
+        hasEverEnteredDrivingMode = false;
         pausedByUser = false;
     }
 
@@ -416,7 +420,18 @@ public class CameraFollowController {
             float preferredFollowZoom) {
 
         logD("follow() enter force=" + force + ", auto=" + autoFollowEnabled + ", interacting=" + isUserInteracting
-                + ", prefZoom=" + preferredFollowZoom);
+                + ", prefZoom=" + preferredFollowZoom
+                + ", state=" + state
+                + ", speedKmh=" + (location.hasSpeed() ? location.getSpeed() * 3.6f : 0f));
+
+        // 长时间未更新相机，重置驾驶标记，避免长时间停车后不再回中
+        if (lastCameraUpdateUptime > 0) {
+            long idleMs = SystemClock.uptimeMillis() - lastCameraUpdateUptime;
+            if (idleMs > 15_000L) {
+                hasEverEnteredDrivingMode = false;
+                logD("follow(): idle " + idleMs + "ms -> reset hasEverEnteredDrivingMode=false");
+            }
+        }
         if (SystemClock.uptimeMillis() < suppressFollowUntilMs)
             return true;
 
@@ -424,7 +439,8 @@ public class CameraFollowController {
         if (navMode) {
             autoFollowEnabled = true;
             isUserInteracting = false;
-            force = force || !hasCenteredOnUser;
+            force = true;
+            hasEverEnteredDrivingMode = false; // 导航模式下保持强制跟随
         }
 
         // If user has paused auto-follow, ignore unless forced or navigation mode is on
@@ -447,7 +463,7 @@ public class CameraFollowController {
         boolean allowCameraMove = followStrategy.allowCameraMove(force, autoFollowEnabled, isUserInteracting, driving,
                 lowSpeedInside);
         boolean canUpdateCamera = force || followStrategy.shouldUpdateCamera(location, state, lastCameraUpdateUptime,
-                lastCameraTargetLatLng, lastCameraBearing, hasCenteredOnUser);
+                lastCameraTargetLatLng, lastCameraBearing, hasEverEnteredDrivingMode);
 
         if (lowSpeedInside) {
             canUpdateCamera = true;
@@ -471,10 +487,10 @@ public class CameraFollowController {
             targetCamera = buildCenteredCamera(location);
         } else if (driving) {
             targetCamera = buildDrivingCamera(location, preferredFollowZoom);
-        } else if (!hasCenteredOnUser || force) {
+        } else if (!hasEverEnteredDrivingMode || force) {
             targetCamera = buildCenteredCamera(location);
         } else if (!isUserInteracting && followStrategy.shouldUpdateCamera(location, state, lastCameraUpdateUptime,
-                lastCameraTargetLatLng, lastCameraBearing, hasCenteredOnUser)) {
+                lastCameraTargetLatLng, lastCameraBearing, hasEverEnteredDrivingMode)) {
             targetCamera = buildCenteredCamera(location);
         } else {
             return false;
@@ -513,8 +529,11 @@ public class CameraFollowController {
         lastCameraUpdateUptime = SystemClock.uptimeMillis();
         lastCameraTargetLatLng = targetCamera.target;
         lastCameraBearing = targetCamera.bearing;
-        hasCenteredOnUser = true;
-
+        // 只有真实驾驶且速度超过 10km/h 时才认为进入“驾驶模式”
+        if (isDrivingState(state) && location.hasSpeed() && location.getSpeed() * 3.6f >= 10f) {
+            hasEverEnteredDrivingMode = true;
+            logD("follow(): entered driving mode (speed>=10km/h)");
+        }
         lastLocationLatLng = new LatLng(location.getLatitude(), location.getLongitude());
         if (smartLocationManager != null && driving) {
             float offset = estimateEdgeOffsetMeters(location);
@@ -527,6 +546,7 @@ public class CameraFollowController {
     public void centerOn(@NonNull Location location,
             @NonNull SmartLocationManager.MovementState state,
             float preferredFollowZoom) {
+        hasEverEnteredDrivingMode = false;
         follow(location, state, true, true, false, false, preferredFollowZoom);
     }
 
@@ -543,7 +563,16 @@ public class CameraFollowController {
             targetLatLng = driverLatLng;
         }
 
-        float zoom = computeSpeedZoom(location, preferredFollowZoom);
+        float zoom;
+        if (navigationModeEnabled && preferredFollowZoom > 10f) {
+            zoom = preferredFollowZoom;
+            logD("buildDrivingCamera: NAV mode using preferredFollowZoom=" + zoom);
+        } else {
+            zoom = computeSpeedZoom(location, preferredFollowZoom);
+        }
+        if (location.getSpeed() < 1.5f) {
+            zoom = Math.min(zoom, 18.3f);
+        }
         float tilt = navigationModeEnabled ? NAVIGATION_TILT_DEGREES : DRIVING_TILT_DEGREES;
         if (current.tilt > tilt) {
             tilt = current.tilt; // avoid abrupt tilt drops mid animation
@@ -777,7 +806,7 @@ public class CameraFollowController {
                 }
             }
         }
-        hasCenteredOnUser = true;
+        hasEverEnteredDrivingMode  = false;
         long suppress = alignToCenter ? 1_500L : 700L;
         suppressFollowUntilMs = SystemClock.uptimeMillis() + suppress;
     }

@@ -141,6 +141,9 @@ public class DeliveryFocusManager {
             17.5f
     );
 
+    // Map fit utility: meters-per-pixel at zoom level 0 (equator)
+    private static final double METERS_PER_PIXEL_AT_ZOOM_0 = 156543.03392;
+
     /** Returns a live view of the current zoom config (for diagnostics/UI). */
     @NonNull
     public static ZoomConfig getZoomConfig() {
@@ -1010,5 +1013,31 @@ public class DeliveryFocusManager {
 
         lastEvalMs = now;
         return true;
+    }
+
+    /**
+     * Compute a zoom level that fits the given distance (diameter) within a vertical slice of the
+     * visible map.
+     *
+     * @param distanceMeters    target distance to fit (meters, interpreted as diameter)
+     * @param latitude          current latitude (for meters-per-pixel)
+     * @param availableHeightPx available map height in pixels
+     * @param heightFraction    fraction of the height to use (0-1)
+     * @return suggested zoom level
+     */
+    public static float computeZoomToFit(float distanceMeters,
+                                         double latitude,
+                                         int availableHeightPx,
+                                         float heightFraction) {
+        if (Float.isNaN(distanceMeters) || distanceMeters <= 0f) {
+            return ZOOM_CONFIG.defaultZoom;
+        }
+        int h = Math.max(1, availableHeightPx);
+        float fraction = Math.max(0.1f, Math.min(1f, heightFraction));
+        double metersPerPixel = (distanceMeters * 2.0) / (h * fraction);
+        double latRad = Math.toRadians(latitude);
+        double denom = metersPerPixel <= 0 ? 1 : metersPerPixel;
+        double zoom = Math.log(METERS_PER_PIXEL_AT_ZOOM_0 * Math.cos(latRad) / denom) / Math.log(2);
+        return (float) zoom;
     }
 }

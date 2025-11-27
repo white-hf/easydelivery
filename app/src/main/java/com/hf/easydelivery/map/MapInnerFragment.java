@@ -20,6 +20,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.WindowInsets;
 import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -1202,6 +1203,27 @@ public class MapInnerFragment extends Fragment
                 ? DEFAULT_DISTANCE_METERS
                 : lastNearestDistanceMeters;
         float preferredZoom = focusManager.computeZoomForDistance(distanceMeters);
+        // ===== 终极版：静止/步行智能缩放（完美适配当前 UI 结构）=====
+        boolean isStationaryOrWalking = state == SmartLocationManager.MovementState.STATIONARY
+                || state == SmartLocationManager.MovementState.WALKING;
+
+        if (isStationaryOrWalking && !Float.isNaN(lastNearestDistanceMeters)) {
+            int availableHeight = getRealMapVisibleHeightPx();
+            float adjustedDistance = lastNearestDistanceMeters * 1.15f;
+
+            float zoomToFit = DeliveryFocusManager.computeZoomToFit(
+                    adjustedDistance,
+                    effective.getLatitude(),
+                    availableHeight,
+                    0.80f);
+
+            if (zoomToFit < 18.9f) {
+                preferredZoom = Math.max(14.9f, zoomToFit);
+                logD("SmartZoom applied: dist=" + lastNearestDistanceMeters
+                        + "m → availableHeight=" + availableHeight
+                        + "px → zoom=" + String.format(Locale.getDefault(), "%.2f", preferredZoom));
+            }
+        }
         boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
         boolean manualHold = isManualCenterHoldActive();
         boolean allowAutoFollow = navigationModeEnabled || (!autoFollowPausedByGesture && !manualHold);
@@ -1284,6 +1306,59 @@ public class MapInnerFragment extends Fragment
     private void clearCommuteSuppression() {
         commuteSuppressUntilMs = 0L;
         commuteAnchorLatLng = null;
+    }
+
+    /** 精准计算地图真实可用高度（已完美适配当前布局） */
+    private int getRealMapVisibleHeightPx() {
+        if (mapView == null || mapView.getHeight() <= 0) {
+            return (int) (800 * getResources().getDisplayMetrics().density);
+        }
+
+        int fullHeight = mapView.getHeight();
+
+        // Toolbar 高度
+        int toolbarHeight = mToolbar != null ? mToolbar.getHeight()
+                : getResources().getDimensionPixelSize(
+                        com.google.android.material.R.dimen.m3_appbar_expanded_title_margin_bottom);
+
+        // InfoPill 高度（展开或收起）
+        int infoPillHeight = 0;
+        View currentPill = (infoPill != null && infoPill.getVisibility() == View.VISIBLE) ? infoPill
+                : (collapsedInfoPill != null && collapsedInfoPill.getVisibility() == View.VISIBLE) ? collapsedInfoPill
+                        : null;
+        if (currentPill != null) {
+            infoPillHeight = currentPill.getHeight();
+            if (infoPillHeight == 0) {
+                // 无具体高度资源，兜底使用已有 margin + 额外 40dp
+                int extra = (int) (40 * getResources().getDisplayMetrics().density);
+                infoPillHeight = infoPillBaseBottomMarginPx + extra;
+            }
+        }
+
+        // BottomNavigationView 高度
+        View bottomNav = requireActivity().findViewById(R.id.bottom_nav);
+        int bottomNavHeight = 0;
+        if (bottomNav != null && bottomNav.getVisibility() == View.VISIBLE) {
+            bottomNavHeight = bottomNav.getHeight();
+            if (bottomNavHeight == 0) {
+                bottomNavHeight = (int) (56 * getResources().getDisplayMetrics().density);
+            }
+        }
+
+        // 系统手势导航栏高度
+        int navigationBarHeight = 0;
+        WindowInsets insets = mapView.getRootWindowInsets();
+        if (insets != null) {
+            navigationBarHeight = WindowInsetsCompat.toWindowInsetsCompat(insets)
+                    .getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+        }
+
+        int available = fullHeight - toolbarHeight - infoPillHeight - bottomNavHeight - navigationBarHeight;
+
+        if (available < fullHeight * 0.58f) {
+            available = (int) (fullHeight * 0.58f);
+        }
+        return Math.max(available, 400);
     }
 
     private void showResumeFollowButton() {
