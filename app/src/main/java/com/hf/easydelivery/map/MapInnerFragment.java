@@ -1225,27 +1225,7 @@ public class MapInnerFragment extends Fragment
             }
         }
 
-        // ===== Patch 2: Stationary/Walking Dynamic Zoom =====
-        // If standing still, ensure the next package is visible on screen
-         isStationaryOrWalking = state == SmartLocationManager.MovementState.STATIONARY
-                || state == SmartLocationManager.MovementState.WALKING;
 
-        if (isStationaryOrWalking && !Float.isNaN(lastNearestDistanceMeters) && mapView != null
-                && mapView.getHeight() > 0) {
-            // Calculate zoom to fit distance in 60% of screen height (leaving space for UI)
-            float zoomToFit = DeliveryFocusManager.computeZoomToFit(
-                    lastNearestDistanceMeters,
-                    effective.getLatitude(),
-                    mapView.getHeight(),
-                    0.6f);
-            // If dynamic zoom is wider (smaller number) than the default close-up zoom
-            // (18.8f), use it.
-            // But don't zoom out too far (e.g. keep at least 15.0f).
-            if (zoomToFit < 18.8f) {
-                preferredZoom = Math.max(15.0f, zoomToFit);
-                logD("Dynamic Zoom applied: dist=" + lastNearestDistanceMeters + "m -> zoom=" + preferredZoom);
-            }
-        }
 
         boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
         boolean manualHold = isManualCenterHoldActive();
