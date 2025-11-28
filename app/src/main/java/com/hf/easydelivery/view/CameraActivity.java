@@ -1317,7 +1317,7 @@ public class CameraActivity extends AppCompatActivity
         }
 
         CourierService service = new CourierService();
-        service.retryDelivery(params,
+        new Thread(() -> service.retryDelivery(params,
                 new RetryDeliveryRspCb(infoSnapshot.getOrderSn(), new RetryDeliveryRspCb.Callback() {
                     @Override
                     public void onSuccess() {
@@ -1335,7 +1335,7 @@ public class CameraActivity extends AppCompatActivity
                             Toast.makeText(CameraActivity.this, "Retry failed: " + error, Toast.LENGTH_SHORT).show();
                         });
                     }
-                }));
+                }))).start();
     }
 
     private void showFailReasonSelectionDialog() {

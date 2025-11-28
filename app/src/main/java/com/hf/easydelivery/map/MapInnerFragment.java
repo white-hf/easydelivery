@@ -201,6 +201,7 @@ public class MapInnerFragment extends Fragment
 
     // --- Developer panel shortcut (double-tap toolbar) ---
     private static final long DEV_DOUBLE_TAP_WINDOW_MS = 450L;
+    private static final long AUTO_FOLLOW_PAUSE_MS = 5500L; // 用户手势后，约 5.5 秒保护窗口
     private long lastToolbarTapMs = 0L;
 
     // ===== Top-3 主案：Fragment 侧轻量采样/抑制配置 =====
@@ -1223,6 +1224,28 @@ public class MapInnerFragment extends Fragment
                         + "m → availableHeight=" + availableHeight
                         + "px → zoom=" + String.format(Locale.getDefault(), "%.2f", preferredZoom));
             }
+        } else if (isStationaryOrWalking && currentMapDeliveries != null && !currentMapDeliveries.isEmpty()) {
+            // 列表式视角：静止/步行时把最近包裹群聚合到视野中，最多取前5个未完成包裹
+            LatLngBounds.Builder builder = new LatLngBounds.Builder();
+            int count = 0;
+            for (DeliveryInfo info : currentMapDeliveries) {
+                if (info == null)
+                    continue;
+                builder.include(new LatLng(info.getLatitude(), info.getLongitude()));
+                count++;
+                if (count >= 5)
+                    break;
+            }
+            if (count > 0 && googleMap != null) {
+                try {
+                    int paddingPx = (int) (48 * getResources().getDisplayMetrics().density);
+                    googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), paddingPx));
+                    logD("SmartZoom bounds fit for " + count + " items (stationary/walking)");
+                    return;
+                } catch (Exception e) {
+                    logD("SmartZoom bounds fit failed: " + e.getMessage());
+                }
+            }
         }
 
 
@@ -1230,21 +1253,21 @@ public class MapInnerFragment extends Fragment
         boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
         boolean manualHold = isManualCenterHoldActive();
         boolean allowAutoFollow = navigationModeEnabled || (!autoFollowPausedByGesture && !manualHold);
-        // ===== Patch 1: 开车就强制重置居中标记 + 强制居中 =====
+        // ===== Patch 1 (调整版): 开车强制居中仅在导航模式/允许自动跟随时生效 =====
         boolean isDriving = state == SmartLocationManager.MovementState.SLOW_DRIVING
                 || state == SmartLocationManager.MovementState.NORMAL_DRIVING;
 
-        if (isDriving && cameraController != null) {
-            // 关键：只要开始开车，就认为用户“需要重新跟随”，强制拉回蓝点
+        if (navigationModeEnabled && isDriving && cameraController != null) {
+            // 导航模式下，开始开车时认为用户“需要重新跟随”，强制拉回蓝点
             cameraController.resetHasCenteredOnUser();
             // 可选：轻微震动反馈（像高德一样，上车后轻震一下表示已恢复跟随）
             Utils.vibrate(requireContext(), 30);
         }
 
-        // ===== 修改 shouldForce 判断：开车就强制居中 =====
+        // ===== 修改 shouldForce 判断：只有在允许自动跟随时才因驾驶强制居中 =====
         boolean shouldForce = navigationModeEnabled
-                || isDriving // 新增：开车强制
-                || (!cameraController.hasCenteredOnUser() && allowAutoFollow); // 保留首次打开强制
+                || (isDriving && allowAutoFollow)
+                || (!cameraController.hasCenteredOnUser() && allowAutoFollow);
 
         boolean interacting = navigationModeEnabled ? false
                 : (isUserInteracting || autoFollowPausedByGesture || manualHold);
@@ -1463,11 +1486,11 @@ public class MapInnerFragment extends Fragment
         if (!moving)
             return;
         long now = SystemClock.uptimeMillis();
-        if (now - autoFollowPausedAtMs < 5_000L) {
+        if (now - autoFollowPausedAtMs < AUTO_FOLLOW_PAUSE_MS) {
             return;
         }
-        logD("auto-follow paused >5s during drive/walk -> auto-resume");
-        clearAutoFollowPause();
+        logD("auto-follow paused >" + AUTO_FOLLOW_PAUSE_MS + "ms during drive/walk -> auto-resume");
+        clearAutoFollowPause(); // 内部会隐藏“重新跟随”按钮
         if (cameraController != null) {
             cameraController.resetHasCenteredOnUser();
         }
@@ -1707,6 +1730,15 @@ public class MapInnerFragment extends Fragment
             if (googleMap == null || mLastLocation == null || navigationModeEnabled) {
                 edgeCheckHandler.postDelayed(this, 1000);
                 return;
+            }
+
+            // 用户刚通过手势暂停自动跟随时，给一个保护窗口，避免边缘兜底立即抢回视图
+            if (autoFollowPausedByGesture) {
+                long now = SystemClock.uptimeMillis();
+                if (autoFollowPausedAtMs != 0L && now - autoFollowPausedAtMs < AUTO_FOLLOW_PAUSE_MS) {
+                    edgeCheckHandler.postDelayed(this, 1000);
+                    return;
+                }
             }
 
             LatLng myLatLng = new LatLng(mLastLocation.getLatitude(), mLastLocation.getLongitude());

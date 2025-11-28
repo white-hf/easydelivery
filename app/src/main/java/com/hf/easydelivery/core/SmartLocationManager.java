@@ -373,6 +373,9 @@ public class SmartLocationManager {
                 requestSingleHighAccuracyFix(); // 立刻拉一次准点
             }
 
+            FileLog.getInstance().debug(TAG, "movement state change: "
+                    + currentState + " -> " + newState + ", speed=" + speed);
+
             currentState = newState;
             // Removed automatic enterBurstMode on STATIONARY to allow explicit burst mode
             // or distance-based triggers
