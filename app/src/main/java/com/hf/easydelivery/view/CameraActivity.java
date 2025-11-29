@@ -1324,7 +1324,7 @@ public class CameraActivity extends AppCompatActivity
                     @Override
                     public void onSuccess() {
                         FileLog.getInstance().debug(TAG,
-                                "Retry delivery API success for order: " + infoSnapshot.getOrderSn());
+                                "Retry delivery API success for order: " + infoSnapshotTrue.getOrderSn());
                         runOnUiThread(() -> {
                             pd.dismiss();
                             Toast.makeText(CameraActivity.this, "Retry success!", Toast.LENGTH_SHORT).show();
