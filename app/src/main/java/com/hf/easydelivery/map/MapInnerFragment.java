@@ -1238,6 +1238,7 @@ public class MapInnerFragment extends Fragment
             }
             if (count > 0 && googleMap != null) {
                 try {
+                    builder.include(new LatLng(effective.getLatitude(), effective.getLongitude()));
                     int paddingPx = (int) (48 * getResources().getDisplayMetrics().density);
                     googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), paddingPx));
                     logD("SmartZoom bounds fit for " + count + " items (stationary/walking)");
@@ -1247,8 +1248,6 @@ public class MapInnerFragment extends Fragment
                 }
             }
         }
-
-
 
         boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
         boolean manualHold = isManualCenterHoldActive();

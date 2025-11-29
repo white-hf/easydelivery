@@ -1321,15 +1321,20 @@ public class CameraActivity extends AppCompatActivity
                 new RetryDeliveryRspCb(infoSnapshot.getOrderSn(), new RetryDeliveryRspCb.Callback() {
                     @Override
                     public void onSuccess() {
+                        FileLog.getInstance().debug(TAG,
+                                "Retry delivery API success for order: " + infoSnapshot.getOrderSn());
                         runOnUiThread(() -> {
                             pd.dismiss();
                             Toast.makeText(CameraActivity.this, "Retry success!", Toast.LENGTH_SHORT).show();
-                            submitPackage(0, null, PendingPackagesMgr.PackageStatus.UPLOADED.getStatus());
+                            // Retry is a direct API call, no need to submitPackage (which queues for async
+                            // upload)
+                            finish();
                         });
                     }
 
                     @Override
                     public void onFail(String error) {
+                        FileLog.getInstance().error(TAG, "Retry delivery API failed: " + error);
                         runOnUiThread(() -> {
                             pd.dismiss();
                             Toast.makeText(CameraActivity.this, "Retry failed: " + error, Toast.LENGTH_SHORT).show();

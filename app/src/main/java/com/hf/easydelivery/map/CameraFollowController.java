@@ -807,8 +807,10 @@ public class CameraFollowController {
             }
         }
         hasEverEnteredDrivingMode  = false;
-        long suppress = alignToCenter ? 1_500L : 700L;
-        suppressFollowUntilMs = SystemClock.uptimeMillis() + suppress;
+
+        // 改成永不抑制 + 强制重置时间戳
+        suppressFollowUntilMs = 0L;
+        lastCameraUpdateUptime = 0L;   // 让下一帧一定能过 timeOk 判定
     }
 
 }
