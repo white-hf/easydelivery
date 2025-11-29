@@ -1647,8 +1647,12 @@ public class MapInnerFragment extends Fragment
         if (mapView != null)
             mapView.onResume();
         requireActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        if (mSmartLocationManager != null)
+        if (mSmartLocationManager != null) {
+            // CRITICAL: Re-register listener to prevent CameraActivity or other components
+            // from stealing updates
+            mSmartLocationManager.setLocationUpdateListener(this);
             mSmartLocationManager.startLocationUpdates();
+        }
     }
 
     @Override

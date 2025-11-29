@@ -793,13 +793,7 @@ public class CameraActivity extends AppCompatActivity
         boundCamera.getCameraControl().setZoomRatio(targetZoom);
         lastResolvedIntent = intent;
         lastAppliedZoomRatio = targetZoom;
-        FileLog.getInstance().debug(TAG,
-                "applyProximityZoom shot=" + (captureSequenceIndex + 1)
-                        + " intent=" + intentLabel(intent)
-                        + " stage=" + intentLabel(captureStage)
-                        + " zoom=" + String.format(Locale.getDefault(), "%.2f", targetZoom)
-                        + " pitch=" + (Float.isNaN(lastPitchDegrees) ? "unknown"
-                                : String.format(Locale.getDefault(), "%.1f°", lastPitchDegrees)));
+
     }
 
     private CaptureIntent resolveCaptureIntent() {
@@ -868,7 +862,6 @@ public class CameraActivity extends AppCompatActivity
         if (captureStage != CaptureIntent.WAYBILL) {
             clearBarcodeHint();
         }
-        FileLog.getInstance().debug(TAG, "advanceStageForPreview -> " + intentLabel(captureStage));
         applyProximityZoom(true);
     }
 
@@ -909,10 +902,7 @@ public class CameraActivity extends AppCompatActivity
         ensureCaptureSequenceSynced();
         captureSequenceIndex += 1;
         CaptureIntent appliedIntent = intent != null ? intent : lastResolvedIntent;
-        FileLog.getInstance().debug(TAG,
-                "captureSaved seq=" + captureSequenceIndex
-                        + " intent=" + intentLabel(appliedIntent)
-                        + " nextStage=" + intentLabel(captureStage));
+
     }
 
     private String intentLabel(@Nullable CaptureIntent intent) {
@@ -1481,15 +1471,7 @@ public class CameraActivity extends AppCompatActivity
         applyProximityZoom(true);
         applyDynamicFlashMode();
         final CaptureIntent intentForShot = lastResolvedIntent;
-        FileLog.getInstance().debug(TAG,
-                "captureShot seq=" + (captureSequenceIndex + 1)
-                        + " stage=" + intentLabel(captureStage)
-                        + " intent=" + intentLabel(intentForShot)
-                        + " zoom=" + String.format(Locale.getDefault(), "%.2f", lastAppliedZoomRatio)
-                        + " pitch="
-                        + (Float.isNaN(lastPitchDegrees) ? "unknown"
-                                : String.format(Locale.getDefault(), "%.1f°", lastPitchDegrees))
-                        + " barcodeHint=" + isBarcodeHintActive());
+
         // --- 播放拍照反馈 ---
         playShutterFeedback();
         boolean full = true;
@@ -1630,7 +1612,7 @@ public class CameraActivity extends AppCompatActivity
     }
 
     private void startCamera() {
-        FileLog.getInstance().debug(TAG, "startCamera: begin");
+
         if (cameraStarted) {
             FileLog.getInstance().debug(TAG, "startCamera: already started, skipping");
             return;
@@ -1640,7 +1622,7 @@ public class CameraActivity extends AppCompatActivity
         cameraProviderFuture.addListener(() -> {
             try {
                 ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
-                FileLog.getInstance().debug(TAG, "startCamera: provider.get() success");
+
                 Preview preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(previewView.getSurfaceProvider());
                 ImageCapture.Builder builder = new ImageCapture.Builder();
@@ -1648,7 +1630,7 @@ public class CameraActivity extends AppCompatActivity
                     builder.setFlashMode(ImageCapture.FLASH_MODE_AUTO);
                 }
                 imageCapture = builder.build();
-                FileLog.getInstance().debug(TAG, "startCamera: prepared preview and imageCapture, binding now...");
+
                 CameraSelector cameraSelector = new CameraSelector.Builder()
                         .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                         .build();
@@ -1663,7 +1645,7 @@ public class CameraActivity extends AppCompatActivity
                 lastFlashOn = false;
                 applyDynamicFlashMode();
                 applyProximityZoom(true);
-                FileLog.getInstance().debug(TAG, "startCamera: bindToLifecycle completed successfully");
+
             } catch (Exception e) {
                 FileLog.getInstance().error(TAG, "startCamera failed: "
                         + e.getClass().getSimpleName() + " - " + e.getMessage(), e);

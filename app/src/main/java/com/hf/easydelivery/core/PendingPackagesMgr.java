@@ -499,8 +499,7 @@ public class PendingPackagesMgr implements Subscriber {
                 }
                 if (file.exists() && file.isFile()) {
                     boolean deleted = file.delete();
-                    FileLog.getInstance()
-                            .debug("[PendingMgr] cleanup image " + file.getAbsolutePath() + " deleted=" + deleted);
+
                 }
             } catch (Throwable t) {
                 FileLog.getInstance().error("[PendingMgr] cleanup image error: " + t.getMessage());
