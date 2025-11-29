@@ -1312,8 +1312,11 @@ public class MapInnerFragment extends Fragment
             logD("navigation mode active -> ignore pause gesture");
             return;
         }
-        if (autoFollowPausedByGesture)
+        if (autoFollowPausedByGesture) {
+            // 用户持续操作时刷新暂停时间，避免过早自动恢复
+            autoFollowPausedAtMs = SystemClock.uptimeMillis();
             return;
+        }
         autoFollowPausedByGesture = true;
         autoFollowPausedAtMs = SystemClock.uptimeMillis();
         showResumeFollowButton(); // 像 Google Maps 一样在用户干预时显示

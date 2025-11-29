@@ -1299,6 +1299,8 @@ public class CameraActivity extends AppCompatActivity
             return;
         }
 
+        final DeliveryInfo infoSnapshotTrue = infoSnapshot;
+
         ProgressDialog pd = new ProgressDialog(this);
         pd.setMessage("Retrying delivery...");
         pd.setCancelable(false);
@@ -1318,7 +1320,7 @@ public class CameraActivity extends AppCompatActivity
 
         CourierService service = new CourierService();
         new Thread(() -> service.retryDelivery(params,
-                new RetryDeliveryRspCb(infoSnapshot.getOrderSn(), new RetryDeliveryRspCb.Callback() {
+                new RetryDeliveryRspCb(infoSnapshotTrue.getOrderSn(), new RetryDeliveryRspCb.Callback() {
                     @Override
                     public void onSuccess() {
                         runOnUiThread(() -> {
