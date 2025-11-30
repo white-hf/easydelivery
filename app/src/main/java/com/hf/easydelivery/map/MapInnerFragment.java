@@ -2,9 +2,12 @@ package com.hf.easydelivery.map;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.os.IBinder;
 import android.location.Location;
 import android.os.Build;
 import android.os.Bundle;
@@ -67,6 +70,7 @@ import com.hf.easydelivery.view.model.MapViewModel;
 import com.hf.easydelivery.view.model.ScanViewModel;
 import com.hf.easydelivery.map.config.ProfileManager;
 import com.hf.easydelivery.view.DeveloperPanelBottomSheet;
+import com.hf.easydelivery.service.LockScreenNotificationService;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -180,6 +184,31 @@ public class MapInnerFragment extends Fragment
 
     private SmartLocationManager mSmartLocationManager;
     private Location mLastLocation = null;
+
+    // Lock screen notification service
+    private LockScreenNotificationService lockScreenService;
+    private boolean lockScreenServiceBound = false;
+    private final ServiceConnection lockScreenServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            LockScreenNotificationService.LocalBinder binder = (LockScreenNotificationService.LocalBinder) service;
+            lockScreenService = binder.getService();
+            lockScreenServiceBound = true;
+            logD("Lock screen service connected");
+            // Update with current delivery if available
+            if (currentPrimaryDelivery != null && !Float.isNaN(lastNearestDistanceMeters)) {
+                int count = currentCloseDeliveries != null ? currentCloseDeliveries.size() : 1;
+                lockScreenService.updateDelivery(currentPrimaryDelivery, lastNearestDistanceMeters, count);
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            lockScreenServiceBound = false;
+            lockScreenService = null;
+            logD("Lock screen service disconnected");
+        }
+    };
     private MapViewModel mapViewModel;
     // 支持两种数据源：派送中(地图) / 未扫描(扫码)
     private ScanViewModel scanViewModel;
@@ -500,6 +529,8 @@ public class MapInnerFragment extends Fragment
                     // 进入时退出通勤抑制
                     commuteSuppressUntilMs = 0L;
                     showInfoPill(target, nearby);
+                    // Update lock screen notification
+                    updateLockScreenNotification(target, distanceMeters, nearby.size());
                 }
 
                 @Override
@@ -512,6 +543,8 @@ public class MapInnerFragment extends Fragment
                     // 更新时退出通勤抑制
                     commuteSuppressUntilMs = 0L;
                     showInfoPill(target, nearby);
+                    // Update lock screen notification
+                    updateLockScreenNotification(target, distanceMeters, nearby.size());
                 }
 
                 @Override
@@ -519,6 +552,8 @@ public class MapInnerFragment extends Fragment
                     // 隐藏时清当前主键（允许下次策略自由选择）
                     currentPrimaryKey = null;
                     hideInfoPillCompletely();
+                    // Clear lock screen notification
+                    stopLockScreenService();
                 }
             });
 
@@ -1653,6 +1688,8 @@ public class MapInnerFragment extends Fragment
             mSmartLocationManager.setLocationUpdateListener(this);
             mSmartLocationManager.startLocationUpdates();
         }
+        // Start lock screen notification service if we have deliveries
+        startLockScreenServiceIfNeeded();
     }
 
     @Override
@@ -1716,6 +1753,9 @@ public class MapInnerFragment extends Fragment
         nearestDeliveries = Collections.emptyList();
         currentCloseDeliveries = Collections.emptyList();
 
+        // Stop and unbind lock screen notification service
+        stopLockScreenService();
+
         if (mapView != null)
             mapView.onDestroy();
         edgeCheckHandler.removeCallbacks(edgeCheckRunnable);
@@ -1766,4 +1806,57 @@ public class MapInnerFragment extends Fragment
             edgeCheckHandler.postDelayed(this, 1000);
         }
     };
+
+    // ──────────────────────────────────────────────────────
+    // Lock Screen Notification Helper Methods
+    // ──────────────────────────────────────────────────────
+
+    /**
+     * Start lock screen notification service if we have deliveries
+     */
+    private void startLockScreenServiceIfNeeded() {
+        if (currentPrimaryDelivery != null && !lockScreenServiceBound) {
+            try {
+                Intent intent = new Intent(requireContext(), LockScreenNotificationService.class);
+                requireContext().startForegroundService(intent);
+                requireContext().bindService(intent, lockScreenServiceConnection, Context.BIND_AUTO_CREATE);
+                logD("Starting lock screen notification service");
+            } catch (Throwable t) {
+                FileLog.getInstance().error(TAG, "Failed to start lock screen service", t);
+            }
+        }
+    }
+
+    /**
+     * Update lock screen notification with current delivery info
+     */
+    private void updateLockScreenNotification(DeliveryInfo delivery, float distanceMeters, int count) {
+        if (lockScreenServiceBound && lockScreenService != null) {
+            lockScreenService.updateDelivery(delivery, distanceMeters, count);
+        } else {
+            // Service not bound yet, start it
+            startLockScreenServiceIfNeeded();
+        }
+    }
+
+    /**
+     * Stop and unbind lock screen notification service
+     */
+    private void stopLockScreenService() {
+        if (lockScreenServiceBound) {
+            try {
+                requireContext().unbindService(lockScreenServiceConnection);
+                lockScreenServiceBound = false;
+                logD("Unbound lock screen service");
+            } catch (Throwable ignore) {
+            }
+        }
+        if (lockScreenService != null) {
+            try {
+                lockScreenService.clearNotification();
+            } catch (Throwable ignore) {
+            }
+            lockScreenService = null;
+        }
+    }
 }
