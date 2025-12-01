@@ -90,7 +90,7 @@ public class SmartLocationManager {
     private float speed;
     private long lastUpdateTime;
     private MovementState currentState = MovementState.STATIONARY;
-    private LocationUpdateListener listener;
+    private final java.util.Set<LocationUpdateListener> listeners = new java.util.concurrent.CopyOnWriteArraySet<>();
     private Handler handler;
     private boolean inBurstMode = false;
     private Runnable burstModeRunnable;
@@ -215,7 +215,23 @@ public class SmartLocationManager {
     }
 
     public void setLocationUpdateListener(LocationUpdateListener listener) {
-        this.listener = listener;
+        listeners.clear();
+        if (listener != null) {
+            listeners.add(listener);
+        }
+    }
+
+    /** Add an additional listener without removing existing ones. */
+    public void addLocationUpdateListener(LocationUpdateListener listener) {
+        if (listener != null) {
+            listeners.add(listener);
+        }
+    }
+
+    public void removeLocationUpdateListener(LocationUpdateListener listener) {
+        if (listener != null) {
+            listeners.remove(listener);
+        }
     }
 
     public void startLocationUpdates() {
@@ -321,16 +337,26 @@ public class SmartLocationManager {
         float bearingInput = newLocation.hasBearing() ? newLocation.getBearing() : Float.NaN;
         lastPredictedLocation = predictFutureLocation(outputLoc, speed, bearingInput);
 
-        if (listener != null) {
-            listener.onLocationUpdate(outputLoc, currentState);
+        if (!listeners.isEmpty()) {
+            for (LocationUpdateListener l : listeners) {
+                try {
+                    l.onLocationUpdate(outputLoc, currentState);
+                } catch (Exception ignored) {
+                }
+            }
         }
 
         if (newLocation.getAccuracy() > WEAK_SIGNAL_THRESHOLD) {
             weakSignalCount++;
             if (weakSignalCount >= 3) {
                 weakSignalCount = 0;
-                if (listener instanceof WeakSignalListener) {
-                    ((WeakSignalListener) listener).onWeakSignal();
+                for (LocationUpdateListener l : listeners) {
+                    if (l instanceof WeakSignalListener) {
+                        try {
+                            ((WeakSignalListener) l).onWeakSignal();
+                        } catch (Exception ignored) {
+                        }
+                    }
                 }
             }
         } else {
