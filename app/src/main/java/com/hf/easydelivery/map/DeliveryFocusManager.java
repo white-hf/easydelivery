@@ -713,6 +713,25 @@ public class DeliveryFocusManager {
         return (float) Math.max(14.0, Math.min(zoom, 19.0));
     }
 
+    /**
+     * Computes the "Smart Zoom" level for stationary/walking modes.
+     * Applies a safety margin (1.15x) to the distance and calculates zoom to fit
+     * within the visible map height.
+     * 
+     * @param distanceMeters     Distance to the target package
+     * @param latitude           Current latitude (for projection calculation)
+     * @param visibleMapHeightPx Visible height of the map in pixels
+     * @return The calculated zoom level
+     */
+    public static float computeSmartZoom(float distanceMeters, double latitude, int visibleMapHeightPx) {
+        float adjustedDistance = distanceMeters * 1.15f;
+        return computeZoomToFit(
+                adjustedDistance,
+                latitude,
+                visibleMapHeightPx,
+                0.80f); // 0.80f padding factor as per original logic
+    }
+
     public float computeZoomForDistance(float distanceMeters, @NonNull ZoomProfile profile) {
         ZoomStrategy s = ZOOM_STRATEGIES.get(profile);
         if (s == null)
@@ -1176,19 +1195,21 @@ public class DeliveryFocusManager {
     }
 
     /**
-     * Compute a zoom level that fits the given distance (diameter) within a vertical slice of the
+     * Compute a zoom level that fits the given distance (diameter) within a
+     * vertical slice of the
      * visible map.
      *
-     * @param distanceMeters    target distance to fit (meters, interpreted as diameter)
+     * @param distanceMeters    target distance to fit (meters, interpreted as
+     *                          diameter)
      * @param latitude          current latitude (for meters-per-pixel)
      * @param availableHeightPx available map height in pixels
      * @param heightFraction    fraction of the height to use (0-1)
      * @return suggested zoom level
      */
     public static float computeZoomToFit(float distanceMeters,
-                                         double latitude,
-                                         int availableHeightPx,
-                                         float heightFraction) {
+            double latitude,
+            int availableHeightPx,
+            float heightFraction) {
         if (Float.isNaN(distanceMeters) || distanceMeters <= 0f) {
             return ZOOM_CONFIG.defaultZoom;
         }

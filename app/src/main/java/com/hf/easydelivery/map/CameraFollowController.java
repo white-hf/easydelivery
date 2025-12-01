@@ -16,6 +16,10 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.maps.android.SphericalUtil;
 import com.hf.courierservice.apihelper.FileLog;
+import com.google.android.gms.maps.CameraUpdate;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.hf.easydelivery.dao.DeliveryInfo;
+import java.util.List;
 import com.hf.easydelivery.map.config.ProfileManager;
 import com.hf.easydelivery.core.SmartLocationManager;
 
@@ -411,6 +415,230 @@ public class CameraFollowController {
         lastCameraUpdateUptime = 0L;
         hasEverEnteredDrivingMode = false;
         pausedByUser = false;
+    }
+
+    /**
+     * Updates the camera based on the provided context.
+     * Centralizes all camera decision logic (Smart Zoom, List View, Driving
+     * Follow).
+     */
+    public boolean updateCamera(@NonNull CameraUpdateContext context) {
+        logD("updateCamera() enter: " + context);
+
+        // Reset driving mode if idle too long
+        if (lastCameraUpdateUptime > 0) {
+            long idleMs = SystemClock.uptimeMillis() - lastCameraUpdateUptime;
+            if (idleMs > 15_000L) {
+                hasEverEnteredDrivingMode = false;
+                logD("updateCamera(): idle " + idleMs + "ms -> reset hasEverEnteredDrivingMode=false");
+            }
+        }
+
+        if (SystemClock.uptimeMillis() < suppressFollowUntilMs) {
+            logD("updateCamera() blocked: suppressed until " + suppressFollowUntilMs);
+            return false;
+        }
+
+        boolean navMode = context.isNavigationMode;
+        if (navMode) {
+            hasEverEnteredDrivingMode = false;
+        }
+
+        if (pausedByUser && !navMode) {
+            logD("updateCamera() blocked: pausedByUser=true and not navMode");
+            return false;
+        }
+
+        // 1. List View Strategy (Stationary + No Single Focus)
+        // Priority: Smart Zoom (Single Focus) > List View (Group Focus)
+        boolean smartZoomApplicable = context.isStationaryOrWalking() && context.nearestPackageDistanceMeters > 0;
+
+        if (context.isStationaryOrWalking() && !smartZoomApplicable && context.nearbyDeliveries != null
+                && !context.nearbyDeliveries.isEmpty()) {
+            CameraUpdate listUpdate = buildListViewCamera(context);
+            if (listUpdate != null) {
+                logD("updateCamera: applying list view update");
+                googleMap.animateCamera(listUpdate);
+                return true;
+            }
+        }
+
+        // 2. Calculate Preferred Zoom
+        float preferredZoom = computePreferredZoom(context);
+
+        // 3. Determine Permissions
+        boolean allowAutoFollow = shouldAllowAutoFollow(context);
+        boolean shouldForce = shouldForceFollow(context, allowAutoFollow);
+
+        // 4. Edge Boost Logic
+        boolean lowSpeedInside = context.isLowSpeedInsideDeliveryZone() || navMode;
+        if (lowSpeedInside && allowAutoFollow && !shouldForce) {
+            float offsetMeters = estimateEdgeOffsetMeters(context.location);
+            if (offsetMeters > EDGE_FORCE_METERS) {
+                logD("updateCamera() forcing recenter due to edge offset=" + offsetMeters);
+                shouldForce = true;
+            }
+        }
+
+        // 5. Check Strategy
+        boolean driving = context.isDriving() || navMode;
+        boolean allowCameraMove = followStrategy.allowCameraMove(shouldForce, allowAutoFollow,
+                context.isUserInteracting, driving, lowSpeedInside);
+
+        if (!allowCameraMove) {
+            logD("updateCamera() blocked: allowCameraMove=false");
+            return false;
+        }
+
+        // 6. Update Check
+        boolean canUpdateCamera = shouldForce || followStrategy.shouldUpdateCamera(context.location,
+                context.movementState, lastCameraUpdateUptime, lastCameraTargetLatLng, lastCameraBearing,
+                hasEverEnteredDrivingMode);
+
+        if (lowSpeedInside) {
+            canUpdateCamera = true;
+        }
+
+        if (!canUpdateCamera && !shouldForce) {
+            logD("updateCamera() blocked: canUpdateCamera=false & not forced");
+            return false;
+        }
+
+        // 7. Build Target
+        CameraPosition targetCamera;
+        if (navMode) {
+            targetCamera = buildDrivingCamera(context.location, preferredZoom);
+        } else if (lowSpeedInside) {
+            targetCamera = buildCenteredCamera(context.location, preferredZoom);
+        } else if (driving) {
+            targetCamera = buildDrivingCamera(context.location, preferredZoom);
+        } else if (!hasEverEnteredDrivingMode || shouldForce) {
+            targetCamera = buildCenteredCamera(context.location, preferredZoom);
+        } else if (!context.isUserInteracting && followStrategy.shouldUpdateCamera(context.location,
+                context.movementState, lastCameraUpdateUptime, lastCameraTargetLatLng, lastCameraBearing,
+                hasEverEnteredDrivingMode)) {
+            targetCamera = buildCenteredCamera(context.location, preferredZoom);
+        } else {
+            return false;
+        }
+
+        if (targetCamera == null) {
+            return false;
+        }
+
+        // 8. Micro-update check
+        if (lastCameraTargetLatLng != null) {
+            float px = 0f;
+            try {
+                Point pA = googleMap.getProjection().toScreenLocation(lastCameraTargetLatLng);
+                Point pB = googleMap.getProjection().toScreenLocation(targetCamera.target);
+                px = (float) Math.hypot(pA.x - pB.x, pA.y - pB.y);
+            } catch (Exception ignore) {
+            }
+            float bearingDelta = Math.abs(targetCamera.bearing
+                    - (Float.isNaN(lastCameraBearing) ? targetCamera.bearing : lastCameraBearing));
+            if (bearingDelta > 180f)
+                bearingDelta = 360f - bearingDelta;
+            float zoomDelta = Math.abs(targetCamera.zoom - googleMap.getCameraPosition().zoom);
+            if (px < MIN_PIXEL_DELTA && bearingDelta < MIN_BEARING_DELTA_DEG && zoomDelta < 0.01f && !shouldForce) {
+                logD("updateCamera() micro update skipped: px=" + px + ", bearingΔ=" + bearingDelta + ", zoomΔ="
+                        + zoomDelta);
+                return false;
+            }
+        }
+
+        // 9. Animate
+        animateCameraTo(targetCamera);
+        lastCameraUpdateUptime = SystemClock.uptimeMillis();
+        lastCameraTargetLatLng = targetCamera.target;
+        lastCameraBearing = targetCamera.bearing;
+
+        if (context.isDriving() && context.location.hasSpeed() && context.location.getSpeed() * 3.6f >= 10f) {
+            hasEverEnteredDrivingMode = true;
+            logD("updateCamera(): entered driving mode (speed>=10km/h)");
+        }
+
+        lastLocationLatLng = new LatLng(context.location.getLatitude(), context.location.getLongitude());
+
+        if (smartLocationManager != null && driving) {
+            float offset = estimateEdgeOffsetMeters(context.location);
+            smartLocationManager.requestBoostIfEdgeRisk(offset, context.location.getSpeed());
+        }
+
+        return true;
+    }
+
+    private CameraUpdate buildListViewCamera(CameraUpdateContext context) {
+        LatLngBounds.Builder builder = new LatLngBounds.Builder();
+        int count = 0;
+        for (DeliveryInfo info : context.nearbyDeliveries) {
+            if (info == null)
+                continue;
+            builder.include(new LatLng(info.getLatitude(), info.getLongitude()));
+            count++;
+            if (count >= 5)
+                break;
+        }
+        if (count > 0) {
+            try {
+                builder.include(new LatLng(context.location.getLatitude(), context.location.getLongitude()));
+                int paddingPx = (int) (48 * mapView.getResources().getDisplayMetrics().density);
+                logD("buildListViewCamera: fitting " + count + " items");
+                return CameraUpdateFactory.newLatLngBounds(builder.build(), paddingPx);
+            } catch (Exception e) {
+                logD("buildListViewCamera failed: " + e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    private float computePreferredZoom(CameraUpdateContext context) {
+        if (context.nearestPackageDistanceMeters <= 0) {
+            return DRIVING_MIN_ZOOM;
+        }
+
+        if (context.isStationaryOrWalking()) {
+            float smartZoom = DeliveryFocusManager.computeSmartZoom(
+                    context.nearestPackageDistanceMeters,
+                    context.location.getLatitude(),
+                    context.visibleMapHeightPx);
+
+            if (smartZoom < 18.9f) {
+                float result = Math.max(14.9f, smartZoom);
+                logD("computePreferredZoom: smart zoom=" + result);
+                return result;
+            }
+        }
+
+        float result = computeSpeedZoom(context.location, DRIVING_MIN_ZOOM);
+        logD("computePreferredZoom: speed zoom=" + result);
+        return result;
+    }
+
+    private boolean shouldAllowAutoFollow(CameraUpdateContext context) {
+        if (context.isNavigationMode) {
+            return true;
+        }
+        return !context.isAutoFollowPaused && !context.isManualCenterHold;
+    }
+
+    private boolean shouldForceFollow(CameraUpdateContext context, boolean allowAutoFollow) {
+        if (context.isNavigationMode) {
+            return true;
+        }
+
+        if (context.isDriving() && allowAutoFollow) {
+            resetHasCenteredOnUser();
+            logD("shouldForceFollow: driving -> force=true");
+            return true;
+        }
+
+        if (!hasCenteredOnUser() && allowAutoFollow) {
+            logD("shouldForceFollow: first time -> force=true");
+            return true;
+        }
+
+        return false;
     }
 
     public boolean follow(@NonNull Location location,

@@ -71,6 +71,7 @@ import com.hf.easydelivery.view.model.ScanViewModel;
 import com.hf.easydelivery.map.config.ProfileManager;
 import com.hf.easydelivery.view.DeveloperPanelBottomSheet;
 import com.hf.easydelivery.service.LockScreenNotificationService;
+import com.hf.easydelivery.map.CameraUpdateContext;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -1234,90 +1235,32 @@ public class MapInnerFragment extends Fragment
             return;
         }
 
-        // 2) Phase 1/2 回退路径：无需 FocusDecision（Phase 3 未接入时生效）
-        float distanceMeters = Float.isNaN(lastNearestDistanceMeters)
-                ? DEFAULT_DISTANCE_METERS
-                : lastNearestDistanceMeters;
-        float preferredZoom = focusManager.computeZoomForDistance(distanceMeters);
-        // ===== 终极版：静止/步行智能缩放（完美适配当前 UI 结构）=====
-        boolean isStationaryOrWalking = state == SmartLocationManager.MovementState.STATIONARY
-                || state == SmartLocationManager.MovementState.WALKING;
-
-        if (isStationaryOrWalking && !Float.isNaN(lastNearestDistanceMeters)) {
-            int availableHeight = getRealMapVisibleHeightPx();
-            float adjustedDistance = lastNearestDistanceMeters * 1.15f;
-
-            float zoomToFit = DeliveryFocusManager.computeZoomToFit(
-                    adjustedDistance,
-                    effective.getLatitude(),
-                    availableHeight,
-                    0.80f);
-
-            if (zoomToFit < 18.9f) {
-                preferredZoom = Math.max(14.9f, zoomToFit);
-                logD("SmartZoom applied: dist=" + lastNearestDistanceMeters
-                        + "m → availableHeight=" + availableHeight
-                        + "px → zoom=" + String.format(Locale.getDefault(), "%.2f", preferredZoom));
-            }
-        } else if (isStationaryOrWalking && currentMapDeliveries != null && !currentMapDeliveries.isEmpty()) {
-            // 列表式视角：静止/步行时把最近包裹群聚合到视野中，最多取前5个未完成包裹
-            LatLngBounds.Builder builder = new LatLngBounds.Builder();
-            int count = 0;
-            for (DeliveryInfo info : currentMapDeliveries) {
-                if (info == null)
-                    continue;
-                builder.include(new LatLng(info.getLatitude(), info.getLongitude()));
-                count++;
-                if (count >= 5)
-                    break;
-            }
-            if (count > 0 && googleMap != null) {
-                try {
-                    builder.include(new LatLng(effective.getLatitude(), effective.getLongitude()));
-                    int paddingPx = (int) (48 * getResources().getDisplayMetrics().density);
-                    googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), paddingPx));
-                    logD("SmartZoom bounds fit for " + count + " items (stationary/walking)");
-                    return;
-                } catch (Exception e) {
-                    logD("SmartZoom bounds fit failed: " + e.getMessage());
-                }
-            }
-        }
-
+        // 2) 构建相机上下文并委托给 CameraFollowController
+        float distanceMeters = Float.isNaN(lastNearestDistanceMeters) ? -1f : lastNearestDistanceMeters;
         boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
         boolean manualHold = isManualCenterHoldActive();
-        boolean allowAutoFollow = navigationModeEnabled || (!autoFollowPausedByGesture && !manualHold);
-        // ===== Patch 1 (调整版): 开车强制居中仅在导航模式/允许自动跟随时生效 =====
+
+        CameraUpdateContext cameraContext = new CameraUpdateContext(
+                effective,
+                state,
+                distanceMeters,
+                currentMapDeliveries,
+                insideZone,
+                getRealMapVisibleHeightPx(),
+                isUserInteracting,
+                autoFollowPausedByGesture,
+                manualHold,
+                navigationModeEnabled);
+
+        // 导航模式下开车时的震动反馈
         boolean isDriving = state == SmartLocationManager.MovementState.SLOW_DRIVING
                 || state == SmartLocationManager.MovementState.NORMAL_DRIVING;
 
         if (navigationModeEnabled && isDriving && cameraController != null) {
-            // 导航模式下，开始开车时认为用户“需要重新跟随”，强制拉回蓝点
-            cameraController.resetHasCenteredOnUser();
-            // 可选：轻微震动反馈（像高德一样，上车后轻震一下表示已恢复跟随）
             Utils.vibrate(requireContext(), 30);
         }
 
-        // ===== 修改 shouldForce 判断：只有在允许自动跟随时才因驾驶强制居中 =====
-        boolean shouldForce = navigationModeEnabled
-                || (isDriving && allowAutoFollow)
-                || (!cameraController.hasCenteredOnUser() && allowAutoFollow);
-
-        boolean interacting = navigationModeEnabled ? false
-                : (isUserInteracting || autoFollowPausedByGesture || manualHold);
-        logD("camera follow: force=" + shouldForce
-                + ", allow=" + allowAutoFollow
-                + ", interacting=" + interacting
-                + ", insideZone=" + insideZone
-                + ", prefZoom=" + preferredZoom);
-        cameraController.follow(
-                effective,
-                state,
-                shouldForce,
-                allowAutoFollow,
-                interacting,
-                insideZone,
-                preferredZoom);
+        cameraController.updateCamera(cameraContext);
     }
 
     private int controlInsetFor(@Nullable View control) {
