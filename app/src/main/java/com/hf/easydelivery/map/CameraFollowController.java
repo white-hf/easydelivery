@@ -303,6 +303,8 @@ public class CameraFollowController {
     private boolean capturingUserBearing = false;
     private final float[] distanceResults = new float[1];
     private boolean navigationModeEnabled = false;
+    // Smooth lookAhead transition to avoid camera jitter
+    private double lastLookAheadMeters = 35d;
 
     // --- Phase 3: jitter gating ---
     private static final float MIN_BEARING_DELTA_DEG = 2f; // skip tiny bearing changes
@@ -484,14 +486,14 @@ public class CameraFollowController {
         if (navMode) {
             targetCamera = buildDrivingCamera(location, preferredFollowZoom);
         } else if (lowSpeedInside) {
-            targetCamera = buildCenteredCamera(location);
+            targetCamera = buildCenteredCamera(location, preferredFollowZoom);
         } else if (driving) {
             targetCamera = buildDrivingCamera(location, preferredFollowZoom);
         } else if (!hasEverEnteredDrivingMode || force) {
-            targetCamera = buildCenteredCamera(location);
+            targetCamera = buildCenteredCamera(location, preferredFollowZoom);
         } else if (!isUserInteracting && followStrategy.shouldUpdateCamera(location, state, lastCameraUpdateUptime,
                 lastCameraTargetLatLng, lastCameraBearing, hasEverEnteredDrivingMode)) {
-            targetCamera = buildCenteredCamera(location);
+            targetCamera = buildCenteredCamera(location, preferredFollowZoom);
         } else {
             return false;
         }
@@ -593,15 +595,31 @@ public class CameraFollowController {
 
     @Nullable
     private CameraPosition buildCenteredCamera(@NonNull Location location) {
+        return buildCenteredCamera(location, -1f);
+    }
+
+    @Nullable
+    private CameraPosition buildCenteredCamera(@NonNull Location location, float preferredZoom) {
         CameraPosition current = googleMap.getCameraPosition();
         LatLng target = new LatLng(location.getLatitude(), location.getLongitude());
-        float zoom = current.zoom < 15f ? 15f : current.zoom;
+
+        // Use preferredZoom if provided (calculated by MapInnerFragment's smart zoom
+        // logic)
+        // This ensures packages are visible after delivery completion
+        float zoom;
+        if (preferredZoom > 0) {
+            zoom = preferredZoom;
+            logD("buildCenteredCamera: using preferredZoom=" + zoom);
+        } else {
+            zoom = current.zoom < 15f ? 15f : current.zoom;
+            logD("buildCenteredCamera: keeping current zoom=" + zoom);
+        }
+
         float bearing = (!navigationModeEnabled && !Float.isNaN(userPreferredBearing))
                 ? userPreferredBearing
                 : current.bearing;
         float tilt = Math.max(current.tilt, BROWSE_TILT_DEGREES);
-        logD("buildCenteredCamera zoom=" + (current.zoom < 15f ? 15f : current.zoom) + ", bearingSrc="
-                + (Float.isNaN(userPreferredBearing) ? "camera" : "user"));
+
         return new CameraPosition.Builder(current)
                 .target(target)
                 .zoom(zoom)
@@ -628,15 +646,27 @@ public class CameraFollowController {
 
     private double computeLookAheadMeters(@NonNull Location location) {
         float kmh = location.hasSpeed() ? (location.getSpeed() * 3.6f) : 0f;
+        double targetLookAhead;
         if (kmh < 10f)
-            return 35d;
-        if (kmh < 30f)
-            return 55d;
-        if (kmh < 60f)
-            return 85d;
-        if (kmh < 90f)
-            return 110d;
-        return 140d;
+            targetLookAhead = 35d;
+        else if (kmh < 30f)
+            targetLookAhead = 55d;
+        else if (kmh < 60f)
+            targetLookAhead = 85d;
+        else if (kmh < 90f)
+            targetLookAhead = 110d;
+        else
+            targetLookAhead = 140d;
+
+        // Smooth transition: max 10m change per update to avoid camera jitter
+        double delta = targetLookAhead - lastLookAheadMeters;
+        if (Math.abs(delta) > 10d) {
+            delta = Math.signum(delta) * 10d;
+        }
+        lastLookAheadMeters += delta;
+        logD("computeLookAhead: speed=" + kmh + "km/h, target=" + targetLookAhead + "m, actual=" + lastLookAheadMeters
+                + "m");
+        return lastLookAheadMeters;
     }
 
     private void animateCameraTo(@NonNull CameraPosition targetCamera) {
@@ -806,11 +836,11 @@ public class CameraFollowController {
                 }
             }
         }
-        hasEverEnteredDrivingMode  = false;
+        hasEverEnteredDrivingMode = false;
 
         // 改成永不抑制 + 强制重置时间戳
         suppressFollowUntilMs = 0L;
-        lastCameraUpdateUptime = 0L;   // 让下一帧一定能过 timeOk 判定
+        lastCameraUpdateUptime = 0L; // 让下一帧一定能过 timeOk 判定
     }
 
 }
