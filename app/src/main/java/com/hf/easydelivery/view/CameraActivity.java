@@ -421,7 +421,7 @@ public class CameraActivity extends AppCompatActivity
         if (smartLocationManager == null) {
             return;
         }
-        smartLocationManager.setLocationUpdateListener(this);
+        smartLocationManager.addLocationUpdateListener(this);
         smartLocationManager.startLocationUpdates();
         refreshCurrentLocationSnapshot();
     }
@@ -431,7 +431,7 @@ public class CameraActivity extends AppCompatActivity
             return;
         }
         try {
-            smartLocationManager.setLocationUpdateListener(null);
+            smartLocationManager.removeLocationUpdateListener(this);
             smartLocationManager.stopLocationUpdates();
         } catch (Exception e) {
             FileLog.getInstance().error(TAG, "stopLocationTracking error: " + e.getMessage(), e);

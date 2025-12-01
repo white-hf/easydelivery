@@ -1032,7 +1032,7 @@ public class MapInnerFragment extends Fragment
     private void getLocation() {
         mSmartLocationManager = SmartLocationManager.getInstance(requireContext());
         if (mSmartLocationManager != null) {
-            mSmartLocationManager.setLocationUpdateListener(this);
+            mSmartLocationManager.addLocationUpdateListener(this);
             mSmartLocationManager.startLocationUpdates();
         }
         if (cameraController != null) {
@@ -1650,7 +1650,7 @@ public class MapInnerFragment extends Fragment
         if (mSmartLocationManager != null) {
             // CRITICAL: Re-register listener to prevent CameraActivity or other components
             // from stealing updates
-            mSmartLocationManager.setLocationUpdateListener(this);
+            mSmartLocationManager.addLocationUpdateListener(this);
             mSmartLocationManager.startLocationUpdates();
         }
     }
@@ -1707,7 +1707,7 @@ public class MapInnerFragment extends Fragment
         }
         if (mSmartLocationManager != null) {
             try {
-                mSmartLocationManager.setLocationUpdateListener(null);
+                mSmartLocationManager.removeLocationUpdateListener(this);
             } catch (Throwable ignore) {
             }
         }
