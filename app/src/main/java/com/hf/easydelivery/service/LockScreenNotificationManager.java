@@ -25,6 +25,7 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
     private static LockScreenNotificationManager instance;
 
     private final Context appContext;
+    private MapViewModel boundViewModel;
     private LockScreenNotificationService service;
     private boolean serviceBound = false;
 
@@ -68,19 +69,30 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
      * Start monitoring deliveries and location updates
      */
     public void startMonitoring(MapViewModel viewModel) {
-        if (isMonitoring) {
-            FileLog.getInstance().debug(TAG, "Already monitoring");
+        if (viewModel == null) {
+            FileLog.getInstance().debug(TAG, "startMonitoring skipped: viewModel null");
+            return;
+        }
+
+        // 如果之前绑的是另一个 ViewModel，先清理再重新绑定，避免旋转后旧 observer 泄漏
+        if (boundViewModel != null && boundViewModel != viewModel) {
+            stopMonitoring(boundViewModel);
+        }
+
+        if (isMonitoring && boundViewModel == viewModel) {
+            FileLog.getInstance().debug(TAG, "Already monitoring (same ViewModel)");
             return;
         }
 
         isMonitoring = true;
         FileLog.getInstance().debug(TAG, "Starting monitoring");
+        boundViewModel = viewModel;
 
         // Create observer
         deliveryObserver = this::onDeliveriesChanged;
 
         // Observe delivery list changes
-        viewModel.getMapItemsLive().observeForever(deliveryObserver);
+        boundViewModel.getMapItemsLive().observeForever(deliveryObserver);
 
         // Register for location updates
         SmartLocationManager locationManager = SmartLocationManager.getInstance(appContext);
@@ -107,9 +119,14 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
 
         // Remove observer
         if (deliveryObserver != null) {
-            viewModel.getMapItemsLive().removeObserver(deliveryObserver);
+            if (viewModel != null) {
+                viewModel.getMapItemsLive().removeObserver(deliveryObserver);
+            } else if (boundViewModel != null) {
+                boundViewModel.getMapItemsLive().removeObserver(deliveryObserver);
+            }
             deliveryObserver = null;
         }
+        boundViewModel = null;
 
         // Unregister from location updates
         SmartLocationManager locationManager = SmartLocationManager.getInstance(appContext);
@@ -132,20 +149,21 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
             clear();
             return;
         }
+        int count = newDeliveries.size();
 
         // Calculate nearest delivery
         if (lastLocation != null) {
             DeliveryInfo nearest = findNearest(newDeliveries, lastLocation);
             if (nearest != null) {
                 float distance = calculateDistance(nearest, lastLocation);
-                updateDelivery(nearest, distance, 1);
+                updateDelivery(nearest, distance, count);
                 FileLog.getInstance().debug(TAG, "Updated nearest delivery: "
                         + nearest.getRouteNumber() + ", distance=" + distance + "m");
             }
         } else {
             // No location yet, just update with first delivery
             DeliveryInfo first = newDeliveries.get(0);
-            updateDelivery(first, -1f, 1);
+            updateDelivery(first, -1f, count);
             FileLog.getInstance().debug(TAG, "No location, using first delivery: "
                     + first.getRouteNumber());
         }
@@ -160,7 +178,7 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
             DeliveryInfo nearest = findNearest(deliveries, location);
             if (nearest != null) {
                 float distance = calculateDistance(nearest, location);
-                updateDelivery(nearest, distance, 1);
+                updateDelivery(nearest, distance, deliveries.size());
             }
         }
     }
@@ -171,6 +189,10 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
     public void updateDelivery(DeliveryInfo delivery, float distance, int count) {
         this.currentDelivery = delivery;
         this.currentDistance = distance;
+        // count 兜底
+        if (count <= 0 && deliveries != null) {
+            count = deliveries.size();
+        }
 
         if (!serviceBound) {
             startService();
@@ -192,7 +214,8 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
 
     private void updateServiceIfNeeded() {
         if (serviceBound && service != null && currentDelivery != null) {
-            service.updateDelivery(currentDelivery, currentDistance, 1);
+            int count = (deliveries == null || deliveries.isEmpty()) ? 1 : deliveries.size();
+            service.updateDelivery(currentDelivery, currentDistance, count);
         }
     }
 

@@ -1890,6 +1890,15 @@ public class MapInnerFragment extends Fragment
         if (parent instanceof MapHostFragment) {
             ((MapHostFragment) parent).notifyFullscreenToggle(isFullscreenMode);
         }
+        // Fallback: if activity implements listener (防止 ViewPager 场景 listener 丢失)
+        if (requireActivity() instanceof MapHostFragment.FullscreenModeListener) {
+            ((MapHostFragment.FullscreenModeListener) requireActivity()).onFullscreenToggle(isFullscreenMode);
+        }
+
+        // Hide/show in-fragment toolbar
+        if (mToolbar != null) {
+            mToolbar.setVisibility(isFullscreenMode ? View.GONE : View.VISIBLE);
+        }
 
         // Adjust InfoPill bottom margin
         adjustInfoPillMarginForFullscreen();

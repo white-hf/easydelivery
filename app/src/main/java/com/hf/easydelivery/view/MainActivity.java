@@ -151,6 +151,15 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override
+    protected void onStop() {
+        super.onStop();
+        // 在进入后台时移除 observer/监听，防止旋转或重建时旧实例泄漏
+        if (lockScreenManager != null && mapViewModel != null) {
+            lockScreenManager.stopMonitoring(mapViewModel);
+        }
+    }
+
+    @Override
     public void onFullscreenToggle(boolean isFullscreen) {
         // Hide/show bottom navigation
         if (bottomNav != null) {
