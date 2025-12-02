@@ -186,6 +186,10 @@ public class MapInnerFragment extends Fragment
     private SmartLocationManager mSmartLocationManager;
     private Location mLastLocation = null;
 
+    // Fullscreen mode
+    private ImageButton btnFullscreen;
+    private boolean isFullscreenMode = false;
+
     // Lock screen notification service
     private LockScreenNotificationService lockScreenService;
     private boolean lockScreenServiceBound = false;
@@ -416,6 +420,11 @@ public class MapInnerFragment extends Fragment
                 btnMyLoc.setOnClickListener(v -> centerOnMyLocation(false));
             if (btnMapType != null)
                 btnMapType.setOnClickListener(v -> toggleMapType(btnMapType));
+        }
+
+        btnFullscreen = mini.findViewById(R.id.btn_fullscreen);
+        if (btnFullscreen != null) {
+            btnFullscreen.setOnClickListener(v -> toggleFullscreenMode());
         }
 
         if (mToolbar != null) {
@@ -1800,6 +1809,72 @@ public class MapInnerFragment extends Fragment
             } catch (Throwable ignore) {
             }
             lockScreenService = null;
+        }
+    }
+
+    // ──────────────────────────────────────────────────────
+    // Fullscreen Mode Helper Methods
+    // ──────────────────────────────────────────────────────
+
+    /**
+     * Toggle fullscreen mode - hides/shows top toolbar and bottom navigation
+     */
+    private void toggleFullscreenMode() {
+        isFullscreenMode = !isFullscreenMode;
+
+        // Update button icon
+        if (btnFullscreen != null) {
+            int iconRes = isFullscreenMode
+                    ? R.drawable.ic_fullscreen_exit
+                    : R.drawable.ic_fullscreen_enter;
+            btnFullscreen.setImageResource(iconRes);
+        }
+
+        // Notify parent fragment
+        Fragment parent = getParentFragment();
+        if (parent instanceof MapHostFragment) {
+            ((MapHostFragment) parent).notifyFullscreenToggle(isFullscreenMode);
+        }
+
+        // Adjust InfoPill bottom margin
+        adjustInfoPillMarginForFullscreen();
+
+        logD("Fullscreen mode: " + isFullscreenMode);
+    }
+
+    /**
+     * Adjust InfoPill bottom margin based on fullscreen state
+     */
+    private void adjustInfoPillMarginForFullscreen() {
+        if (infoPill == null)
+            return;
+
+        ViewGroup.LayoutParams params = infoPill.getLayoutParams();
+        if (!(params instanceof ViewGroup.MarginLayoutParams))
+            return;
+
+        ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) params;
+
+        // Calculate bottom margin
+        int bottomMargin;
+        if (isFullscreenMode) {
+            // Fullscreen: closer to bottom (16dp)
+            bottomMargin = (int) (16 * getResources().getDisplayMetrics().density);
+        } else {
+            // Normal: leave space for bottom nav (72dp = 56dp nav + 16dp margin)
+            bottomMargin = (int) (72 * getResources().getDisplayMetrics().density);
+        }
+
+        marginParams.bottomMargin = bottomMargin;
+        infoPill.setLayoutParams(marginParams);
+
+        // Also adjust collapsed pill
+        if (collapsedInfoPill != null) {
+            ViewGroup.LayoutParams collapsedParams = collapsedInfoPill.getLayoutParams();
+            if (collapsedParams instanceof ViewGroup.MarginLayoutParams) {
+                ((ViewGroup.MarginLayoutParams) collapsedParams).bottomMargin = bottomMargin;
+                collapsedInfoPill.setLayoutParams(collapsedParams);
+            }
         }
     }
 }

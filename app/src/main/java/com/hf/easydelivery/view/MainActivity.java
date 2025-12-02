@@ -1,6 +1,5 @@
 package com.hf.easydelivery.view;
 
-
 import android.content.Intent;
 import android.os.Bundle;
 import androidx.annotation.NonNull;
@@ -8,6 +7,7 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 import androidx.viewpager2.widget.ViewPager2;
 
@@ -15,34 +15,40 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.map.MapHostFragment;
+import com.hf.easydelivery.service.LockScreenNotificationManager;
+import com.hf.easydelivery.view.model.MapViewModel;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity
+        implements MapHostFragment.FullscreenModeListener {
     private static final String TAG_DELIVER = "tab_deliver";
-    private static final String TAG_SCAN    = "tab_scan";
-    private static final String TAG_ME      = "tab_me";
+    private static final String TAG_SCAN = "tab_scan";
+    private static final String TAG_ME = "tab_me";
     private BottomNavigationView bottomNav;
     private ViewPager2 viewPager;
+    private MapViewModel mapViewModel;
+    private LockScreenNotificationManager lockScreenManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Use OnBackPressedDispatcher to handle back presses normally without overlay logic
+        // Use OnBackPressedDispatcher to handle back presses normally without overlay
+        // logic
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
                 new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this)
-                    .setTitle("确认退出")
-                    .setMessage("您确定要退出应用吗？")
-                    .setPositiveButton("退出", (dialog, which) -> {
-                        setEnabled(false); // 避免重复触发
-                        MainActivity.super.onBackPressed();
-                    })
-                    .setNegativeButton("取消", (dialog, which) -> {
-                        dialog.dismiss();
-                    })
-                    .show();
+                        .setTitle("确认退出")
+                        .setMessage("您确定要退出应用吗？")
+                        .setPositiveButton("退出", (dialog, which) -> {
+                            setEnabled(false); // 避免重复触发
+                            MainActivity.super.onBackPressed();
+                        })
+                        .setNegativeButton("取消", (dialog, which) -> {
+                            dialog.dismiss();
+                        })
+                        .show();
             }
         });
 
@@ -101,15 +107,72 @@ public class MainActivity extends AppCompatActivity {
         int defaultIndex = 0;
         if (savedInstanceState != null) {
             String savedTag = savedInstanceState.getString("currentTag", TAG_DELIVER);
-            if (TAG_SCAN.equals(savedTag)) defaultIndex = 1;
-            else if (TAG_ME.equals(savedTag)) defaultIndex = 2;
+            if (TAG_SCAN.equals(savedTag))
+                defaultIndex = 1;
+            else if (TAG_ME.equals(savedTag))
+                defaultIndex = 2;
         }
         viewPager.setCurrentItem(defaultIndex, false);
         // 同步底部导航栏
         switch (defaultIndex) {
-            case 0: bottomNav.setSelectedItemId(R.id.nav_deliver); break;
-            case 1: bottomNav.setSelectedItemId(R.id.nav_scan); break;
-            case 2: bottomNav.setSelectedItemId(R.id.nav_me); break;
+            case 0:
+                bottomNav.setSelectedItemId(R.id.nav_deliver);
+                break;
+            case 1:
+                bottomNav.setSelectedItemId(R.id.nav_scan);
+                break;
+            case 2:
+                bottomNav.setSelectedItemId(R.id.nav_me);
+                break;
+        }
+
+        // Initialize lock screen notification manager
+        mapViewModel = new ViewModelProvider(this).get(MapViewModel.class);
+        lockScreenManager = LockScreenNotificationManager.getInstance(this);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Start monitoring deliveries for lock screen notification
+        if (lockScreenManager != null && mapViewModel != null) {
+            lockScreenManager.startMonitoring(mapViewModel);
+        }
+
+        // Set fullscreen listener on MapHostFragment
+        FragmentStateAdapter adapter = (FragmentStateAdapter) viewPager.getAdapter();
+        if (adapter != null && viewPager.getCurrentItem() == 0) {
+            Fragment mapHostFragment = getSupportFragmentManager()
+                    .findFragmentByTag("f0"); // ViewPager2 uses "f{position}" as tag
+            if (mapHostFragment instanceof MapHostFragment) {
+                ((MapHostFragment) mapHostFragment).setFullscreenModeListener(this);
+            }
+        }
+    }
+
+    @Override
+    public void onFullscreenToggle(boolean isFullscreen) {
+        // Hide/show bottom navigation
+        if (bottomNav != null) {
+            bottomNav.setVisibility(isFullscreen ? android.view.View.GONE : android.view.View.VISIBLE);
+        }
+
+        // Hide/show ActionBar (if any)
+        if (getSupportActionBar() != null) {
+            if (isFullscreen) {
+                getSupportActionBar().hide();
+            } else {
+                getSupportActionBar().show();
+            }
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // Stop monitoring only when finishing
+        if (isFinishing() && lockScreenManager != null && mapViewModel != null) {
+            lockScreenManager.stopMonitoring(mapViewModel);
         }
     }
 
@@ -118,6 +181,7 @@ public class MainActivity extends AppCompatActivity {
         public MainPagerAdapter(@NonNull FragmentActivity fa) {
             super(fa);
         }
+
         @NonNull
         @Override
         public Fragment createFragment(int position) {
@@ -129,15 +193,17 @@ public class MainActivity extends AppCompatActivity {
                 return new MeFragment();
             }
         }
+
         @Override
         public int getItemCount() {
             return 3;
         }
+
     }
 
     // 判断是否已登录（可自定义token规则）
     private boolean isLoggedIn() {
-        return  ResourceMgr.getInstance().getLoginInfo().bIsLoggedIn;
+        return ResourceMgr.getInstance().getLoginInfo().bIsLoggedIn;
     }
 
     @Override
@@ -146,8 +212,10 @@ public class MainActivity extends AppCompatActivity {
         // 保存当前页面
         int currentItem = viewPager != null ? viewPager.getCurrentItem() : 0;
         String tag = TAG_DELIVER;
-        if (currentItem == 1) tag = TAG_SCAN;
-        else if (currentItem == 2) tag = TAG_ME;
+        if (currentItem == 1)
+            tag = TAG_SCAN;
+        else if (currentItem == 2)
+            tag = TAG_ME;
         outState.putString("currentTag", tag);
     }
 }

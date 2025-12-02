@@ -41,4 +41,20 @@
         android:src="@android:drawable/ic_menu_mapmode"
         android:tint="@android:color/white" />
 
+    <!-- 间隔 -->
+    <Space
+        android:layout_width="1dp"
+        android:layout_height="8dp" />
+
+    <!-- 全屏模式切换 -->
+    <ImageButton
+        android:id="@+id/btn_fullscreen"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:padding="8dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/fullscreen_mode"
+        android:src="@drawable/ic_fullscreen_enter"
+        android:tint="@android:color/white" />
+
 </LinearLayout>
