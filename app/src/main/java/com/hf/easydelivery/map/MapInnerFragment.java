@@ -30,6 +30,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import android.os.SystemClock;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -38,6 +41,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatDelegate;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.content.ContextCompat;
@@ -50,9 +54,13 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.MapsInitializer;
 import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.model.BitmapDescriptor;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
@@ -133,6 +141,8 @@ public class MapInnerFragment extends Fragment
     private TextView pillAddressText;
     private TextView pillRecipientText;
     private MaterialButton btnPillShowList;
+    private Marker myLocationMarker;
+    private BitmapDescriptor myLocationIcon;
     private final DeliveryFocusManager focusManager = new DeliveryFocusManager();
     private final SimpleEtaEstimator simpleEtaEstimator = new SimpleEtaEstimator();
     private CameraFollowController cameraController;
@@ -754,7 +764,8 @@ public class MapInnerFragment extends Fragment
     public void onMapReady(GoogleMap map) {
         FileLog.i(TAG, "onMapReady: enter");
         googleMap = map;
-        googleMap.setMyLocationEnabled(true);
+        // 使用自定义定位标记，关闭默认蓝点
+        googleMap.setMyLocationEnabled(false);
         cameraController = new CameraFollowController(googleMap, mapView);
         cameraController.setSmartLocationManager(mSmartLocationManager);
         cameraController.setNavigationModeEnabled(navigationModeEnabled);
@@ -871,7 +882,6 @@ public class MapInnerFragment extends Fragment
         currentPrimaryDelivery = info;
         DeliveryFocusManager.InfoGroup infoGroup = focusManager.buildInfoGroup(info, focusGroup);
         List<DeliveryInfo> sameAddressGroup = infoGroup.sameAddress;
-        currentCloseDeliveries = sameAddressGroup;
         currentPrimaryKey = buildPrimaryKey(info);
 
         int nearbyCount = infoGroup.nearbyCount;
@@ -1197,6 +1207,7 @@ public class MapInnerFragment extends Fragment
                 effective = predicted;
             }
         }
+        updateMyLocationMarker(effective);
 
         // 1) 交给 Proximity 决策 InfoPill 的显隐/更新（Top-3：远距降采样 + 区域通勤极简）
         try {
@@ -1532,6 +1543,42 @@ public class MapInnerFragment extends Fragment
         return out[0];
     }
 
+    private void updateMyLocationMarker(@NonNull Location loc) {
+        if (googleMap == null)
+            return;
+        if (myLocationIcon == null) {
+            myLocationIcon = BitmapDescriptorFactory.fromBitmap(createMyLocationBitmap());
+        }
+        LatLng pos = new LatLng(loc.getLatitude(), loc.getLongitude());
+        float bearing = loc.hasBearing() ? loc.getBearing() : Float.NaN;
+        if (myLocationMarker == null) {
+            MarkerOptions opts = new MarkerOptions()
+                    .position(pos)
+                    .anchor(0.5f, 0.5f)
+                    .flat(true)
+                    .zIndex(1000f)
+                    .icon(myLocationIcon);
+            myLocationMarker = googleMap.addMarker(opts);
+        } else {
+            myLocationMarker.setPosition(pos);
+        }
+        if (!Float.isNaN(bearing) && myLocationMarker != null) {
+            myLocationMarker.setRotation(bearing);
+        }
+    }
+
+    private Bitmap createMyLocationBitmap() {
+        Drawable d = AppCompatResources.getDrawable(requireContext(), R.drawable.ic_my_location_marker);
+        int sizePx = (int) (36 * getResources().getDisplayMetrics().density);
+        Bitmap b = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+        if (d == null)
+            return b;
+        Canvas c = new Canvas(b);
+        d.setBounds(0, 0, sizePx, sizePx);
+        d.draw(c);
+        return b;
+    }
+
     /**
      * Top-3：决定本次是否需要触发 Proximity 评估。
      * 【已修改】增加社区短途保护 + 步行立即解锁，彻底解决社区派送不跟手问题。
@@ -1669,6 +1716,14 @@ public class MapInnerFragment extends Fragment
             clusterManager.clearItems();
             clusterManager = null;
         }
+        if (myLocationMarker != null) {
+            try {
+                myLocationMarker.remove();
+            } catch (Throwable ignore) {
+            }
+            myLocationMarker = null;
+        }
+        myLocationIcon = null;
         if (cameraController != null) {
             cameraController.cancelAnimations();
             cameraController.resetRuntimeState();

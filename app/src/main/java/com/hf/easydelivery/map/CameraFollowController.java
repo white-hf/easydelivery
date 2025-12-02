@@ -419,13 +419,12 @@ public class CameraFollowController {
 
     /**
      * Updates the camera based on the provided context.
-     * Centralizes all camera decision logic (Smart Zoom, List View, Driving
-     * Follow).
+     * Fully restored old follow() behavior + keeps the new architecture.
      */
     public boolean updateCamera(@NonNull CameraUpdateContext context) {
         logD("updateCamera() enter: " + context);
 
-        // Reset driving mode if idle too long
+        // --- Reset driving mode if idle too long ---
         if (lastCameraUpdateUptime > 0) {
             long idleMs = SystemClock.uptimeMillis() - lastCameraUpdateUptime;
             if (idleMs > 15_000L) {
@@ -440,21 +439,36 @@ public class CameraFollowController {
         }
 
         boolean navMode = context.isNavigationMode;
+
+        // ============================================================
+        // [PATCH #1] —— 恢复旧 follow()：导航模式必须覆盖用户交互
+        // ============================================================
+        boolean isUserInteracting = context.isUserInteracting;
+        boolean isAutoFollowPaused = context.isAutoFollowPaused;
+
         if (navMode) {
+            isUserInteracting = false;      // 旧行为：导航模式下强制取消交互
+            isAutoFollowPaused = false;     // 旧行为：导航模式强制启用 auto follow
             hasEverEnteredDrivingMode = false;
         }
 
         if (pausedByUser && !navMode) {
-            logD("updateCamera() blocked: pausedByUser=true and not navMode");
+            logD("updateCamera() blocked: pausedByUser=true");
             return false;
         }
 
-        // 1. List View Strategy (Stationary + No Single Focus)
-        // Priority: Smart Zoom (Single Focus) > List View (Group Focus)
-        boolean smartZoomApplicable = context.isStationaryOrWalking() && context.nearestPackageDistanceMeters > 0;
+        // ============================================================
+        // 1. List View Strategy
+        // ============================================================
+        boolean smartZoomApplicable =
+                context.isStationaryOrWalking() &&
+                        context.nearestPackageDistanceMeters > 0;
 
-        if (context.isStationaryOrWalking() && !smartZoomApplicable && context.nearbyDeliveries != null
+        if (context.isStationaryOrWalking()
+                && !smartZoomApplicable
+                && context.nearbyDeliveries != null
                 && !context.nearbyDeliveries.isEmpty()) {
+
             CameraUpdate listUpdate = buildListViewCamera(context);
             if (listUpdate != null) {
                 logD("updateCamera: applying list view update");
@@ -463,49 +477,97 @@ public class CameraFollowController {
             }
         }
 
-        // 2. Calculate Preferred Zoom
+        // ============================================================
+        // 2. Preferred Zoom
+        // ============================================================
         float preferredZoom = computePreferredZoom(context);
 
-        // 3. Determine Permissions
-        boolean allowAutoFollow = shouldAllowAutoFollow(context);
-        boolean shouldForce = shouldForceFollow(context, allowAutoFollow);
+        // ============================================================
+        // 3. Allow Auto Follow?
+        // ============================================================
+        boolean allowAutoFollow = !isAutoFollowPaused || navMode;
 
-        // 4. Edge Boost Logic
+        // ============================================================
+        // 4. Force-Follow（恢复旧 follow() 完整逻辑）
+        // ============================================================
+        boolean shouldForce = false;
+
+        // --- Navigation mode always forces ---
+        if (navMode) {
+            shouldForce = true;
+        }
+
+        // --- Driving always forces (old behavior) ---
+        if (!shouldForce && context.isDriving() && allowAutoFollow) {
+            resetHasCenteredOnUser();
+            shouldForce = true;
+            logD("shouldForce: driving => true");
+        }
+
+        // --- First time -> force ---
+        if (!shouldForce && !hasCenteredOnUser() && allowAutoFollow) {
+            shouldForce = true;
+            logD("shouldForce: first time => true");
+        }
+
+        // ============================================================
+        // [PATCH #2] —— 恢复 edge-force（不能放在后面）
+        // ============================================================
         boolean lowSpeedInside = context.isLowSpeedInsideDeliveryZone() || navMode;
-        if (lowSpeedInside && allowAutoFollow && !shouldForce) {
+        if (!shouldForce && lowSpeedInside && allowAutoFollow) {
             float offsetMeters = estimateEdgeOffsetMeters(context.location);
             if (offsetMeters > EDGE_FORCE_METERS) {
-                logD("updateCamera() forcing recenter due to edge offset=" + offsetMeters);
                 shouldForce = true;
+                logD("shouldForce: edgeForce offset=" + offsetMeters);
             }
         }
 
-        // 5. Check Strategy
+        // ============================================================
+        // 5. Determine AllowCameraMove（必须根据 force 先算）
+        // ============================================================
         boolean driving = context.isDriving() || navMode;
-        boolean allowCameraMove = followStrategy.allowCameraMove(shouldForce, allowAutoFollow,
-                context.isUserInteracting, driving, lowSpeedInside);
+
+        boolean allowCameraMove =
+                followStrategy.allowCameraMove(
+                        shouldForce,
+                        allowAutoFollow,
+                        isUserInteracting,
+                        driving,
+                        lowSpeedInside
+                );
 
         if (!allowCameraMove) {
-            logD("updateCamera() blocked: allowCameraMove=false");
+            logD("updateCamera(): allowCameraMove=false");
             return false;
         }
 
-        // 6. Update Check
-        boolean canUpdateCamera = shouldForce || followStrategy.shouldUpdateCamera(context.location,
-                context.movementState, lastCameraUpdateUptime, lastCameraTargetLatLng, lastCameraBearing,
-                hasEverEnteredDrivingMode);
+        // ============================================================
+        // 6. shouldUpdateCamera（保持旧 follow() 的判断）
+        // ============================================================
+        boolean canUpdateCamera =
+                shouldForce ||
+                        followStrategy.shouldUpdateCamera(
+                                context.location,
+                                context.movementState,
+                                lastCameraUpdateUptime,
+                                lastCameraTargetLatLng,
+                                lastCameraBearing,
+                                hasEverEnteredDrivingMode);
 
         if (lowSpeedInside) {
-            canUpdateCamera = true;
+            canUpdateCamera = true;   // old behavior
         }
 
-        if (!canUpdateCamera && !shouldForce) {
-            logD("updateCamera() blocked: canUpdateCamera=false & not forced");
+        if (!canUpdateCamera) {
+            logD("updateCamera(): canUpdateCamera=false");
             return false;
         }
 
-        // 7. Build Target
+        // ============================================================
+        // 7. Build Target Camera（完全按原逻辑分支）
+        // ============================================================
         CameraPosition targetCamera;
+
         if (navMode) {
             targetCamera = buildDrivingCamera(context.location, preferredZoom);
         } else if (lowSpeedInside) {
@@ -514,52 +576,63 @@ public class CameraFollowController {
             targetCamera = buildDrivingCamera(context.location, preferredZoom);
         } else if (!hasEverEnteredDrivingMode || shouldForce) {
             targetCamera = buildCenteredCamera(context.location, preferredZoom);
-        } else if (!context.isUserInteracting && followStrategy.shouldUpdateCamera(context.location,
-                context.movementState, lastCameraUpdateUptime, lastCameraTargetLatLng, lastCameraBearing,
-                hasEverEnteredDrivingMode)) {
+        } else if (!isUserInteracting &&
+                followStrategy.shouldUpdateCamera(context.location,
+                        context.movementState,
+                        lastCameraUpdateUptime,
+                        lastCameraTargetLatLng,
+                        lastCameraBearing,
+                        hasEverEnteredDrivingMode)) {
             targetCamera = buildCenteredCamera(context.location, preferredZoom);
         } else {
             return false;
         }
 
-        if (targetCamera == null) {
-            return false;
-        }
+        if (targetCamera == null) return false;
 
-        // 8. Micro-update check
+        // ============================================================
+        // 8. Micro-update skip（保留）
+        // ============================================================
         if (lastCameraTargetLatLng != null) {
             float px = 0f;
             try {
                 Point pA = googleMap.getProjection().toScreenLocation(lastCameraTargetLatLng);
                 Point pB = googleMap.getProjection().toScreenLocation(targetCamera.target);
-                px = (float) Math.hypot(pA.x - pB.x, pA.y - pB.y);
-            } catch (Exception ignore) {
-            }
-            float bearingDelta = Math.abs(targetCamera.bearing
-                    - (Float.isNaN(lastCameraBearing) ? targetCamera.bearing : lastCameraBearing));
-            if (bearingDelta > 180f)
-                bearingDelta = 360f - bearingDelta;
+                px = (float)Math.hypot(pA.x - pB.x, pA.y - pB.y);
+            } catch (Exception ignore) {}
+
+            float bearingDelta = Math.abs(targetCamera.bearing -
+                    (Float.isNaN(lastCameraBearing) ? targetCamera.bearing : lastCameraBearing));
+            if (bearingDelta > 180) bearingDelta = 360 - bearingDelta;
+
             float zoomDelta = Math.abs(targetCamera.zoom - googleMap.getCameraPosition().zoom);
+
             if (px < MIN_PIXEL_DELTA && bearingDelta < MIN_BEARING_DELTA_DEG && zoomDelta < 0.01f && !shouldForce) {
-                logD("updateCamera() micro update skipped: px=" + px + ", bearingΔ=" + bearingDelta + ", zoomΔ="
-                        + zoomDelta);
+                logD("updateCamera(): micro-update skipped");
                 return false;
             }
         }
 
-        // 9. Animate
+        // ============================================================
+        // 9. Apply Camera
+        // ============================================================
         animateCameraTo(targetCamera);
+
+        // --- Update state ---
         lastCameraUpdateUptime = SystemClock.uptimeMillis();
         lastCameraTargetLatLng = targetCamera.target;
         lastCameraBearing = targetCamera.bearing;
-
-        if (context.isDriving() && context.location.hasSpeed() && context.location.getSpeed() * 3.6f >= 10f) {
-            hasEverEnteredDrivingMode = true;
-            logD("updateCamera(): entered driving mode (speed>=10km/h)");
-        }
-
         lastLocationLatLng = new LatLng(context.location.getLatitude(), context.location.getLongitude());
 
+        // --- Enter driving mode (>10km/h) ---
+        if (context.isDriving()
+                && context.location.hasSpeed()
+                && context.location.getSpeed() * 3.6f >= 10f) {
+            hasEverEnteredDrivingMode = true;
+            logD("updateCamera(): entered driving mode");
+        }
+
+        // --- Edge Boost for location manager ---
         if (smartLocationManager != null && driving) {
             float offset = estimateEdgeOffsetMeters(context.location);
             smartLocationManager.requestBoostIfEdgeRisk(offset, context.location.getSpeed());
