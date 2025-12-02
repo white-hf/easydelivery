@@ -1,4 +1,5 @@
 <resources>
+    <string name="fullscreen_mode">全屏模式</string>
     <string name="app_name">EasyDelivery</string>
     <string name="action_settings">Settings</string>
     <string name="action_scan">扫单</string>
