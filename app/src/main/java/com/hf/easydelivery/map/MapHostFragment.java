@@ -28,12 +28,26 @@ public class MapHostFragment extends Fragment {
     public interface MapSwitchListener {
         /**
          * Called when the view is switched between map and list.
+         * 
          * @param showingMap true if showing map, false if showing list
          */
         void onMapSwitched(boolean showingMap);
     }
 
+    /**
+     * Listener interface for fullscreen mode toggle.
+     */
+    public interface FullscreenModeListener {
+        /**
+         * Called when fullscreen mode is toggled.
+         * 
+         * @param isFullscreen true if entering fullscreen, false if exiting
+         */
+        void onFullscreenToggle(boolean isFullscreen);
+    }
+
     private MapSwitchListener mapSwitchListener;
+    private FullscreenModeListener fullscreenListener;
     private FloatingActionButton fabSwitchView;
 
     private MapInnerFragment mapFrag;
@@ -42,6 +56,7 @@ public class MapHostFragment extends Fragment {
 
     /**
      * Sets the listener for map/list switch events.
+     * 
      * @param listener the listener to set
      */
     public void setMapSwitchListener(MapSwitchListener listener) {
@@ -54,8 +69,10 @@ public class MapHostFragment extends Fragment {
         Fragment listFrag = fm.findFragmentByTag("list");
 
         FragmentTransaction tx = fm.beginTransaction();
-        if (mapFrag != null) tx.show(mapFrag);
-        if (listFrag != null) tx.hide(listFrag);
+        if (mapFrag != null)
+            tx.show(mapFrag);
+        if (listFrag != null)
+            tx.hide(listFrag);
         tx.commitAllowingStateLoss();
 
         if (fabSwitchView != null) {
@@ -65,14 +82,15 @@ public class MapHostFragment extends Fragment {
 
     @Nullable
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
+            @Nullable Bundle savedInstanceState) {
         View root = inflater.inflate(R.layout.fragment_map_host, container, false);
 
         mapViewModel = new ViewModelProvider(requireActivity()).get(MapViewModel.class);
 
         fabSwitchView = root.findViewById(R.id.fabSwitchView);
 
-// 初始化两个子 Fragment，但仅显示地图 Fragment
+        // 初始化两个子 Fragment，但仅显示地图 Fragment
         FragmentManager fm = getChildFragmentManager();
         mapFrag = (MapInnerFragment) fm.findFragmentByTag("map");
         listFrag = (PackageListFragment) fm.findFragmentByTag("list");
@@ -93,10 +111,8 @@ public class MapHostFragment extends Fragment {
             }
         });
 
-
         return root;
     }
-
 
     /**
      * 切换到地图视图
@@ -168,6 +184,26 @@ public class MapHostFragment extends Fragment {
             listFrag.loadUnscannedParcels();
         } else {
             listFrag.loadInDeliveryParcels();
+        }
+    }
+
+    /**
+     * Sets the listener for fullscreen mode events.
+     * 
+     * @param listener the listener to set
+     */
+    public void setFullscreenModeListener(FullscreenModeListener listener) {
+        this.fullscreenListener = listener;
+    }
+
+    /**
+     * Notifies the listener that fullscreen mode has been toggled.
+     * 
+     * @param isFullscreen true if entering fullscreen, false if exiting
+     */
+    public void notifyFullscreenToggle(boolean isFullscreen) {
+        if (fullscreenListener != null) {
+            fullscreenListener.onFullscreenToggle(isFullscreen);
         }
     }
 }
