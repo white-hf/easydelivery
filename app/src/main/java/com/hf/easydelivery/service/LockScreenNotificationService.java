@@ -71,8 +71,6 @@ public class LockScreenNotificationService extends Service {
 
         if (notificationManager != null) {
             notificationManager.notify(NOTIFICATION_ID, buildNotification());
-            FileLog.getInstance().debug(TAG, "Notification updated: " + delivery.getRouteNumber()
-                    + ", distance=" + distanceMeters + "m, count=" + count);
         }
     }
 

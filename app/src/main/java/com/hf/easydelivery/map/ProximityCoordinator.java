@@ -159,9 +159,7 @@ public final class ProximityCoordinator {
         InfoPillProximityController.ProximityDecision d =
                 proximityController.evaluate(location, state, pending);
 
-        logD("decision show="+d.show+", update="+d.update+", hide="+d.hide
-                + ", dist="+ String.format(java.util.Locale.US, "%.1f", d.distanceMeters)
-                + ", boost="+d.requestBoost+"/"+d.boostDurationMs+"ms");
+        // noisy removed
 
         // 2) 需要提频时，转发到定位层（解耦于具体实现）
         if (d.requestBoost && boostable != null) {
@@ -191,7 +189,7 @@ public final class ProximityCoordinator {
                     if (r[0] <= nearbyRadiusMeters) nearby.add(di);
                 }
             }
-            logD("nearby size="+ (nearby==null?0:nearby.size()) + " within=" + nearbyRadiusMeters + "m");
+            // noisy: skip log
 
             if (nearby == null) nearby = Collections.emptyList();
 
@@ -232,7 +230,7 @@ public final class ProximityCoordinator {
     }
 
     private void dispatchShow(@NonNull DeliveryInfo target, float distance, @NonNull List<DeliveryInfo> nearby) {
-        logD("dispatchShow id=" + (target.getOrderId()==null?"null":target.getOrderSn()) + ", d=" + distance + ", nearby=" + (nearby==null?0:nearby.size()));
+        // noisy removed
         Listener l = this.listener; if (l == null) return;
         try { l.onShow(target, distance, nearby); } catch (Throwable ignore) {}
         // cache state
@@ -245,10 +243,8 @@ public final class ProximityCoordinator {
     private void dispatchUpdate(@NonNull DeliveryInfo target, float distance, @NonNull List<DeliveryInfo> nearby) {
         final int size = (nearby==null?0:nearby.size());
         if (isDuplicateUpdate(target, distance, size)) {
-            logD("dispatchUpdate deduped (same key, ~same distance, size="+size+")");
             return;
         }
-        logD("dispatchUpdate id=" + (target.getOrderId()==null?"null":target.getOrderId()) + ", d=" + distance + ", nearby=" + size);
         Listener l = this.listener; if (l == null) return;
         try { l.onUpdate(target, distance, nearby); } catch (Throwable ignore) {}
         // cache state

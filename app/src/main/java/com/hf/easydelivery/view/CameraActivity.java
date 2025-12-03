@@ -617,7 +617,7 @@ public class CameraActivity extends AppCompatActivity
                 }
             }
         } catch (Exception e) {
-            FileLog.getInstance().debug("CameraActivity", "prepareHostChromeRefs error: " + e.getMessage());
+            // ignore: host refs not critical
         }
     }
 
@@ -628,7 +628,7 @@ public class CameraActivity extends AppCompatActivity
             if (hostBottomBar != null)
                 hostBottomBar.setVisibility(View.GONE);
         } catch (Exception e) {
-            FileLog.getInstance().debug("CameraActivity", "hideHostChrome: " + e.getMessage());
+            // ignore
         }
     }
 
@@ -639,7 +639,7 @@ public class CameraActivity extends AppCompatActivity
             if (hostBottomBar != null)
                 hostBottomBar.setVisibility(View.VISIBLE);
         } catch (Exception e) {
-            FileLog.getInstance().debug("CameraActivity", "showHostChrome: " + e.getMessage());
+            // ignore
         }
     }
 
@@ -656,7 +656,7 @@ public class CameraActivity extends AppCompatActivity
             decor.setSystemUiVisibility(flags);
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         } catch (Exception e) {
-            FileLog.getInstance().debug("CameraActivity", "enterImmersiveFullscreen: " + e.getMessage());
+            // ignore
         }
     }
 
@@ -667,7 +667,7 @@ public class CameraActivity extends AppCompatActivity
             decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         } catch (Exception e) {
-            FileLog.getInstance().debug("CameraActivity", "exitImmersiveFullscreen: " + e.getMessage());
+            // ignore
         }
     }
 

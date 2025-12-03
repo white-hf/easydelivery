@@ -309,6 +309,9 @@ public class CameraFollowController {
     private boolean navigationModeEnabled = false;
     // Smooth lookAhead transition to avoid camera jitter
     private double lastLookAheadMeters = 35d;
+    // Smooth speed→zoom transitions
+    private float lastSpeedZoom = Float.NaN;
+    private int lastSpeedBand = -1; // 0:near,1:city,2:suburb,3:highway
 
     // --- Phase 3: jitter gating ---
     private static final float MIN_BEARING_DELTA_DEG = 2f; // skip tiny bearing changes
@@ -422,7 +425,7 @@ public class CameraFollowController {
      * Fully restored old follow() behavior + keeps the new architecture.
      */
     public boolean updateCamera(@NonNull CameraUpdateContext context) {
-        logD("updateCamera() enter: " + context);
+        // noisy: logD("updateCamera() enter: " + context);
 
         // --- Reset driving mode if idle too long ---
         if (lastCameraUpdateUptime > 0) {
@@ -501,13 +504,13 @@ public class CameraFollowController {
         if (!shouldForce && context.isDriving() && allowAutoFollow) {
             resetHasCenteredOnUser();
             shouldForce = true;
-            logD("shouldForce: driving => true");
+            // noisy
         }
 
         // --- First time -> force ---
         if (!shouldForce && !hasCenteredOnUser() && allowAutoFollow) {
             shouldForce = true;
-            logD("shouldForce: first time => true");
+            // noisy
         }
 
         // ============================================================
@@ -518,7 +521,7 @@ public class CameraFollowController {
             float offsetMeters = estimateEdgeOffsetMeters(context.location);
             if (offsetMeters > EDGE_FORCE_METERS) {
                 shouldForce = true;
-                logD("shouldForce: edgeForce offset=" + offsetMeters);
+                // noisy
             }
         }
 
@@ -931,18 +934,45 @@ public class CameraFollowController {
 
     private float computeSpeedZoom(@NonNull Location location, float preferredFollowZoom) {
         float kmh = location.hasSpeed() ? (location.getSpeed() * 3.6f) : 0f;
-        float baseZoom;
-        if (kmh < 20f) {
-            baseZoom = SPEED_ZOOM_NEAR;
-        } else if (kmh < 50f) {
-            baseZoom = SPEED_ZOOM_CITY;
-        } else if (kmh < 80f) {
-            baseZoom = SPEED_ZOOM_SUBURB;
-        } else {
-            baseZoom = SPEED_ZOOM_HIGHWAY;
+        // 滞回分档，减少在阈值附近来回切换
+        if (lastSpeedBand < 0) lastSpeedBand = 0;
+        switch (lastSpeedBand) {
+            case 0: // near -> city
+                if (kmh > 22f) lastSpeedBand = 1;
+                break;
+            case 1: // city <-> near/suburb
+                if (kmh < 18f) lastSpeedBand = 0;
+                else if (kmh > 55f) lastSpeedBand = 2;
+                break;
+            case 2: // suburb <-> city/highway
+                if (kmh < 45f) lastSpeedBand = 1;
+                else if (kmh > 85f) lastSpeedBand = 3;
+                break;
+            case 3: // highway -> suburb
+                if (kmh < 75f) lastSpeedBand = 2;
+                break;
         }
-        float zoom = Math.max(baseZoom, Math.max(preferredFollowZoom, DRIVING_MIN_ZOOM));
-        return zoom;
+
+        float baseZoom;
+        switch (lastSpeedBand) {
+            case 0: baseZoom = SPEED_ZOOM_NEAR; break;
+            case 1: baseZoom = SPEED_ZOOM_CITY; break;
+            case 2: baseZoom = SPEED_ZOOM_SUBURB; break;
+            default: baseZoom = SPEED_ZOOM_HIGHWAY; break;
+        }
+
+        float targetZoom = Math.max(baseZoom, Math.max(preferredFollowZoom, DRIVING_MIN_ZOOM));
+
+        // 低通：单次调整不超过 0.2，避免上下跳变
+        if (Float.isNaN(lastSpeedZoom)) {
+            lastSpeedZoom = targetZoom;
+        } else {
+            float delta = targetZoom - lastSpeedZoom;
+            if (delta > 0.2f) delta = 0.2f;
+            if (delta < -0.2f) delta = -0.2f;
+            lastSpeedZoom += delta;
+        }
+        return lastSpeedZoom;
     }
 
     private double computeLookAheadMeters(@NonNull Location location) {
@@ -1095,8 +1125,7 @@ public class CameraFollowController {
         boolean shouldForce = (decision.shouldForceCameraFollow() && allowAutoFollow)
                 || (!hasCenteredOnUser() && allowAutoFollow)
                 || (decision.isFocusChanged() && allowAutoFollow);
-        logD("applyDecision allow=" + allowAutoFollow + ", force=" + shouldForce + ", prefZoom="
-                + decision.getPreferredZoom());
+        // noisy removed
         follow(loc, mv, shouldForce, allowAutoFollow || decision.shouldForceCameraFollow(), interacting, false,
                 decision.getPreferredZoom());
     }

@@ -184,6 +184,7 @@ public class MapInnerFragment extends Fragment
     private DeliveryInfo currentPrimaryDelivery = null;
     private String currentPrimaryKey = null;
     private float lastNearestDistanceMeters = Float.NaN;
+    private float lastValidNearestDistanceMeters = Float.NaN; // 缓存最近一次有效距离，避免远距采样间隙回落
     private View btnResumeFollow;
     private boolean autoFollowPausedByGesture = false;
     private long manualCenterHoldUntilMs = 0L;
@@ -546,6 +547,9 @@ public class MapInnerFragment extends Fragment
                     currentCloseDeliveries = nearby;
                     currentPrimaryKey = buildPrimaryKey(target);
                     lastNearestDistanceMeters = distanceMeters;
+                    if (!Float.isNaN(distanceMeters)) {
+                        lastValidNearestDistanceMeters = distanceMeters;
+                    }
                     // 进入时退出通勤抑制
                     commuteSuppressUntilMs = 0L;
                     showInfoPill(target, nearby);
@@ -560,6 +564,9 @@ public class MapInnerFragment extends Fragment
                     currentCloseDeliveries = nearby;
                     currentPrimaryKey = buildPrimaryKey(target);
                     lastNearestDistanceMeters = distanceMeters;
+                    if (!Float.isNaN(distanceMeters)) {
+                        lastValidNearestDistanceMeters = distanceMeters;
+                    }
                     // 更新时退出通勤抑制
                     commuteSuppressUntilMs = 0L;
                     showInfoPill(target, nearby);
@@ -1256,7 +1263,9 @@ public class MapInnerFragment extends Fragment
         }
 
         // 2) 构建相机上下文并委托给 CameraFollowController
-        float distanceMeters = Float.isNaN(lastNearestDistanceMeters) ? -1f : lastNearestDistanceMeters;
+        float distanceMeters = Float.isNaN(lastNearestDistanceMeters)
+                ? (Float.isNaN(lastValidNearestDistanceMeters) ? -1f : lastValidNearestDistanceMeters)
+                : lastNearestDistanceMeters;
         boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
         boolean manualHold = isManualCenterHoldActive();
 

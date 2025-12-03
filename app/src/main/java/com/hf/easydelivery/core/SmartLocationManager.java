@@ -416,6 +416,12 @@ public class SmartLocationManager {
 
     private void enterBurstMode(long durationMs) {
         long now = System.currentTimeMillis();
+        // 防抖：如果刚进入过 burst 且仍在窗口内，只延长窗口，不重复配置
+        if (inBurstMode && now - lastBoostChangeMs < BOOST_MIN_INTERVAL_MS) {
+            boostHoldUntilMs = Math.max(boostHoldUntilMs, now + Math.max(1_000L, durationMs));
+            scheduleBurstEnd();
+            return;
+        }
         inBurstMode = true;
         lastBoostChangeMs = now;
         boostHoldUntilMs = Math.max(boostHoldUntilMs, now + Math.max(1_000L, durationMs));

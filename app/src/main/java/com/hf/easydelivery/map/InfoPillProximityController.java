@@ -30,14 +30,10 @@ import java.util.Map;
 public class InfoPillProximityController {
 
     private static final String TAG = "InfoPillProximityController";
-    private static void logI(String msg) { try { FileLog.i(TAG, msg); } catch (Throwable ignore) {} }
-    private static void logD(String msg) { try { FileLog.getInstance().debug(TAG, msg); } catch (Throwable ignore) {} }
-    private static void logDecision(String prefix, ProximityDecision d) {
-        try {
-            FileLog.getInstance().debug(TAG, prefix + " show=" + d.show + " hide=" + d.hide + " update=" + d.update
-                    + " dist=" + d.distanceMeters + " boost=" + d.requestBoost + "/" + d.boostDurationMs + "ms");
-        } catch (Throwable ignore) {}
-    }
+    // Silence noisy proximity logging (InfoPill stable)
+    private static void logI(String msg) { }
+    private static void logD(String msg) { }
+    private static void logDecision(String prefix, ProximityDecision d) { }
 
     @NonNull
     public ProximityProfile getProfile() { return profile; }

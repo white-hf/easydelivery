@@ -28,6 +28,7 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
     private MapViewModel boundViewModel;
     private LockScreenNotificationService service;
     private boolean serviceBound = false;
+    private boolean serviceStarting = false;
 
     private DeliveryInfo currentDelivery;
     private float currentDistance = -1f;
@@ -42,6 +43,7 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
         public void onServiceConnected(ComponentName name, IBinder binder) {
             service = ((LockScreenNotificationService.LocalBinder) binder).getService();
             serviceBound = true;
+            serviceStarting = false;
             FileLog.getInstance().debug(TAG, "Service connected (global)");
             updateServiceIfNeeded();
         }
@@ -49,6 +51,7 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
         @Override
         public void onServiceDisconnected(ComponentName name) {
             serviceBound = false;
+            serviceStarting = false;
             service = null;
             FileLog.getInstance().debug(TAG, "Service disconnected (global)");
         }
@@ -194,7 +197,7 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
             count = deliveries.size();
         }
 
-        if (!serviceBound) {
+        if (!serviceBound && !serviceStarting) {
             startService();
         } else {
             updateServiceIfNeeded();
@@ -202,12 +205,17 @@ public class LockScreenNotificationManager implements SmartLocationManager.Locat
     }
 
     private void startService() {
+        if (serviceBound || serviceStarting) {
+            return;
+        }
+        serviceStarting = true;
         try {
             Intent intent = new Intent(appContext, LockScreenNotificationService.class);
             appContext.startForegroundService(intent);
             appContext.bindService(intent, connection, Context.BIND_AUTO_CREATE);
             FileLog.getInstance().debug(TAG, "Service started (global)");
         } catch (Throwable t) {
+            serviceStarting = false;
             FileLog.getInstance().error(TAG, "Failed to start service", t);
         }
     }

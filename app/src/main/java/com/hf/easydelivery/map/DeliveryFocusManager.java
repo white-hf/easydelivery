@@ -89,12 +89,7 @@ public class DeliveryFocusManager {
     // Throttle zoom logs to only print when it meaningfully changes
     private float lastZoomLogged = Float.NaN;
 
-    private void maybeLogZoom(String ctx, float distanceMeters, float zoom) {
-        if (Float.isNaN(lastZoomLogged) || Math.abs(zoom - lastZoomLogged) >= 0.2f) {
-            logI("zoom[" + ctx + "] d=" + prettyDist(distanceMeters) + " -> " + zoom);
-            lastZoomLogged = zoom;
-        }
-    }
+    private void maybeLogZoom(String ctx, float distanceMeters, float zoom) { }
 
     public static final class InfoGroup {
         public final List<DeliveryInfo> sameAddress;
@@ -157,8 +152,6 @@ public class DeliveryFocusManager {
     /** Returns a live view of the current zoom config (for diagnostics/UI). */
     @NonNull
     public static ZoomConfig getZoomConfig() {
-        logI("getZoomConfig() close=" + ZOOM_CONFIG.closeMeters + ", approach=" + ZOOM_CONFIG.approachMeters
-                + ", leave=" + ZOOM_CONFIG.leaveMeters + ", defZoom=" + ZOOM_CONFIG.defaultZoom);
         return ZOOM_CONFIG;
     }
 
@@ -167,9 +160,6 @@ public class DeliveryFocusManager {
      * primitives).
      */
     public static void applyZoomConfig(@NonNull ZoomConfig cfg) {
-        logI("applyZoomConfig(...) before -> close=" + ZOOM_CONFIG.closeMeters + ", approach="
-                + ZOOM_CONFIG.approachMeters + ", leave=" + ZOOM_CONFIG.leaveMeters + ", defZoom="
-                + ZOOM_CONFIG.defaultZoom);
         if (cfg == null)
             return;
         ZOOM_CONFIG.closeMeters = cfg.closeMeters;
@@ -178,9 +168,6 @@ public class DeliveryFocusManager {
         ZOOM_CONFIG.defaultZoom = cfg.defaultZoom;
         ZOOM_CONFIG.closeZoom = cfg.closeZoom;
         ZOOM_CONFIG.approachZoom = cfg.approachZoom;
-        logI("applyZoomConfig(...) after  -> close=" + ZOOM_CONFIG.closeMeters + ", approach="
-                + ZOOM_CONFIG.approachMeters + ", leave=" + ZOOM_CONFIG.leaveMeters + ", defZoom="
-                + ZOOM_CONFIG.defaultZoom);
     }
 
     // ==== Proximity Config (Top-3 scheduling: sampling / lock / commute) ====
@@ -659,7 +646,6 @@ public class DeliveryFocusManager {
 
     public float distanceTo(@Nullable DeliveryInfo info, @NonNull Location location) {
         if (info == null || !isCoordinateValid(info)) {
-            logI("distanceTo(): invalid coord -> INF(far) for info=" + (info == null ? "null" : info.getOrderId()));
             return Float.MAX_VALUE;
         }
         return distanceMeters(location.getLatitude(), location.getLongitude(),
@@ -674,9 +660,7 @@ public class DeliveryFocusManager {
      * stateless.
      */
     public float computeZoomForDistance(float distanceMeters) {
-        float z = DEFAULT_ZOOM_STRATEGY.compute(distanceMeters);
-        maybeLogZoom("default", distanceMeters, z);
-        return z;
+        return DEFAULT_ZOOM_STRATEGY.compute(distanceMeters);
     }
 
     /**
