@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@android:color/white">
+
+    <!-- Line 1: Route info (街号 单元 包裹号 同址 附近) -->
+    <TextView
+        android:id="@+id/notification_route_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@android:color/black"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text="123号  456单元  A12345包裹" />
+
+    <!-- Line 2: Address -->
+    <TextView
+        android:id="@+id/notification_address_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="@android:color/black"
+        android:textSize="13sp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text="Main Street" />
+
+    <!-- Line 3: Recipient and distance -->
+    <TextView
+        android:id="@+id/notification_recipient_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="#666666"
+        android:textSize="12sp"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:text="收件人: John Smith\n距离: 250m" />
+
+</LinearLayout>
