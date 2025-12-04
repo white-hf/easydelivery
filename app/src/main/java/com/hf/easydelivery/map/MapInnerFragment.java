@@ -214,7 +214,19 @@ public class MapInnerFragment extends Fragment
             // Update with current delivery if available
             if (currentPrimaryDelivery != null && !Float.isNaN(lastNearestDistanceMeters)) {
                 int count = currentCloseDeliveries != null ? currentCloseDeliveries.size() : 1;
-                lockScreenService.updateDelivery(currentPrimaryDelivery, lastNearestDistanceMeters, count);
+
+                // Calculate detailed counts
+                int nearbyCount = 0;
+                int sameAddressCount = 1;
+                if (focusManager != null && currentCloseDeliveries != null) {
+                    DeliveryFocusManager.InfoGroup infoGroup = focusManager.buildInfoGroup(currentPrimaryDelivery,
+                            currentCloseDeliveries);
+                    nearbyCount = infoGroup.nearbyCount;
+                    sameAddressCount = infoGroup.sameAddress.size();
+                }
+
+                lockScreenService.updateDelivery(currentPrimaryDelivery, lastNearestDistanceMeters, count, nearbyCount,
+                        sameAddressCount);
             }
         }
 
@@ -553,8 +565,12 @@ public class MapInnerFragment extends Fragment
                     // 进入时退出通勤抑制
                     commuteSuppressUntilMs = 0L;
                     showInfoPill(target, nearby);
+
+                    // Calculate counts for notification
+                    DeliveryFocusManager.InfoGroup infoGroup = focusManager.buildInfoGroup(target, nearby);
                     // Update lock screen notification
-                    updateLockScreenNotification(target, distanceMeters, nearby.size());
+                    updateLockScreenNotification(target, distanceMeters, nearby.size(), infoGroup.nearbyCount,
+                            infoGroup.sameAddress.size());
                 }
 
                 @Override
@@ -570,8 +586,12 @@ public class MapInnerFragment extends Fragment
                     // 更新时退出通勤抑制
                     commuteSuppressUntilMs = 0L;
                     showInfoPill(target, nearby);
+
+                    // Calculate counts for notification
+                    DeliveryFocusManager.InfoGroup infoGroup = focusManager.buildInfoGroup(target, nearby);
                     // Update lock screen notification
-                    updateLockScreenNotification(target, distanceMeters, nearby.size());
+                    updateLockScreenNotification(target, distanceMeters, nearby.size(), infoGroup.nearbyCount,
+                            infoGroup.sameAddress.size());
                 }
 
                 @Override
@@ -1846,9 +1866,13 @@ public class MapInnerFragment extends Fragment
     /**
      * Update lock screen notification with current delivery info
      */
-    private void updateLockScreenNotification(DeliveryInfo delivery, float distanceMeters, int count) {
+    /**
+     * Update lock screen notification with current delivery info
+     */
+    private void updateLockScreenNotification(DeliveryInfo delivery, float distanceMeters, int count, int nearbyCount,
+            int sameAddressCount) {
         if (lockScreenServiceBound && lockScreenService != null) {
-            lockScreenService.updateDelivery(delivery, distanceMeters, count);
+            lockScreenService.updateDelivery(delivery, distanceMeters, count, nearbyCount, sameAddressCount);
         } else {
             // Service not bound yet, start it
             startLockScreenServiceIfNeeded();
