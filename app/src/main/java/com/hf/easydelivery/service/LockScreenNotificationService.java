@@ -239,8 +239,8 @@ public class LockScreenNotificationService extends Service {
                 .setAutoCancel(false)
 
                 // Add action buttons
-                .addAction(R.drawable.ic_camera, "拍照", cameraIntent)
-                .addAction(R.drawable.ic_navigation, "导航", navigationIntent);
+                .addAction(R.drawable.ic_shutter, "拍照", cameraIntent)
+                .addAction(R.drawable.ic_nav_mode_on, "导航", navigationIntent);
 
         return builder.build();
     }
@@ -373,7 +373,9 @@ public class LockScreenNotificationService extends Service {
         Intent intent = new Intent(this, CameraActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         if (currentDelivery != null) {
-            intent.putExtra("delivery_info", currentDelivery);
+            intent.putExtra("order_id", currentDelivery.getOrderId());
+            intent.putExtra("latitude", currentDelivery.getLatitude());
+            intent.putExtra("longitude", currentDelivery.getLongitude());
         }
         return PendingIntent.getActivity(
                 this,
