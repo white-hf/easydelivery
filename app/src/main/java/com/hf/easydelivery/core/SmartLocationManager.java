@@ -168,6 +168,14 @@ public class SmartLocationManager {
      * @param durationMs 例如 20_000（20 秒）
      */
     public void requestBoost(long durationMs) {
+        // ✅ 防误触发：静止/步行 且 速度<1m/s 时跳过Boost
+        if ((currentState == MovementState.STATIONARY || currentState == MovementState.WALKING)
+                && speed < 1.0f) {
+            FileLog.getInstance().debug(TAG,
+                    "requestBoost skipped: state=" + currentState + ", speed=" + speed);
+            return;
+        }
+
         if (durationMs <= 0)
             durationMs = 5_000L;
         if (inBurstMode) {
@@ -180,12 +188,18 @@ public class SmartLocationManager {
     }
 
     /**
-     * 便捷：地图检测到“边缘风险/不平滑风险”时调用。
+     * 便捷：地图检测到"边缘风险/不平滑风险"时调用。
      * 
      * @param offsetMeters 蓝点相对目标中心的米偏移
      * @param speedMps     当前速度 m/s
      */
     public void requestBoostIfEdgeRisk(float offsetMeters, float speedMps) {
+        // ✅ 低速时不触发边缘风险Boost（只在高速移动时才有意义）
+        if (speedMps < 2.0f || currentState == MovementState.STATIONARY
+                || currentState == MovementState.WALKING) {
+            return;
+        }
+
         long now = System.currentTimeMillis();
         // 节流：两次提频之间至少间隔 BOOST_MIN_INTERVAL_MS
         if (now - lastBoostChangeMs < BOOST_MIN_INTERVAL_MS)
@@ -269,6 +283,8 @@ public class SmartLocationManager {
         LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY)
                 .setIntervalMillis(interval)
                 .setMinUpdateIntervalMillis(minInterval)
+                .setMinUpdateDistanceMeters(2.0f) // ✅ GPS层过滤：2米距离阈值
+                .setWaitForAccurateLocation(false) // ✅ 不等待高精度，快速响应
                 .build();
 
         fusedLocationClient.requestLocationUpdates(locationRequest,
@@ -307,6 +323,23 @@ public class SmartLocationManager {
             speed = 0f;
         }
 
+        // ✅ 双层过滤 Layer 1: 粗过滤（防抖），避免静止/步行时的GPS抖动刷屏
+        // 静止/步行状态下：时间<2s 且 位移<2m => 不分发（但仍更新state）
+        boolean shouldDispatch = true;
+        if ((currentState == MovementState.STATIONARY || currentState == MovementState.WALKING)
+                && lastLocation != null) {
+            long timeDiff = newLocation.getTime() - lastUpdateTime;
+            float distance = lastLocation.distanceTo(newLocation);
+
+            if (timeDiff < 2000 && distance < 2.0f) {
+                // 仍更新内部状态，但不分发给listeners
+                shouldDispatch = false;
+                FileLog.getInstance().debug(TAG,
+                        String.format("Location update filtered: state=%s, time=%dms, dist=%.1fm",
+                                currentState, timeDiff, distance));
+            }
+        }
+
         // Jump risk：两次点位跨度较大且在快速移动 → 临时提频以避免“到边再跳回”的突兀
         if (!inBurstMode && prevLast != null) {
             float jumpMeters = prevLast.distanceTo(newLocation);
@@ -320,6 +353,11 @@ public class SmartLocationManager {
         lastUpdateTime = newLocation.getTime();
 
         boolean stateChanged = updateMovementState();
+
+        // ✅ 如果被粗过滤跳过，提前返回（已更新状态，但不分发也不处理后续逻辑）
+        if (!shouldDispatch) {
+            return;
+        }
 
         Location outputLoc;
         if (lastSmoothedLocation != null) {
@@ -368,9 +406,12 @@ public class SmartLocationManager {
             updateLocationParametersForState();
         }
 
-        // 仅当变为静止时自动退出高频窗口；行驶中保持高频以保障平滑
-        if (stateChanged && currentState == MovementState.STATIONARY) {
+        // ✅ 强制退出Boost：变为静止/步行时立即退出高频
+        if (stateChanged && (currentState == MovementState.STATIONARY
+                || currentState == MovementState.WALKING)) {
             exitBurstMode();
+            FileLog.getInstance().debug(TAG,
+                    "Burst mode force exited: state changed to " + currentState);
         }
 
         this.forwardToDrivingDistanceTracker(outputLoc, currentState);

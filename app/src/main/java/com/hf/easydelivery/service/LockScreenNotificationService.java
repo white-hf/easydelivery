@@ -34,6 +34,11 @@ public class LockScreenNotificationService extends Service {
     private float currentDistance = -1f;
     private int packageCount = 1;
 
+    // ✅ 通知去重配置
+    private static final float MIN_DISTANCE_CHANGE_METERS = 5.0f;
+    private static final long MIN_UPDATE_INTERVAL_MS = 5000; // 5秒
+    private long lastNotificationTime = 0;
+
     public class LocalBinder extends Binder {
         public LockScreenNotificationService getService() {
             return LockScreenNotificationService.this;
@@ -65,13 +70,61 @@ public class LockScreenNotificationService extends Service {
      * Update the notification with new delivery information
      */
     public void updateDelivery(DeliveryInfo delivery, float distanceMeters, int count) {
+        // ✅ 检查是否需要更新
+        if (!shouldUpdateNotification(delivery, distanceMeters, count)) {
+            return;
+        }
+
         this.currentDelivery = delivery;
         this.currentDistance = distanceMeters;
         this.packageCount = count;
+        lastNotificationTime = System.currentTimeMillis();
 
         if (notificationManager != null) {
             notificationManager.notify(NOTIFICATION_ID, buildNotification());
+            FileLog.getInstance().debug(TAG,
+                    String.format("Notification updated: distance=%.1fm, count=%d",
+                            distanceMeters, count));
         }
+    }
+
+    /**
+     * 判断是否需要更新通知
+     * 
+     * @param delivery       新的配送信息
+     * @param distanceMeters 新的距离
+     * @param count          新的包裹数量
+     * @return true=需要更新, false=跳过
+     */
+    private boolean shouldUpdateNotification(DeliveryInfo delivery,
+            float distanceMeters, int count) {
+        long now = System.currentTimeMillis();
+
+        // 时间间隔检查（5秒内不重复更新）
+        if (now - lastNotificationTime < MIN_UPDATE_INTERVAL_MS) {
+            return false;
+        }
+
+        // 目标包裹变化 - 立即更新
+        if (currentDelivery != null && delivery != null) {
+            String currentSn = currentDelivery.getOrderSn();
+            String newSn = delivery.getOrderSn();
+            if (currentSn != null && newSn != null && !currentSn.equals(newSn)) {
+                return true;
+            }
+        }
+
+        // 包裹数量变化 - 立即更新
+        if (count != packageCount) {
+            return true;
+        }
+
+        // 距离变化检查（>5米才更新）
+        if (Math.abs(distanceMeters - currentDistance) > MIN_DISTANCE_CHANGE_METERS) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
