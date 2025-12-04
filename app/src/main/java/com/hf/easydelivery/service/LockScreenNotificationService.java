@@ -46,8 +46,9 @@ public class LockScreenNotificationService extends Service {
     private int sameAddressCount = 1;
 
     // ✅ 通知去重配置
-    private static final float MIN_DISTANCE_CHANGE_METERS = 5.0f;
-    private static final long MIN_UPDATE_INTERVAL_MS = 5000; // 5秒
+    private static final float MIN_DISTANCE_CHANGE_METERS = MapConfig.NOTIF_MIN_DISTANCE_M;
+    private static final long MIN_UPDATE_INTERVAL_MS = MapConfig.NOTIF_MIN_INTERVAL_MS; // 5秒
+    private static final long MIN_UPDATE_INTERVAL_STATIONARY_MS = MapConfig.NOTIF_MIN_INTERVAL_STATIONARY_MS; // 静止时进一步降频
     private long lastNotificationTime = 0;
 
     // ✅ MediaSession for persistent lock screen display
@@ -139,9 +140,7 @@ public class LockScreenNotificationService extends Service {
 
         if (notificationManager != null) {
             notificationManager.notify(NOTIFICATION_ID, buildNotification());
-            FileLog.getInstance().debug(TAG,
-                    String.format("Notification updated: distance=%.1fm, count=%d, nearby=%d",
-                            distanceMeters, count, nearbyCount));
+            // log removed to reduce spam
         }
     }
 
@@ -157,8 +156,12 @@ public class LockScreenNotificationService extends Service {
             float distanceMeters, int count) {
         long now = System.currentTimeMillis();
 
-        // 时间间隔检查（5秒内不重复更新）
-        if (now - lastNotificationTime < MIN_UPDATE_INTERVAL_MS) {
+        // 时间间隔检查（静止时更长）
+        long minInterval = MIN_UPDATE_INTERVAL_MS;
+        if (currentDistance >= 0 && distanceMeters >= 0 && distanceMeters < 5f) {
+            minInterval = MIN_UPDATE_INTERVAL_STATIONARY_MS;
+        }
+        if (now - lastNotificationTime < minInterval) {
             return false;
         }
 

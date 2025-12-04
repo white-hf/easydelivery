@@ -79,8 +79,8 @@ public final class ProximityCoordinator {
     private Boostable boostable;
 
     // ==== Tunables ====
-    private float nearbyRadiusMeters = 50f; // 近邻聚合半径
-    private int nearbyLimit = 20; // 近邻候选上限（用于 UI 聚合）
+    private float nearbyRadiusMeters = MapConfig.NEARBY_RADIUS_METERS; // 近邻聚合半径
+    private int nearbyLimit = MapConfig.NEARBY_LIMIT; // 近邻候选上限（用于 UI 聚合）
 
     // ==== Cached UI state (Phase 3: transition de-dup & observability) ====
     @Nullable
@@ -88,7 +88,7 @@ public final class ProximityCoordinator {
     private boolean lastVisible = false; // whether InfoPill was visible
     private float lastDistanceMeters = Float.NaN; // last distance pushed to UI
     private int lastNearbySize = 0; // last nearby count
-    private static final float UPDATE_EPSILON_M = 0.8f; // ignore sub-meter oscillation
+    private static final float UPDATE_EPSILON_M = MapConfig.DISTANCE_EPSILON_M; // ignore sub-meter oscillation
 
     // ✅ P2: 排序缓存（减少CPU使用）
     private static final float CACHE_INVALIDATION_DISTANCE_M = 10.0f;

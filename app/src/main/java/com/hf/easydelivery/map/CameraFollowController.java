@@ -157,7 +157,7 @@ public class CameraFollowController {
                 float lastBearing,
                 boolean hasCentered) {
             long now = SystemClock.uptimeMillis();
-            boolean timeOk = (now - lastUpdateUptime) > FOLLOW_CONFIG.stdIntervalMs;
+        boolean timeOk = (now - lastUpdateUptime) > FOLLOW_CONFIG.stdIntervalMs;
 
             float distance = 0f;
             if (lastTarget != null) {
@@ -594,7 +594,7 @@ public class CameraFollowController {
         if (targetCamera == null) return false;
 
         // ============================================================
-        // 8. Micro-update skip（保留）
+        // 8. Micro-update skip（保留 + 静止去抖）
         // ============================================================
         if (lastCameraTargetLatLng != null) {
             float px = 0f;
@@ -610,8 +610,18 @@ public class CameraFollowController {
 
             float zoomDelta = Math.abs(targetCamera.zoom - googleMap.getCameraPosition().zoom);
 
+            // 静止/步行额外去抖：1s内且移动很小则跳过
+            long now = SystemClock.uptimeMillis();
+            boolean stationaryOrWalk = context.movementState == SmartLocationManager.MovementState.STATIONARY
+                    || context.movementState == SmartLocationManager.MovementState.WALKING;
+            boolean shortInterval = now - lastCameraUpdateUptime < 1000L;
+
             if (px < MIN_PIXEL_DELTA && bearingDelta < MIN_BEARING_DELTA_DEG && zoomDelta < 0.01f && !shouldForce) {
                 logD("updateCamera(): micro-update skipped");
+                return false;
+            }
+            if (stationaryOrWalk && shortInterval && px < MIN_PIXEL_DELTA && zoomDelta < 0.02f && !shouldForce) {
+                logD("updateCamera(): stationary debounce skipped");
                 return false;
             }
         }

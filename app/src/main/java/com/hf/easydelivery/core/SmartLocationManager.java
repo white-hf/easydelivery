@@ -87,6 +87,7 @@ public class SmartLocationManager {
     private Location lastLocation;
     private Location lastSmoothedLocation;
     private Location lastPredictedLocation;
+    private long lastDispatchUptimeMs = 0L;
     private float speed;
     private long lastUpdateTime;
     private MovementState currentState = MovementState.STATIONARY;
@@ -413,6 +414,8 @@ public class SmartLocationManager {
             FileLog.getInstance().debug(TAG,
                     "Burst mode force exited: state changed to " + currentState);
         }
+
+        lastDispatchUptimeMs = SystemClock.uptimeMillis();
 
         this.forwardToDrivingDistanceTracker(outputLoc, currentState);
 
