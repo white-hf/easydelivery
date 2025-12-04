@@ -20,6 +20,7 @@ import android.support.v4.media.session.PlaybackStateCompat;
 
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.dao.DeliveryInfo;
+import com.hf.easydelivery.map.MapConfig;
 import com.hf.easydelivery.view.MainActivity;
 import com.hf.easydelivery.view.CameraActivity;
 import com.hf.courierservice.apihelper.FileLog;
