@@ -284,6 +284,7 @@ public class SmartLocationManager {
         LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY)
                 .setIntervalMillis(interval)
                 .setMinUpdateIntervalMillis(minInterval)
+                .setMaxUpdateDelayMillis(0) // 不接收批量缓存的历史点
                 .setMinUpdateDistanceMeters(2.0f) // ✅ GPS层过滤：2米距离阈值
                 .setWaitForAccurateLocation(false) // ✅ 不等待高精度，快速响应
                 .build();
@@ -311,6 +312,13 @@ public class SmartLocationManager {
     private void updateLocation(Location newLocation) {
 
         Location prevLast = lastLocation; // keep previous for jump computation
+        // 丢弃明显过期的点（批量缓存的历史轨迹）
+        long nowMillis = System.currentTimeMillis();
+        if (nowMillis - newLocation.getTime() > 3000) {
+            FileLog.getInstance().debug(TAG,
+                    String.format("Location ignored: stale by %d ms", nowMillis - newLocation.getTime()));
+            return;
+        }
 
         // Prefer device-provided speed (m/s) if available; otherwise compute from
         // distance/time

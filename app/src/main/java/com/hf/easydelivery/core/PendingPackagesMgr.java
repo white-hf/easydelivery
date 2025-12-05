@@ -210,6 +210,7 @@ public class PendingPackagesMgr implements Subscriber {
         FileLog.getInstance().debug("[PendingMgr] update: tracking=" + trackingId + ", status=" + newStatus);
 
         dbHandler.post(() -> {
+            boolean updated = false;
             try {
                 ListIterator<PackageEntity> iterator = waitingUploadPackageList.listIterator();
                 while (iterator.hasNext()) {
@@ -226,7 +227,18 @@ public class PendingPackagesMgr implements Subscriber {
                         }
                         FileLog.getInstance()
                                 .debug("[PendingMgr] update ok: tracking=" + trackingId + ", status=" + newStatus);
+                        updated = true;
                         break;
+                    }
+                }
+                // not found in memory list -> fallback to direct DB update
+                if (!updated) {
+                    int rows = deliveredPackagesDao.updateStatusByTrackingId(trackingId, newStatus);
+                    if (rows > 0) {
+                        FileLog.getInstance().debug(
+                                "[PendingMgr] update fallback DB-only ok: tracking=" + trackingId + ", status=" + newStatus);
+                    } else {
+                        throw new Exception("update fallback affected 0 rows");
                     }
                 }
             } catch (Exception e) {

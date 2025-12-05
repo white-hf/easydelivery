@@ -16,7 +16,6 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.media.app.NotificationCompat.MediaStyle;
 import android.support.v4.media.session.MediaSessionCompat;
-import android.support.v4.media.session.PlaybackStateCompat;
 
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.dao.DeliveryInfo;
@@ -37,6 +36,7 @@ public class LockScreenNotificationService extends Service {
     private static final String TAG = "LockScreenNotificationService";
     private static final String CHANNEL_ID = "delivery_navigation";
     private static final int NOTIFICATION_ID = 1001;
+    private MediaSessionCompat mediaSession;
 
     private final IBinder binder = new LocalBinder();
     private NotificationManager notificationManager;
@@ -51,9 +51,6 @@ public class LockScreenNotificationService extends Service {
     private static final long MIN_UPDATE_INTERVAL_MS = MapConfig.NOTIF_MIN_INTERVAL_MS; // 5秒
     private static final long MIN_UPDATE_INTERVAL_STATIONARY_MS = MapConfig.NOTIF_MIN_INTERVAL_STATIONARY_MS; // 静止时进一步降频
     private long lastNotificationTime = 0;
-
-    // ✅ MediaSession for persistent lock screen display
-    private MediaSessionCompat mediaSession;
 
     // Action request codes
     private static final int REQUEST_CODE_CAMERA = 100;
@@ -70,28 +67,9 @@ public class LockScreenNotificationService extends Service {
     public void onCreate() {
         super.onCreate();
         notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        mediaSession = new MediaSessionCompat(this, TAG);
         createNotificationChannel();
-        initMediaSession();
-        FileLog.getInstance().debug(TAG, "Service created with MediaSession");
-    }
-
-    /**
-     * Initialize MediaSession for persistent lock screen notification
-     */
-    private void initMediaSession() {
-        mediaSession = new MediaSessionCompat(this, "DeliveryNavigation");
-        mediaSession.setFlags(
-                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS |
-                        MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
-
-        // Set initial playback state (required for MediaStyle)
-        PlaybackStateCompat.Builder stateBuilder = new PlaybackStateCompat.Builder()
-                .setActions(PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PAUSE)
-                .setState(PlaybackStateCompat.STATE_PLAYING, 0, 1.0f);
-        mediaSession.setPlaybackState(stateBuilder.build());
-        mediaSession.setActive(true);
-
-        FileLog.getInstance().debug(TAG, "MediaSession initialized");
+        FileLog.getInstance().debug(TAG, "Service created");
     }
 
     @Override
@@ -225,16 +203,17 @@ public class LockScreenNotificationService extends Service {
         PendingIntent cameraIntent = createCameraIntent();
         PendingIntent navigationIntent = createNavigationIntent();
 
-        // Build notification with MediaStyle
+        MediaStyle mediaStyle = new MediaStyle()
+                .setShowActionsInCompactView(0, 1)
+                .setMediaSession(mediaSession != null ? mediaSession.getSessionToken() : null);
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_nav_mode_on)
                 .setContentTitle(buildSimpleTitle())
                 .setContentText(buildSimpleContent())
                 .setCustomContentView(customView) // Collapsed view
                 .setCustomBigContentView(customView) // Expanded view (same layout)
-                .setStyle(new MediaStyle()
-                        .setMediaSession(mediaSession.getSessionToken())
-                        .setShowActionsInCompactView(0, 1)) // Show first 2 actions in compact view
+                .setStyle(mediaStyle)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -412,9 +391,12 @@ public class LockScreenNotificationService extends Service {
     public void onDestroy() {
         super.onDestroy();
         if (mediaSession != null) {
-            mediaSession.release();
+            try {
+                mediaSession.release();
+            } catch (Exception ignore) {
+            }
             mediaSession = null;
         }
-        FileLog.getInstance().debug(TAG, "Service destroyed and MediaSession released");
+        FileLog.getInstance().debug(TAG, "Service destroyed");
     }
 }

@@ -71,7 +71,8 @@ public class DeliveredPackagesFragment extends Fragment implements DeliveredPack
                     .setMessage("您要重新上传此包裹吗？")
                     .setPositiveButton("是", (dialog, which) -> {
                         ResourceMgr.getInstance().getPendingPackagesMgr().update(item.trackingId, PendingPackagesMgr.PackageStatus.Pending.getStatus());
-                        ResourceMgr.getInstance().getPendingPackagesMgr().addQueue(item, false);
+                        // 重新入队并加入待上传列表，确保回调能正常更新状态
+                        ResourceMgr.getInstance().getPendingPackagesMgr().addQueue(item, true);
                         Toast.makeText(requireContext(), "包裹已加入上传队列", Toast.LENGTH_SHORT).show();
                     })
                     .setNegativeButton("否", null)

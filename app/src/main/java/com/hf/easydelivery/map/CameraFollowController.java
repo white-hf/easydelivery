@@ -620,7 +620,9 @@ public class CameraFollowController {
                 logD("updateCamera(): micro-update skipped");
                 return false;
             }
-            if (stationaryOrWalk && shortInterval && px < MIN_PIXEL_DELTA && zoomDelta < 0.02f && !shouldForce) {
+            // 仅静止/步行时做额外去抖，驾驶态不屏蔽更新
+            if (!context.isDriving() && stationaryOrWalk && shortInterval
+                    && px < MIN_PIXEL_DELTA && zoomDelta < 0.02f && !shouldForce) {
                 logD("updateCamera(): stationary debounce skipped");
                 return false;
             }
