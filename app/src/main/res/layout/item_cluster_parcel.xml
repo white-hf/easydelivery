@@ -8,14 +8,30 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
-    <!-- route_number 粗体 17sp -->
-    <TextView
-        android:id="@+id/tv_route"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textStyle="bold"
-        android:textSize="24sp"
-        android:textColor="@android:color/black"/>
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- route_number 粗体 17sp -->
+        <TextView
+            android:id="@+id/tv_route"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textStyle="bold"
+            android:textSize="24sp"
+            android:textColor="@android:color/black"/>
+
+        <ImageView
+            android:id="@+id/btn_expand"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="6dp"
+            android:src="@android:drawable/arrow_down_float"
+            android:contentDescription="展开"/>
+    </LinearLayout>
 
     <!-- 详情 多行 14sp，次要颜色 -->
     <TextView
@@ -27,4 +43,47 @@
         android:layout_marginTop="4dp"
         android:maxLines="4"
         android:ellipsize="end"/>
+
+    <LinearLayout
+        android:id="@+id/actions_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="start"
+        android:visibility="gone"
+        android:layout_marginTop="8dp">
+
+        <ImageButton
+            android:id="@+id/btn_call"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_call"
+            android:contentDescription="电话" />
+
+        <ImageButton
+            android:id="@+id/btn_sms"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="12dp"
+            android:background="?selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_dialog_email"
+            android:contentDescription="短信" />
+
+        <ImageButton
+            android:id="@+id/btn_share"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="12dp"
+            android:background="?selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_share"
+            android:contentDescription="分享" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/map_container"
+        android:layout_width="match_parent"
+        android:layout_height="160dp"
+        android:visibility="gone"
+        android:layout_marginTop="8dp" />
 </LinearLayout>
