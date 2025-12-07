@@ -31,6 +31,12 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
     private Long mOrderId;
     private DeliveryInfo currentDelivery;
     private String[] formattedTemplates = new String[0];
+    // 兜底字段：未入库/无 orderId 时使用
+    private String fallbackTracking;
+    private String fallbackAddress;
+    private String fallbackPhone;
+    private String fallbackName;
+    private String fallbackRoute;
 
     public SmsBottomSheetFragment(Long orderId) {
         this.mOrderId = orderId;
@@ -40,6 +46,14 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
         this.mOrderId = mOrderId;
     }
 
+    public void setFallbackInfo(String tracking, String address, String phone, String name, String route) {
+        this.fallbackTracking = tracking;
+        this.fallbackAddress = address;
+        this.fallbackPhone = phone;
+        this.fallbackName = name;
+        this.fallbackRoute = route;
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -47,7 +61,7 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
         smsEditText = view.findViewById(R.id.sms_edit_text);
         sendButton = view.findViewById(R.id.send_button);
         templateListView = view.findViewById(R.id.template_list_view);
-        currentDelivery = (mOrderId != null) ? ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId) : null;
+        currentDelivery = (mOrderId != null && mOrderId > 0) ? ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId) : null;
         String[] rawTemplates = getResources().getStringArray(R.array.sms_tempalte);
         formattedTemplates = new String[rawTemplates.length];
         for (int i = 0; i < rawTemplates.length; i++) {
@@ -89,14 +103,17 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
     }
 
     private void launchSmsApp(String msg) {
-        final DeliveryInfo deliveryInfo = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
-        if (deliveryInfo == null) {
+        DeliveryInfo deliveryInfo = (mOrderId != null && mOrderId > 0)
+                ? ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId)
+                : null;
+        String phone = deliveryInfo != null ? deliveryInfo.getPhone() : fallbackPhone;
+        if (TextUtils.isEmpty(phone)) {
             Toast.makeText(getContext(), "收件人信息缺失，无法发送短信", Toast.LENGTH_SHORT).show();
             return;
         }
         try {
             Intent intent = new Intent(Intent.ACTION_SENDTO);
-            intent.setData(Uri.parse("smsto:" + deliveryInfo.getPhone()));
+            intent.setData(Uri.parse("smsto:" + phone));
             intent.putExtra("sms_body", msg);
             startActivity(intent);
             lastSentMessage = msg;
@@ -108,13 +125,16 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
 
     private String formatTemplate(String template) {
         if (template == null) return "";
-        if (currentDelivery == null) return template;
-        String tracking = safe(currentDelivery.getOrderSn());
-        String address = safe(currentDelivery.getAddress());
+        String tracking = currentDelivery != null ? safe(currentDelivery.getOrderSn()) : safe(fallbackTracking);
+        String address = currentDelivery != null ? safe(currentDelivery.getAddress()) : safe(fallbackAddress);
+        String name = currentDelivery != null ? safe(currentDelivery.getName()) : safe(fallbackName);
+        String route = currentDelivery != null ? safe(currentDelivery.getRouteNumber()) : safe(fallbackRoute);
         return template
                 .replace("{tracking}", tracking)
                 .replace("{tracking_no}", tracking)
-                .replace("{address}", address);
+                .replace("{address}", address)
+                .replace("{name}", name)
+                .replace("{route}", route);
     }
 
     private String safe(String value) {

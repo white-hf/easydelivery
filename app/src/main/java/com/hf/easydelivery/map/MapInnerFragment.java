@@ -28,6 +28,9 @@ import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.content.Intent;
+import android.net.Uri;
+import android.text.TextUtils;
 
 import android.os.SystemClock;
 import android.graphics.Bitmap;
@@ -73,6 +76,7 @@ import com.hf.easydelivery.core.SmartLocationManager;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.view.Adapter.ClusterParcelAdapter;
 import com.hf.easydelivery.view.CameraActivity;
+import com.hf.easydelivery.view.SmsBottomSheetFragment;
 import com.hf.easydelivery.view.DeliveredPackagesFragment;
 import com.hf.easydelivery.view.model.MapViewModel;
 import com.hf.easydelivery.view.model.ScanViewModel;
@@ -904,8 +908,51 @@ public class MapInnerFragment extends Fragment
         sorted.sort(DeliveryFocusManager.getAddressComparator());
 
         rv.setAdapter(new ClusterParcelAdapter(sorted, info -> {
-            dialog.dismiss();
-            showCamera(info);
+            if (currentMode == DataMode.UNSCANNED) {
+                // 未扫描模式仅在列表内展开操作，不跳转
+                return;
+            } else {
+                dialog.dismiss();
+                showCamera(info);
+            }
+        }, new ClusterParcelAdapter.OnActionClick() {
+            @Override
+            public void onCall(DeliveryInfo info) {
+                if (TextUtils.isEmpty(info.getPhone()))
+                    return;
+                Intent intent = new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + info.getPhone()));
+                startActivity(intent);
+            }
+
+            @Override
+            public void onSms(DeliveryInfo info) {
+                Long oid = info.getOrderId() == null ? -1L : info.getOrderId();
+                SmsBottomSheetFragment sheet = new SmsBottomSheetFragment(oid);
+                sheet.setFallbackInfo(info.getOrderSn(), info.getAddress(), info.getPhone(), info.getName(),
+                        info.getRouteNumber());
+                sheet.show(getParentFragmentManager(), "SmsBottomSheetFragment");
+            }
+
+            @Override
+            public void onShare(DeliveryInfo info) {
+                StringBuilder sb = new StringBuilder();
+                if (!TextUtils.isEmpty(info.getOrderSn())) {
+                    sb.append("运单: ").append(info.getOrderSn()).append("\n");
+                }
+                if (!TextUtils.isEmpty(info.getRouteNumber())) {
+                    sb.append("包裹号: ").append(info.getRouteNumber()).append("\n");
+                }
+                if (!TextUtils.isEmpty(info.getAddress())) {
+                    sb.append("地址: ").append(info.getAddress()).append("\n");
+                }
+                if (!TextUtils.isEmpty(info.getName())) {
+                    sb.append("收件人: ").append(info.getName()).append("\n");
+                }
+                Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                shareIntent.setType("text/plain");
+                shareIntent.putExtra(Intent.EXTRA_TEXT, sb.toString());
+                startActivity(Intent.createChooser(shareIntent, "分享包裹信息"));
+            }
         }));
         dialog.show();
     }
@@ -1108,6 +1155,13 @@ public class MapInnerFragment extends Fragment
         intent.putExtra("order_id", info.getOrderId() == null ? -1L : info.getOrderId());
         intent.putExtra("latitude", info.getLatitude());
         intent.putExtra("longitude", info.getLongitude());
+        intent.putExtra("route_number", info.getRouteNumber());
+        intent.putExtra("tracking_id", info.getOrderSn());
+        intent.putExtra("address", info.getAddress());
+        intent.putExtra("unit_number", info.getUnitNumber());
+        intent.putExtra("civil_number", info.getCivilNumber());
+        intent.putExtra("customer_name", info.getName());
+        intent.putExtra("phone", info.getPhone());
         startActivity(intent);
     }
 
