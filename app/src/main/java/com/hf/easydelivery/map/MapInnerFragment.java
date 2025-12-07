@@ -1290,16 +1290,15 @@ public class MapInnerFragment extends Fragment
         if (googleMap == null || cameraController == null)
             return;
 
-        Location effective = (state == NORMAL_DRIVING || state == SLOW_DRIVING)
+        Location predicted = null;
+        if (mSmartLocationManager != null) {
+            predicted = mSmartLocationManager.getPredictedLocation();
+        }
+
+        Location effective = (state == SmartLocationManager.MovementState.NORMAL_DRIVING || state == SmartLocationManager.MovementState.SLOW_DRIVING)
                 ? location // Driving 禁用预测（强烈推荐）
                 : (predicted != null ? predicted : location);
 
-        if (mSmartLocationManager != null) {
-            Location predicted = mSmartLocationManager.getPredictedLocation();
-            if (predicted != null) {
-                effective = predicted;
-            }
-        }
         updateMyLocationMarker(effective);
 
         // 1) 交给 Proximity 决策 InfoPill 的显隐/更新（Top-3：远距降采样 + 区域通勤极简）
@@ -1330,8 +1329,8 @@ public class MapInnerFragment extends Fragment
         }
 
         // ✅ 修复进入驾驶时zoom突变：检测状态切换
-        boolean enteringDriving = (lastMovementState == STATIONARY || lastMovementState == WALKING) &&
-                (state == SLOW_DRIVING || state == NORMAL_DRIVING);
+        boolean enteringDriving = (lastMovementState == SmartLocationManager.MovementState.STATIONARY || lastMovementState == SmartLocationManager.MovementState.WALKING) &&
+                (state == SmartLocationManager.MovementState.SLOW_DRIVING || state == SmartLocationManager.MovementState.NORMAL_DRIVING);
 
         if (enteringDriving && cameraController != null) {
             long now = System.currentTimeMillis();
