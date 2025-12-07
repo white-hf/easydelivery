@@ -98,16 +98,27 @@ public class SmartLocationManager {
     private ActivityRecognitionClient activityRecognitionClient;
     private PendingIntent activityRecognitionPendingIntent;
     private int weakSignalCount = 0;
+    private long weakSignalStartTime = 0L; // ✅ Bug fix: 弱信号时间窗口检测
     private static final double SMOOTHING_FACTOR = 0.2;
     private static final float WEAK_SIGNAL_THRESHOLD = 100f;
     private static final double EARTH_RADIUS_METERS = 6378137.0;
     private static final float MIN_PREDICTION_SPEED_MPS = 0.8f;
-    private static final float PREDICTION_HORIZON_SEC = 0.8f;
+    // ✅ PREDICTION_HORIZON_SEC removed - now dynamic based on speed
 
     // === Adaptive boost (temporary high-frequency updates) ===
     private static final long BOOST_MIN_INTERVAL_MS = 10_000L; // 预留：降频节流
-    private long boostHoldUntilMs = 0L; // 保持高频到这个时间戳（wall clock）
-    private long lastBoostChangeMs = 0L; // 最近一次切换 boost 状态（预留）
+    private long boostHoldUntilMs = 0L;
+    private long lastBoostChangeMs = 0L;
+
+    // === 架构师建议：3分钟真静止检测 ===
+    private long lastMovingTimeMs = 0L;
+    private long continuousStationaryStartMs = 0L; // ✅ Bug#3: 跟踪连续静止开始时间
+    private MovementState previousState = MovementState.STATIONARY;
+    private long lastGoodFixTime = 0L;
+    private static final float ACCURACY_THRESHOLD_GOOD = 28f;
+    private static final float ACCURACY_THRESHOLD_POOR = 50f;
+    private static final long POOR_SIGNAL_GRACE_PERIOD = 30_000L;
+    private static final long EMERGENCY_BOOST_THRESHOLD_MS = 15_000L;
 
     // === Heading (bearing) support via sensors ===
     private SensorManager sensorManager;
@@ -124,17 +135,37 @@ public class SmartLocationManager {
     // Cache last requested intervals to avoid redundant re-requests
     private long lastRequestedIntervalMs = -1L;
     private long lastRequestedMinIntervalMs = -1L;
+    private int lastRequestedPriority = -1;
 
     // Low-pass for heading smoothing (0..1). Larger = quicker but noisier
     private static final float HEADING_ALPHA = 0.2f;
-    private static final float ACCEL_WAKE_THRESHOLD = 0.8f;
+    private static final float ACCEL_WAKE_THRESHOLD = 0.8f; // 基础阈值（作为fallback）
     private static final int ACCEL_REQUIRED_HITS = 4;
     private static final long ACCEL_WINDOW_MS = 400L;
-    private static final long MOTION_WAKE_COOLDOWN_MS = 8_000L;
+    private static final long MOTION_WAKE_COOLDOWN_MS = 3_000L;
     private long lastAccelSpikeUptime = 0L;
     private long lastMotionWakeUptime = 0L;
+
+    // ✅ 架构师建议：标准差滤波减少低端设备噪声
+    private static final int ACCEL_BUFFER_SIZE = 10;
+    private static final float NOISE_STD_MULTIPLIER = 2.5f;
+    private float[] accelBuffer = new float[ACCEL_BUFFER_SIZE];
+    private int accelBufferIndex = 0;
+    private boolean accelBufferFilled = false;
     private int accelConsecutiveHits = 0;
     private boolean singleUpdateInFlight = false;
+
+    // 常量定义
+    private static final long DELIVERING_IDLE_THRESHOLD_MS = 10_000L; // 停车/步行超过此时间认为司机不看地图
+    private static final long INTERVAL_DRIVING_NORMAL_MS = 1_500L;
+    private static final long INTERVAL_DRIVING_SLOW_MS = 2_500L;
+    private static final long INTERVAL_WALKING_MS = 5_000L;
+    private static final long INTERVAL_DELIVERING_MS = 45_000L;
+
+    private static final long MIN_INTERVAL_DRIVING_NORMAL_MS = 800L;
+    private static final long MIN_INTERVAL_DRIVING_SLOW_MS = 1_500L;
+    private static final long MIN_INTERVAL_WALKING_MS = 3_000L;
+    private static final long MIN_INTERVAL_DELIVERING_MS = 30_000L;
 
     public interface WeakSignalListener extends LocationUpdateListener {
         void onWeakSignal();
@@ -153,7 +184,6 @@ public class SmartLocationManager {
         else {
             if (context == null)
                 return null;
-
             instance = new SmartLocationManager(context);
         }
         return instance;
@@ -169,18 +199,27 @@ public class SmartLocationManager {
      * @param durationMs 例如 20_000（20 秒）
      */
     public void requestBoost(long durationMs) {
-        // ✅ 防误触发：静止/步行 且 速度<1m/s 时跳过Boost
-        if ((currentState == MovementState.STATIONARY || currentState == MovementState.WALKING)
-                && speed < 1.0f) {
+        long now = System.currentTimeMillis();
+
+        // ✅ 架构师建议#9: 2秒内防止Boost叠加
+        // 防止updateMovementState + displacement wake + edge risk同时触发时叠加
+        if (inBurstMode && (now - lastBoostChangeMs < 2_000L)) {
+            FileLog.getInstance().debug(TAG, "requestBoost debounced: already boosted recently");
+            return;
+        }
+
+        // ✅ 架构师建议：只有真·静止3分钟以上才拒绝提频
+        // 允许红灯、塞车时仍保持高频
+        if (speed < 0.3f && (now - lastMovingTimeMs > 180_000L)) {
             FileLog.getInstance().debug(TAG,
-                    "requestBoost skipped: state=" + currentState + ", speed=" + speed);
+                    "requestBoost refused: truly stationary for " +
+                            (now - lastMovingTimeMs) / 1000 + "s");
             return;
         }
 
         if (durationMs <= 0)
             durationMs = 5_000L;
         if (inBurstMode) {
-            long now = System.currentTimeMillis();
             boostHoldUntilMs = Math.max(boostHoldUntilMs, now + durationMs);
             scheduleBurstEnd();
             return;
@@ -194,6 +233,7 @@ public class SmartLocationManager {
      * @param offsetMeters 蓝点相对目标中心的米偏移
      * @param speedMps     当前速度 m/s
      */
+
     public void requestBoostIfEdgeRisk(float offsetMeters, float speedMps) {
         // ✅ 低速时不触发边缘风险Boost（只在高速移动时才有意义）
         if (speedMps < 2.0f || currentState == MovementState.STATIONARY
@@ -262,9 +302,15 @@ public class SmartLocationManager {
                 if (locationResult == null) {
                     return;
                 }
-                for (Location location : locationResult.getLocations()) {
-                    updateLocation(location);
+
+                // ✅ 架构师建议#6: 批量位置只完整处理最后一个
+                List<Location> locations = locationResult.getLocations();
+                if (locations.isEmpty()) {
+                    return;
                 }
+
+                // 完整处理最后一个
+                updateLocation(locations.get(locations.size() - 1));
             }
         };
 
@@ -274,24 +320,33 @@ public class SmartLocationManager {
         startMotionWakeMonitoring();
     }
 
-    private void requestLocationUpdates(long interval, long minInterval) {
+    private void requestLocationUpdates(long interval, long minInterval, int priority) {
         if (ActivityCompat.checkSelfPermission(context,
                 Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // Handle the case where permission is not granted
             return;
         }
 
-        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY)
+        LocationRequest locationRequest = new LocationRequest.Builder(priority)
                 .setIntervalMillis(interval)
                 .setMinUpdateIntervalMillis(minInterval)
-                .setMaxUpdateDelayMillis(0) // 不接收批量缓存的历史点
-                .setMinUpdateDistanceMeters(2.0f) // ✅ GPS层过滤：2米距离阈值
-                .setWaitForAccurateLocation(false) // ✅ 不等待高精度，快速响应
+                .setMaxUpdateDelayMillis(0)
+                .setMinUpdateDistanceMeters(2.0f)
+                .setWaitForAccurateLocation(false)
                 .build();
 
         fusedLocationClient.requestLocationUpdates(locationRequest,
                 locationCallback,
-                Looper.getMainLooper());
+                Looper.getMainLooper())
+                .addOnFailureListener(e -> {
+                    // ✅ 架构师建议：注册失败时重置缓存，强制下次重试
+                    FileLog.getInstance().error(TAG,
+                            String.format("requestLocationUpdates failed: interval=%dms, minInterval=%dms, priority=%d",
+                                    interval, minInterval, priority),
+                            e);
+                    lastRequestedIntervalMs = -1L;
+                    lastRequestedMinIntervalMs = -1L;
+                    lastRequestedPriority = -1;
+                });
     }
 
     private void switchToSignificantChanges() {
@@ -311,25 +366,63 @@ public class SmartLocationManager {
 
     private void updateLocation(Location newLocation) {
 
-        Location prevLast = lastLocation; // keep previous for jump computation
-        // 丢弃明显过期的点（批量缓存的历史轨迹）
+        Location prevLast = lastLocation;
         long nowMillis = System.currentTimeMillis();
-        if (nowMillis - newLocation.getTime() > 3000) {
+
+        // ✅ Bug#4修复：动态精度检查（但不立即return）
+        long timeSinceGoodFix = nowMillis - lastGoodFixTime;
+        float accuracyThreshold = timeSinceGoodFix > POOR_SIGNAL_GRACE_PERIOD
+                ? ACCURACY_THRESHOLD_POOR
+                : ACCURACY_THRESHOLD_GOOD;
+
+        boolean lowAccuracy = newLocation.getAccuracy() > accuracyThreshold;
+        if (lowAccuracy) {
             FileLog.getInstance().debug(TAG,
-                    String.format("Location ignored: stale by %d ms", nowMillis - newLocation.getTime()));
-            return;
+                    String.format("Low accuracy: %.1fm (threshold: %.1fm) - updating state only",
+                            newLocation.getAccuracy(), accuracyThreshold));
         }
 
-        // Prefer device-provided speed (m/s) if available; otherwise compute from
-        // distance/time
-        if (newLocation.hasSpeed()) {
-            speed = newLocation.getSpeed();
-        } else if (lastLocation != null) {
-            float distance = lastLocation.distanceTo(newLocation);
+        if (newLocation.getAccuracy() <= ACCURACY_THRESHOLD_GOOD) {
+            lastGoodFixTime = nowMillis;
+        }
+
+        // ✅ 速度兜底策略（始终执行）
+        float gpsSpeed = newLocation.hasSpeed() ? newLocation.getSpeed() : 0f;
+        float displacementSpeed = 0f;
+        float distance = 0f;
+        if (lastLocation != null) {
+            distance = lastLocation.distanceTo(newLocation);
             long timeDiff = newLocation.getTime() - lastUpdateTime;
-            speed = (timeDiff > 0) ? (distance / (float) timeDiff) * 1000f : 0f; // m/s
-        } else {
-            speed = 0f;
+            if (timeDiff > 0 && distance > 2.0f) {
+                // ✅ 架构师建议：限制用于速度计算的距离上限为15m，防止跳变导致速度暴涨
+                float distForSpeed = Math.min(distance, 15.0f);
+                displacementSpeed = (distForSpeed / (timeDiff / 1000f));
+            }
+        }
+        speed = Math.max(gpsSpeed, displacementSpeed);
+
+        // ✅ lastMovingTimeMs更新（始终执行）
+        if (speed > 0.3f || distance > 2.0f) {
+            lastMovingTimeMs = nowMillis;
+        }
+
+        // ✅ Bug#4修复：Emergency Boost基于lastLocation时间而非lastDispatch
+        if (lastLocation != null) {
+            long timeSinceLastLocation = nowMillis - lastLocation.getTime();
+            if (timeSinceLastLocation > EMERGENCY_BOOST_THRESHOLD_MS && !inBurstMode) {
+                FileLog.getInstance().debug(TAG,
+                        String.format("Emergency boost: no location for %ds",
+                                timeSinceLastLocation / 1000));
+                requestBoost(10_000L);
+            }
+        }
+
+        // ✅ Bug#4修复：低精度时只更新状态，不分发
+        if (lowAccuracy) {
+            lastLocation = newLocation;
+            lastUpdateTime = newLocation.getTime();
+            updateMovementState();
+            return; // 不继续分发
         }
 
         // ✅ 双层过滤 Layer 1: 粗过滤（防抖），避免静止/步行时的GPS抖动刷屏
@@ -338,10 +431,10 @@ public class SmartLocationManager {
         if ((currentState == MovementState.STATIONARY || currentState == MovementState.WALKING)
                 && lastLocation != null) {
             long timeDiff = newLocation.getTime() - lastUpdateTime;
-            float distance = lastLocation.distanceTo(newLocation);
+            // ✅ 修复Bug：复用外层distance（不要重新声明）
+            distance = lastLocation.distanceTo(newLocation);
 
             if (timeDiff < 2000 && distance < 2.0f) {
-                // 仍更新内部状态，但不分发给listeners
                 shouldDispatch = false;
                 FileLog.getInstance().debug(TAG,
                         String.format("Location update filtered: state=%s, time=%dms, dist=%.1fm",
@@ -349,12 +442,22 @@ public class SmartLocationManager {
             }
         }
 
-        // Jump risk：两次点位跨度较大且在快速移动 → 临时提频以避免“到边再跳回”的突兀
+        // ✅ 架构师建议：位移>8米立即唤醒（最关键！）
+        if (lastLocation != null) {
+            float displacement = lastLocation.distanceTo(newLocation);
+            if (displacement > 8.0f) {
+                requestBoost(20_000L);
+                FileLog.getInstance().debug(TAG,
+                        String.format("Displacement wake: %.1fm -> boost", displacement));
+            }
+        }
+
+        // Jump risk：两次点位跨度较大且在快速移动 → 临时提频以避免"到边再跳回"的突兀
         if (!inBurstMode && prevLast != null) {
             float jumpMeters = prevLast.distanceTo(newLocation);
-            boolean movingFast = speed > 10f; // ~36 km/h
+            boolean movingFast = speed > 10f;
             if (movingFast && jumpMeters > 30f) {
-                requestBoost(20_000L); // 提频20秒
+                requestBoost(20_000L);
             }
         }
 
@@ -363,7 +466,6 @@ public class SmartLocationManager {
 
         boolean stateChanged = updateMovementState();
 
-        // ✅ 如果被粗过滤跳过，提前返回（已更新状态，但不分发也不处理后续逻辑）
         if (!shouldDispatch) {
             return;
         }
@@ -393,10 +495,18 @@ public class SmartLocationManager {
             }
         }
 
+        // ✅ 弱信号检测优化：连续次数 + 时间窗口
         if (newLocation.getAccuracy() > WEAK_SIGNAL_THRESHOLD) {
+            if (weakSignalStartTime == 0L) {
+                weakSignalStartTime = System.currentTimeMillis();
+            }
             weakSignalCount++;
-            if (weakSignalCount >= 3) {
-                weakSignalCount = 0;
+
+            long weakDuration = System.currentTimeMillis() - weakSignalStartTime;
+            // 只有持续超过15秒且连续次数达标才报警，防止地下车库/短时遮挡误报
+            if (weakSignalCount >= 3 && weakDuration > 15_000L) {
+                weakSignalCount = 0; // reset
+                weakSignalStartTime = 0L;
                 for (LocationUpdateListener l : listeners) {
                     if (l instanceof WeakSignalListener) {
                         try {
@@ -407,21 +517,16 @@ public class SmartLocationManager {
                 }
             }
         } else {
+            // 信号恢复，立刻重置
             weakSignalCount = 0;
+            weakSignalStartTime = 0L;
         }
 
-        // 根据状态/提频情况调整定位参数
         if (stateChanged || inBurstMode) {
             updateLocationParametersForState();
         }
 
-        // ✅ 强制退出Boost：变为静止/步行时立即退出高频
-        if (stateChanged && (currentState == MovementState.STATIONARY
-                || currentState == MovementState.WALKING)) {
-            exitBurstMode();
-            FileLog.getInstance().debug(TAG,
-                    "Burst mode force exited: state changed to " + currentState);
-        }
+        // ❌ 移除Boost强制退出 - 让其自然过期，避免红灯时误退
 
         lastDispatchUptimeMs = SystemClock.uptimeMillis();
 
@@ -442,24 +547,27 @@ public class SmartLocationManager {
         }
 
         if (newState != currentState) {
-            // Patch 2: 从静止/步行 -> 开车，立即提频 + 拉一次准点
             boolean isDrivingNow = newState == MovementState.SLOW_DRIVING || newState == MovementState.NORMAL_DRIVING;
             boolean wasNotDriving = currentState == MovementState.STATIONARY || currentState == MovementState.WALKING;
 
             if (isDrivingNow && wasNotDriving) {
-                requestBoost(15_000L); // 提频15秒
-                requestSingleHighAccuracyFix(); // 立刻拉一次准点
+                requestBoost(15_000L);
+                requestSingleHighAccuracyFix();
             }
 
             FileLog.getInstance().debug(TAG, "movement state change: "
                     + currentState + " -> " + newState + ", speed=" + speed);
 
+            // ✅ Bug#3: 跟踪连续静止状态
+            if (newState == MovementState.STATIONARY && currentState != MovementState.STATIONARY) {
+                continuousStationaryStartMs = System.currentTimeMillis();
+            }
+
+            previousState = currentState;
             currentState = newState;
-            // Removed automatic enterBurstMode on STATIONARY to allow explicit burst mode
-            // or distance-based triggers
-            return true; // State has changed
+            return true;
         }
-        return false; // State has not changed
+        return false;
     }
 
     private void enterBurstMode() {
@@ -521,50 +629,98 @@ public class SmartLocationManager {
     }
 
     private void updateLocationParametersForState() {
-        // Removed passive mode switch for STATIONARY to ensure reliable updates
         long interval = inBurstMode ? getBurstModeInterval() : getRecommendedUpdateInterval();
         long minInterval = inBurstMode ? getBurstModeInterval() : getMinUpdateInterval();
+        int priority = getRecommendedPriority();
 
-        // 若参数未变化，避免重复调用 requestLocationUpdates 以省电
-        if (interval == lastRequestedIntervalMs && minInterval == lastRequestedMinIntervalMs) {
+        if (interval == lastRequestedIntervalMs && minInterval == lastRequestedMinIntervalMs
+                && priority == lastRequestedPriority) {
             return;
         }
+
         lastRequestedIntervalMs = interval;
         lastRequestedMinIntervalMs = minInterval;
+        lastRequestedPriority = priority;
 
-        if (fusedLocationClient != null && locationCallback != null) {
-            fusedLocationClient.removeLocationUpdates(locationCallback);
-        }
-        requestLocationUpdates(interval, minInterval);
+        // ✅ 架构师建议#10: 直接request覆盖，不要remove
+        // Google官方: "requestLocationUpdates with same callback replaces previous
+        // request"
+        requestLocationUpdates(interval, minInterval, priority);
     }
 
+    /**
+     * 判断司机是否处于“送件且不看地图”状态
+     */
+    private boolean isDeliveringAndIdle() {
+        long timeSinceLastMovement = System.currentTimeMillis() - lastMovingTimeMs;
+        return (currentState == MovementState.STATIONARY || currentState == MovementState.WALKING)
+                && timeSinceLastMovement > DELIVERING_IDLE_THRESHOLD_MS;
+    }
+
+    /**
+     * 获取推荐优先级
+     */
+    private int getRecommendedPriority() {
+        if (inBurstMode) {
+            return Priority.PRIORITY_HIGH_ACCURACY; // Boost 模式优先
+        }
+
+        if (isDeliveringAndIdle()) {
+            return Priority.PRIORITY_BALANCED_POWER_ACCURACY; // 疯狂省电
+        }
+
+        // 其他情况：驾驶中 / 刚停车 / 步行
+        return Priority.PRIORITY_HIGH_ACCURACY;
+    }
+
+    /**
+     * 获取推荐更新间隔（ms）
+     */
     private long getRecommendedUpdateInterval() {
+        if (inBurstMode) {
+            return INTERVAL_DRIVING_NORMAL_MS; // Boost 模式优先
+        }
+
+        if (isDeliveringAndIdle()) {
+            return INTERVAL_DELIVERING_MS; // 疯狂省电
+        }
+
+        // Driving / Walking / Stationary 刚停车
         switch (currentState) {
             case STATIONARY:
-                return 15 * 1000; // 15 seconds (was 30s)
             case WALKING:
-                return 8 * 1000; // 8 seconds
+                return INTERVAL_WALKING_MS; // 刚停车或慢走，高频更新
             case SLOW_DRIVING:
-                return 5 * 1000; // 5 seconds
+                return INTERVAL_DRIVING_SLOW_MS;
             case NORMAL_DRIVING:
-                return 3 * 1000; // 3 seconds
+                return INTERVAL_DRIVING_NORMAL_MS;
             default:
-                return 10 * 1000; // Default 10 seconds
+                return 4_000L;
         }
     }
 
+    /**
+     * 获取最小更新间隔（ms）
+     */
     private long getMinUpdateInterval() {
+        if (inBurstMode) {
+            return MIN_INTERVAL_DRIVING_NORMAL_MS; // Boost 模式优先
+        }
+
+        if (isDeliveringAndIdle()) {
+            return MIN_INTERVAL_DELIVERING_MS; // 极致省电
+        }
+
         switch (currentState) {
             case STATIONARY:
-                return 10 * 1000; // 10 seconds (was 15s)
             case WALKING:
-                return 4 * 1000; // 4 seconds
+                return MIN_INTERVAL_WALKING_MS;
             case SLOW_DRIVING:
-                return 2 * 1000; // 2 seconds
+                return MIN_INTERVAL_DRIVING_SLOW_MS;
             case NORMAL_DRIVING:
-                return 1 * 1000; // 1 second
+                return MIN_INTERVAL_DRIVING_NORMAL_MS;
             default:
-                return 5 * 1000; // Default 5 seconds
+                return 2_000L;
         }
     }
 
@@ -787,12 +943,44 @@ public class SmartLocationManager {
         public void onSensorChanged(SensorEvent event) {
             if (event.sensor.getType() != Sensor.TYPE_LINEAR_ACCELERATION)
                 return;
+
             float ax = event.values[0];
             float ay = event.values[1];
             float az = event.values[2];
-            double magnitude = Math.sqrt(ax * ax + ay * ay + az * az);
+            float magnitude = (float) Math.sqrt(ax * ax + ay * ay + az * az);
+
+            // ✅ 更新buffer
+            accelBuffer[accelBufferIndex] = magnitude;
+            accelBufferIndex = (accelBufferIndex + 1) % ACCEL_BUFFER_SIZE;
+            if (!accelBufferFilled && accelBufferIndex == 0) {
+                accelBufferFilled = true;
+            }
+
+            // ✅ 计算动态阈值（均值 + 2.5倍标准差）
+            float threshold = ACCEL_WAKE_THRESHOLD; // fallback
+            if (accelBufferFilled) {
+                float mean = 0f;
+                for (float val : accelBuffer) {
+                    mean += val;
+                }
+                mean /= ACCEL_BUFFER_SIZE;
+
+                float variance = 0f;
+                for (float val : accelBuffer) {
+                    float diff = val - mean;
+                    variance += diff * diff;
+                }
+                float std = (float) Math.sqrt(variance / ACCEL_BUFFER_SIZE);
+                threshold = mean + NOISE_STD_MULTIPLIER * std;
+
+                // 保底最小阈值0.6（避免过于敏感）
+                if (threshold < 0.6f) {
+                    threshold = 0.6f;
+                }
+            }
+
             long now = SystemClock.uptimeMillis();
-            if (magnitude >= ACCEL_WAKE_THRESHOLD) {
+            if (magnitude >= threshold) {
                 if (now - lastAccelSpikeUptime > ACCEL_WINDOW_MS) {
                     accelConsecutiveHits = 0;
                 }
@@ -801,6 +989,16 @@ public class SmartLocationManager {
                 if (accelConsecutiveHits >= ACCEL_REQUIRED_HITS) {
                     accelConsecutiveHits = 0;
                     maybeDispatchMotionWake(now);
+                    // ✅ 调试日志
+                    if (accelBufferFilled) {
+                        float mean = 0f;
+                        for (float val : accelBuffer)
+                            mean += val;
+                        mean /= ACCEL_BUFFER_SIZE;
+                        FileLog.getInstance().debug(TAG,
+                                String.format("Motion wake triggered: mag=%.2f, threshold=%.2f (mean=%.2f)", magnitude,
+                                        threshold, mean));
+                    }
                 }
             } else if (now - lastAccelSpikeUptime > ACCEL_WINDOW_MS) {
                 accelConsecutiveHits = 0;
@@ -881,7 +1079,12 @@ public class SmartLocationManager {
             return null;
         if (speedMps < MIN_PREDICTION_SPEED_MPS)
             return null;
-        double distance = speedMps * PREDICTION_HORIZON_SEC;
+
+        // ✅ 架构师建议#8: 动态预测horizon
+        // 低速(2m/s) → 0.4s, 中速(10m/s) → 2.0s, 高速(20m/s) → 4.0s (clamped to 1.2s)
+        float horizon = Math.max(0.3f, Math.min(1.2f, speedMps * 0.2f));
+        double distance = speedMps * horizon;
+
         if (distance < 1.0)
             return null;
         double headingRad = Math.toRadians(heading);

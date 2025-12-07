@@ -1236,7 +1236,10 @@ public class MapInnerFragment extends Fragment
         if (googleMap == null || cameraController == null)
             return;
 
-        Location effective = location;
+        Location effective = (state == NORMAL_DRIVING || state == SLOW_DRIVING)
+                ? location // Driving 禁用预测（强烈推荐）
+                : (predicted != null ? predicted : location);
+
         if (mSmartLocationManager != null) {
             Location predicted = mSmartLocationManager.getPredictedLocation();
             if (predicted != null) {
@@ -1271,6 +1274,17 @@ public class MapInnerFragment extends Fragment
         } else {
             currentRegionState = InfoPillProximityController.RegionState.IN_TRANSIT;
         }
+
+        // ✅ 修复进入驾驶时zoom突变：检测状态切换
+        boolean enteringDriving = (lastMovementState == STATIONARY || lastMovementState == WALKING) &&
+                (state == SLOW_DRIVING || state == NORMAL_DRIVING);
+
+        if (enteringDriving && cameraController != null) {
+            long now = System.currentTimeMillis();
+            cameraController.setDrivingModeStartTime(now);
+            logD("Entering driving mode - set timestamp: " + now);
+        }
+
         maybeRequestInsideBoost(state);
         // 未扫描包裹视图下不自动恢复/拉回相机，保持用户查看列表的视角
         if (currentMode != DataMode.UNSCANNED) {

@@ -157,7 +157,7 @@ public class CameraFollowController {
                 float lastBearing,
                 boolean hasCentered) {
             long now = SystemClock.uptimeMillis();
-        boolean timeOk = (now - lastUpdateUptime) > FOLLOW_CONFIG.stdIntervalMs;
+            boolean timeOk = (now - lastUpdateUptime) > FOLLOW_CONFIG.stdIntervalMs;
 
             float distance = 0f;
             if (lastTarget != null) {
@@ -313,6 +313,9 @@ public class CameraFollowController {
     private float lastSpeedZoom = Float.NaN;
     private int lastSpeedBand = -1; // 0:near,1:city,2:suburb,3:highway
 
+    // ✅ 修复进入驾驶时zoom突变：跟踪驾驶模式开始时间
+    private long drivingModeStartTime = 0;
+
     // --- Phase 3: jitter gating ---
     private static final float MIN_BEARING_DELTA_DEG = 2f; // skip tiny bearing changes
     private static final float MIN_PIXEL_DELTA = 2f; // skip tiny pixel drifts
@@ -332,6 +335,14 @@ public class CameraFollowController {
             pausedByUser = false;
             userPreferredBearing = Float.NaN;
         }
+    }
+
+    /**
+     * ✅ 修复进入驾驶时zoom突变：记录驾驶模式开始时间
+     */
+    public void setDrivingModeStartTime(long timestamp) {
+        this.drivingModeStartTime = timestamp;
+        logD("setDrivingModeStartTime: " + timestamp);
     }
 
     public void beginBearingCapture() {
@@ -450,8 +461,8 @@ public class CameraFollowController {
         boolean isAutoFollowPaused = context.isAutoFollowPaused;
 
         if (navMode) {
-            isUserInteracting = false;      // 旧行为：导航模式下强制取消交互
-            isAutoFollowPaused = false;     // 旧行为：导航模式强制启用 auto follow
+            isUserInteracting = false; // 旧行为：导航模式下强制取消交互
+            isAutoFollowPaused = false; // 旧行为：导航模式强制启用 auto follow
             hasEverEnteredDrivingMode = false;
         }
 
@@ -463,9 +474,8 @@ public class CameraFollowController {
         // ============================================================
         // 1. List View Strategy
         // ============================================================
-        boolean smartZoomApplicable =
-                context.isStationaryOrWalking() &&
-                        context.nearestPackageDistanceMeters > 0;
+        boolean smartZoomApplicable = context.isStationaryOrWalking() &&
+                context.nearestPackageDistanceMeters > 0;
 
         if (context.isStationaryOrWalking()
                 && !smartZoomApplicable
@@ -530,14 +540,12 @@ public class CameraFollowController {
         // ============================================================
         boolean driving = context.isDriving() || navMode;
 
-        boolean allowCameraMove =
-                followStrategy.allowCameraMove(
-                        shouldForce,
-                        allowAutoFollow,
-                        isUserInteracting,
-                        driving,
-                        lowSpeedInside
-                );
+        boolean allowCameraMove = followStrategy.allowCameraMove(
+                shouldForce,
+                allowAutoFollow,
+                isUserInteracting,
+                driving,
+                lowSpeedInside);
 
         if (!allowCameraMove) {
             logD("updateCamera(): allowCameraMove=false");
@@ -547,18 +555,17 @@ public class CameraFollowController {
         // ============================================================
         // 6. shouldUpdateCamera（保持旧 follow() 的判断）
         // ============================================================
-        boolean canUpdateCamera =
-                shouldForce ||
-                        followStrategy.shouldUpdateCamera(
-                                context.location,
-                                context.movementState,
-                                lastCameraUpdateUptime,
-                                lastCameraTargetLatLng,
-                                lastCameraBearing,
-                                hasEverEnteredDrivingMode);
+        boolean canUpdateCamera = shouldForce ||
+                followStrategy.shouldUpdateCamera(
+                        context.location,
+                        context.movementState,
+                        lastCameraUpdateUptime,
+                        lastCameraTargetLatLng,
+                        lastCameraBearing,
+                        hasEverEnteredDrivingMode);
 
         if (lowSpeedInside) {
-            canUpdateCamera = true;   // old behavior
+            canUpdateCamera = true; // old behavior
         }
 
         if (!canUpdateCamera) {
@@ -591,7 +598,8 @@ public class CameraFollowController {
             return false;
         }
 
-        if (targetCamera == null) return false;
+        if (targetCamera == null)
+            return false;
 
         // ============================================================
         // 8. Micro-update skip（保留 + 静止去抖）
@@ -601,12 +609,14 @@ public class CameraFollowController {
             try {
                 Point pA = googleMap.getProjection().toScreenLocation(lastCameraTargetLatLng);
                 Point pB = googleMap.getProjection().toScreenLocation(targetCamera.target);
-                px = (float)Math.hypot(pA.x - pB.x, pA.y - pB.y);
-            } catch (Exception ignore) {}
+                px = (float) Math.hypot(pA.x - pB.x, pA.y - pB.y);
+            } catch (Exception ignore) {
+            }
 
             float bearingDelta = Math.abs(targetCamera.bearing -
                     (Float.isNaN(lastCameraBearing) ? targetCamera.bearing : lastCameraBearing));
-            if (bearingDelta > 180) bearingDelta = 360 - bearingDelta;
+            if (bearingDelta > 180)
+                bearingDelta = 360 - bearingDelta;
 
             float zoomDelta = Math.abs(targetCamera.zoom - googleMap.getCameraPosition().zoom);
 
@@ -945,43 +955,76 @@ public class CameraFollowController {
     }
 
     private float computeSpeedZoom(@NonNull Location location, float preferredFollowZoom) {
+        // ✅ 修复进入驾驶时zoom突变：驾驶开始2秒内保持上次zoom
+        long now = System.currentTimeMillis();
+        if (drivingModeStartTime > 0) {
+            long timeSinceEnteringDriving = now - drivingModeStartTime;
+            if (timeSinceEnteringDriving < 2000) {
+                // 使用上次的zoom，避免speedZoom在第一帧造成突变
+                if (!Float.isNaN(lastSpeedZoom)) {
+                    logD("computeSpeedZoom: delaying speedZoom, using lastSpeedZoom=" + lastSpeedZoom);
+                    return lastSpeedZoom;
+                }
+            }
+        }
+
         float kmh = location.hasSpeed() ? (location.getSpeed() * 3.6f) : 0f;
         // 滞回分档，减少在阈值附近来回切换
-        if (lastSpeedBand < 0) lastSpeedBand = 0;
+        if (lastSpeedBand < 0)
+            lastSpeedBand = 0;
         switch (lastSpeedBand) {
             case 0: // near -> city
-                if (kmh > 22f) lastSpeedBand = 1;
+                if (kmh > 22f)
+                    lastSpeedBand = 1;
                 break;
             case 1: // city <-> near/suburb
-                if (kmh < 18f) lastSpeedBand = 0;
-                else if (kmh > 55f) lastSpeedBand = 2;
+                if (kmh < 18f)
+                    lastSpeedBand = 0;
+                else if (kmh > 55f)
+                    lastSpeedBand = 2;
                 break;
             case 2: // suburb <-> city/highway
-                if (kmh < 45f) lastSpeedBand = 1;
-                else if (kmh > 85f) lastSpeedBand = 3;
+                if (kmh < 45f)
+                    lastSpeedBand = 1;
+                else if (kmh > 85f)
+                    lastSpeedBand = 3;
                 break;
             case 3: // highway -> suburb
-                if (kmh < 75f) lastSpeedBand = 2;
+                if (kmh < 75f)
+                    lastSpeedBand = 2;
                 break;
         }
 
         float baseZoom;
         switch (lastSpeedBand) {
-            case 0: baseZoom = SPEED_ZOOM_NEAR; break;
-            case 1: baseZoom = SPEED_ZOOM_CITY; break;
-            case 2: baseZoom = SPEED_ZOOM_SUBURB; break;
-            default: baseZoom = SPEED_ZOOM_HIGHWAY; break;
+            case 0:
+                baseZoom = SPEED_ZOOM_NEAR;
+                break;
+            case 1:
+                baseZoom = SPEED_ZOOM_CITY;
+                break;
+            case 2:
+                baseZoom = SPEED_ZOOM_SUBURB;
+                break;
+            default:
+                baseZoom = SPEED_ZOOM_HIGHWAY;
+                break;
         }
 
         float targetZoom = Math.max(baseZoom, Math.max(preferredFollowZoom, DRIVING_MIN_ZOOM));
+        if (Math.abs(targetZoom - lastSpeedZoom) < 0.25f) {
+            targetZoom = lastSpeedZoom; // 保持当前 zoom
+        }
 
         // 低通：单次调整不超过 0.2，避免上下跳变
         if (Float.isNaN(lastSpeedZoom)) {
             lastSpeedZoom = targetZoom;
         } else {
             float delta = targetZoom - lastSpeedZoom;
-            if (delta > 0.2f) delta = 0.2f;
-            if (delta < -0.2f) delta = -0.2f;
+            if (delta > 0.2f)
+                delta = 0.2f;
+            if (delta < -0.2f)
+                delta = -0.2f;
             lastSpeedZoom += delta;
         }
         return lastSpeedZoom;
