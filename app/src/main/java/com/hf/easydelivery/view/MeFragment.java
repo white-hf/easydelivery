@@ -40,6 +40,13 @@ public class MeFragment extends Fragment {
                 startActivity(intent);
             }
         });
+        Button largeBtn = root.findViewById(R.id.btn_my_large);
+        largeBtn.setOnClickListener(v -> {
+            if (getContext() != null) {
+                Intent intent = new Intent(getContext(), MyLargeParcelsActivity.class);
+                startActivity(intent);
+            }
+        });
         Button shareLogBtn = root.findViewById(R.id.btn_share_log);
         shareLogBtn.setOnClickListener(v -> shareLogFile());
 

@@ -85,6 +85,9 @@ import com.hf.easydelivery.view.DeveloperPanelBottomSheet;
 import com.hf.easydelivery.service.LockScreenNotificationService;
 import com.hf.easydelivery.map.CameraUpdateContext;
 
+import android.animation.ValueAnimator;
+import android.view.animation.LinearInterpolator;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -122,6 +125,13 @@ public class MapInnerFragment extends Fragment
     private static final long INSIDE_MANUAL_CENTER_HOLD_MS = 500L;
     private static final long INSIDE_BOOST_DURATION_MS = 5_000L;
     private static final long INSIDE_BOOST_COOLDOWN_MS = 25_000L;
+
+    // ===== UI location quality gating (map-layer) =====
+    private static final float GOOD_ACCURACY_DRIVING_M = 35f;
+    private static final float GOOD_ACCURACY_WALKING_M = 50f;
+    private static final long STALE_LOCATION_MS_DRIVING = 2_000L;
+    private static final long STALE_LOCATION_MS_OTHER = 5_000L;
+    private static final long MAX_PREDICTED_UI_AGE_MS = 1_500L;
 
     private void logD(String msg) {
         try {
@@ -200,6 +210,18 @@ public class MapInnerFragment extends Fragment
 
     private SmartLocationManager mSmartLocationManager;
     private Location mLastLocation = null;
+
+    // ===== Map-layer location smoothing / gating state =====
+    private Location mLastEffectiveUiLocation = null; // what marker/camera used last time
+    private Location mLastGoodLocation = null;        // last good (accurate + not stale) raw fix
+    private long mLastGoodUptimeMs = 0L;
+    private CameraUpdateContext.LocationSource mLastEffectiveSource = CameraUpdateContext.LocationSource.UNKNOWN;
+
+    // Marker smoothing
+    private ValueAnimator myLocAnimator = null;
+    private long lastMarkerAnimUptime = 0L;
+    private LatLng lastMarkerLatLng = null;
+    private float lastMarkerBearing = Float.NaN;
 
     // Fullscreen mode
     private ImageButton btnFullscreen;
@@ -927,8 +949,12 @@ public class MapInnerFragment extends Fragment
             @Override
             public void onSms(DeliveryInfo info) {
                 Long oid = info.getOrderId() == null ? -1L : info.getOrderId();
-                SmsBottomSheetFragment sheet = new SmsBottomSheetFragment(oid);
-                sheet.setFallbackInfo(info.getOrderSn(), info.getAddress(), info.getPhone(), info.getName(),
+                SmsBottomSheetFragment sheet = SmsBottomSheetFragment.newInstance(
+                        oid,
+                        info.getOrderSn(),
+                        info.getPhone(),
+                        info.getAddress(),
+                        info.getName(),
                         info.getRouteNumber());
                 sheet.show(getParentFragmentManager(), "SmsBottomSheetFragment");
             }
@@ -952,6 +978,12 @@ public class MapInnerFragment extends Fragment
                 shareIntent.setType("text/plain");
                 shareIntent.putExtra(Intent.EXTRA_TEXT, sb.toString());
                 startActivity(Intent.createChooser(shareIntent, "分享包裹信息"));
+            }
+
+            @Override
+            public void onLocate(DeliveryInfo info) {
+                dialog.dismiss();
+                focusOnDelivery(info);
             }
         }));
         dialog.show();
@@ -1165,6 +1197,15 @@ public class MapInnerFragment extends Fragment
         startActivity(intent);
     }
 
+    private void focusOnDelivery(DeliveryInfo info) {
+        if (googleMap == null) return;
+        LatLng target = new LatLng(info.getLatitude(), info.getLongitude());
+        googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(target, 17f));
+        currentPrimaryDelivery = info;
+        currentPrimaryKey = buildPrimaryKey(info);
+        showInfoPill(info, Collections.singletonList(info));
+    }
+
     private void getLocation() {
         mSmartLocationManager = SmartLocationManager.getInstance(requireContext());
         if (mSmartLocationManager != null) {
@@ -1191,6 +1232,13 @@ public class MapInnerFragment extends Fragment
                     ? INSIDE_MANUAL_CENTER_HOLD_MS
                     : MANUAL_CENTER_HOLD_MS;
             manualCenterHoldUntilMs = SystemClock.uptimeMillis() + hold;
+        }
+        // 用户手动回中心，强制提频一次，避免静止锁导致无首fix
+        if (mSmartLocationManager != null) {
+            try {
+                mSmartLocationManager.requestBoostForce(8_000L);
+            } catch (Throwable ignore) {
+            }
         }
         if (cameraController != null) {
             cameraController.resetHasCenteredOnUser();
@@ -1283,21 +1331,41 @@ public class MapInnerFragment extends Fragment
                 + ", mv=" + state
                 + ", items=" + (currentMapDeliveries == null ? 0 : currentMapDeliveries.size())
                 + ", pausedByGesture=" + autoFollowPausedByGesture);
+        // Capture previous movement state BEFORE overwriting lastMovementState
+        final SmartLocationManager.MovementState prevState = lastMovementState;
         // 通知 ViewModel 更新定位
         mapViewModel.updateMyLocation(location);
         mLastLocation = location;
         lastMovementState = state;
         if (googleMap == null || cameraController == null)
             return;
+        // --- Map-layer UI effective location (quality gating + smoothing) ---
+        final boolean isDrivingNow = (state == SmartLocationManager.MovementState.SLOW_DRIVING
+                || state == SmartLocationManager.MovementState.NORMAL_DRIVING);
 
         Location predicted = null;
         if (mSmartLocationManager != null) {
             predicted = mSmartLocationManager.getPredictedLocation();
         }
 
-        Location effective = (state == SmartLocationManager.MovementState.NORMAL_DRIVING || state == SmartLocationManager.MovementState.SLOW_DRIVING)
-                ? location // Driving 禁用预测（强烈推荐）
-                : (predicted != null ? predicted : location);
+        final boolean rawGood = isGoodFixForUi(location, state) && !isStaleForUi(location, state);
+        if (rawGood) {
+            // Cache last good raw fix for later fallback
+            mLastGoodLocation = new Location(location);
+            mLastGoodUptimeMs = SystemClock.uptimeMillis();
+        }
+
+        // Decide what the map UI should use for marker/camera.
+        Location effective = chooseEffectiveLocationForUi(location, predicted, state);
+        mLastEffectiveUiLocation = effective;
+
+        // If raw fix is poor/stale, request a short boost to recover accuracy quickly.
+        if (!rawGood && mSmartLocationManager != null) {
+            try {
+                mSmartLocationManager.requestBoost(8_000L);
+            } catch (Throwable ignore) {
+            }
+        }
 
         updateMyLocationMarker(effective);
 
@@ -1328,9 +1396,11 @@ public class MapInnerFragment extends Fragment
             currentRegionState = InfoPillProximityController.RegionState.IN_TRANSIT;
         }
 
-        // ✅ 修复进入驾驶时zoom突变：检测状态切换
-        boolean enteringDriving = (lastMovementState == SmartLocationManager.MovementState.STATIONARY || lastMovementState == SmartLocationManager.MovementState.WALKING) &&
-                (state == SmartLocationManager.MovementState.SLOW_DRIVING || state == SmartLocationManager.MovementState.NORMAL_DRIVING);
+        // ✅ 修复进入驾驶时zoom突变：检测状态切换（必须使用 prevState）
+        boolean enteringDriving = (prevState == SmartLocationManager.MovementState.STATIONARY
+                || prevState == SmartLocationManager.MovementState.WALKING)
+                && (state == SmartLocationManager.MovementState.SLOW_DRIVING
+                        || state == SmartLocationManager.MovementState.NORMAL_DRIVING);
 
         if (enteringDriving && cameraController != null) {
             long now = System.currentTimeMillis();
@@ -1359,6 +1429,12 @@ public class MapInnerFragment extends Fragment
         CameraUpdateContext cameraContext = new CameraUpdateContext(
                 effective,
                 state,
+                effective.hasAccuracy() ? effective.getAccuracy() : Float.NaN,
+                Math.abs(System.currentTimeMillis() - effective.getTime()),
+                mLastEffectiveSource,
+                effective.hasSpeed() ? effective.getSpeed() : Float.NaN,
+                effective.hasBearing() ? effective.getBearing() : Float.NaN,
+                mSmartLocationManager != null ? mSmartLocationManager.getCurrentHeading() : Float.NaN,
                 distanceMeters,
                 currentMapDeliveries,
                 insideZone,
@@ -1654,22 +1730,159 @@ public class MapInnerFragment extends Fragment
         if (myLocationIcon == null) {
             myLocationIcon = BitmapDescriptorFactory.fromBitmap(createMyLocationBitmap());
         }
-        LatLng pos = new LatLng(loc.getLatitude(), loc.getLongitude());
-        float bearing = loc.hasBearing() ? loc.getBearing() : Float.NaN;
+
+        LatLng to = new LatLng(loc.getLatitude(), loc.getLongitude());
+        float toBearing = loc.hasBearing() ? loc.getBearing() : Float.NaN;
+
         if (myLocationMarker == null) {
             MarkerOptions opts = new MarkerOptions()
-                    .position(pos)
+                    .position(to)
                     .anchor(0.5f, 0.5f)
                     .flat(true)
                     .zIndex(1000f)
                     .icon(myLocationIcon);
             myLocationMarker = googleMap.addMarker(opts);
-        } else {
-            myLocationMarker.setPosition(pos);
+            lastMarkerLatLng = to;
+            lastMarkerAnimUptime = SystemClock.uptimeMillis();
+            if (!Float.isNaN(toBearing)) {
+                lastMarkerBearing = toBearing;
+                myLocationMarker.setRotation(toBearing);
+            }
+            return;
         }
-        if (!Float.isNaN(bearing) && myLocationMarker != null) {
-            myLocationMarker.setRotation(bearing);
+
+        // Cancel previous animation
+        try {
+            if (myLocAnimator != null) {
+                myLocAnimator.cancel();
+                myLocAnimator = null;
+            }
+        } catch (Throwable ignore) {
         }
+
+        LatLng from = myLocationMarker.getPosition();
+        if (from == null) {
+            myLocationMarker.setPosition(to);
+            if (!Float.isNaN(toBearing)) {
+                myLocationMarker.setRotation(toBearing);
+            }
+            lastMarkerLatLng = to;
+            lastMarkerAnimUptime = SystemClock.uptimeMillis();
+            return;
+        }
+
+        // Duration: follow update cadence, clamp to [220, 800] ms
+        long nowUptime = SystemClock.uptimeMillis();
+        long dt = (lastMarkerAnimUptime == 0L) ? 350L : (nowUptime - lastMarkerAnimUptime);
+        long duration = Math.max(220L, Math.min(800L, dt));
+        lastMarkerAnimUptime = nowUptime;
+
+        // Bearing interpolation (handle wrap-around)
+        final float startBearing = Float.isNaN(lastMarkerBearing)
+                ? (myLocationMarker.getRotation())
+                : lastMarkerBearing;
+        final float endBearing = Float.isNaN(toBearing) ? startBearing : toBearing;
+
+        myLocAnimator = ValueAnimator.ofFloat(0f, 1f);
+        myLocAnimator.setInterpolator(new LinearInterpolator());
+        myLocAnimator.setDuration(duration);
+        myLocAnimator.addUpdateListener(anim -> {
+            float t = (float) anim.getAnimatedValue();
+            double lat = from.latitude + (to.latitude - from.latitude) * t;
+            double lng = from.longitude + (to.longitude - from.longitude) * t;
+            try {
+                myLocationMarker.setPosition(new LatLng(lat, lng));
+            } catch (Throwable ignore) {
+            }
+
+            // rotation
+            float b0 = startBearing;
+            float b1 = endBearing;
+            float delta = b1 - b0;
+            if (Math.abs(delta) > 180f) {
+                delta -= Math.signum(delta) * 360f;
+            }
+            float b = b0 + delta * t;
+            if (b < 0f)
+                b += 360f;
+            try {
+                myLocationMarker.setRotation(b);
+            } catch (Throwable ignore) {
+            }
+        });
+        try {
+            myLocAnimator.start();
+        } catch (Throwable ignore) {
+            myLocationMarker.setPosition(to);
+            if (!Float.isNaN(toBearing)) {
+                myLocationMarker.setRotation(toBearing);
+            }
+        }
+
+        lastMarkerLatLng = to;
+        if (!Float.isNaN(toBearing)) {
+            lastMarkerBearing = toBearing;
+        }
+    }
+    private boolean isGoodFixForUi(@NonNull Location loc, @NonNull SmartLocationManager.MovementState state) {
+        if (!loc.hasAccuracy()) return false;
+        float acc = loc.getAccuracy();
+        boolean driving = (state == SmartLocationManager.MovementState.SLOW_DRIVING
+                || state == SmartLocationManager.MovementState.NORMAL_DRIVING);
+        float threshold = driving ? GOOD_ACCURACY_DRIVING_M : GOOD_ACCURACY_WALKING_M;
+        return acc > 0f && acc <= threshold;
+    }
+
+    private boolean isStaleForUi(@NonNull Location loc, @NonNull SmartLocationManager.MovementState state) {
+        long now = System.currentTimeMillis();
+        long age = Math.abs(now - loc.getTime());
+        boolean driving = (state == SmartLocationManager.MovementState.SLOW_DRIVING
+                || state == SmartLocationManager.MovementState.NORMAL_DRIVING);
+        long threshold = driving ? STALE_LOCATION_MS_DRIVING : STALE_LOCATION_MS_OTHER;
+        return age > threshold;
+    }
+
+    private boolean isPredictedUsableForUi(@Nullable Location predicted) {
+        if (predicted == null) return false;
+        long now = System.currentTimeMillis();
+        long age = Math.abs(now - predicted.getTime());
+        return age <= MAX_PREDICTED_UI_AGE_MS;
+    }
+
+    @NonNull
+    private Location chooseEffectiveLocationForUi(@NonNull Location raw,
+                                                 @Nullable Location predicted,
+                                                 @NonNull SmartLocationManager.MovementState state) {
+        final boolean driving = (state == SmartLocationManager.MovementState.SLOW_DRIVING
+                || state == SmartLocationManager.MovementState.NORMAL_DRIVING);
+
+        final boolean rawGood = isGoodFixForUi(raw, state) && !isStaleForUi(raw, state);
+
+        // Driving: only use predicted when raw is poor/stale to keep UI continuous.
+        if (driving) {
+            if (rawGood) {
+                mLastEffectiveSource = CameraUpdateContext.LocationSource.RAW;
+                return new Location(raw);
+            }
+            if (isPredictedUsableForUi(predicted)) {
+                mLastEffectiveSource = CameraUpdateContext.LocationSource.PREDICTED;
+                return new Location(predicted);
+            }
+            if (mLastGoodLocation != null && isLocationFresh(mLastGoodLocation)) {
+                mLastEffectiveSource = CameraUpdateContext.LocationSource.LAST_GOOD;
+                return new Location(mLastGoodLocation);
+            }
+            mLastEffectiveSource = CameraUpdateContext.LocationSource.RAW;
+            return new Location(raw);
+        }
+
+        // Walking/Stationary: prefer predicted when fresh (smoother), otherwise use raw.
+        if (isPredictedUsableForUi(predicted)) {
+            mLastEffectiveSource = CameraUpdateContext.LocationSource.PREDICTED;
+            return new Location(predicted);
+        }
+        mLastEffectiveSource = CameraUpdateContext.LocationSource.RAW;
+        return new Location(raw);
     }
 
     private Bitmap createMyLocationBitmap() {
@@ -1828,6 +2041,13 @@ public class MapInnerFragment extends Fragment
             }
             myLocationMarker = null;
         }
+        try {
+            if (myLocAnimator != null) {
+                myLocAnimator.cancel();
+                myLocAnimator = null;
+            }
+        } catch (Throwable ignore) {
+        }
         myLocationIcon = null;
         if (cameraController != null) {
             cameraController.cancelAnimations();
@@ -1876,7 +2096,7 @@ public class MapInnerFragment extends Fragment
     private final Runnable edgeCheckRunnable = new Runnable() {
         @Override
         public void run() {
-            if (googleMap == null || mLastLocation == null || navigationModeEnabled) {
+            if (googleMap == null || mLastEffectiveUiLocation == null || navigationModeEnabled) {
                 edgeCheckHandler.postDelayed(this, 1000);
                 return;
             }
@@ -1890,7 +2110,7 @@ public class MapInnerFragment extends Fragment
                 }
             }
 
-            LatLng myLatLng = new LatLng(mLastLocation.getLatitude(), mLastLocation.getLongitude());
+            LatLng myLatLng = new LatLng(mLastEffectiveUiLocation.getLatitude(), mLastEffectiveUiLocation.getLongitude());
             LatLng center = googleMap.getCameraPosition().target;
             float distance = distanceBetweenMeters(center, myLatLng);
 

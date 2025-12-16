@@ -49,6 +49,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".view.MyLargeParcelsActivity"
+            android:exported="false" />
 
         <!-- 登录页面，弹出登录/返回主页 -->
         <activity

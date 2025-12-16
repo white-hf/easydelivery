@@ -44,8 +44,24 @@ public class ApartmentGalleryActivity extends AppCompatActivity implements Apart
     private void loadData() {
         executor.execute(() -> {
             List<ApartmentPhotoEntity> list = service.listAll();
+            // 自动清理脏数据（无文件路径或文件不存在）
+            List<ApartmentPhotoEntity> cleaned = new ArrayList<>();
+            if (list != null) {
+                for (ApartmentPhotoEntity e : list) {
+                    if (e == null || TextUtils.isEmpty(e.filePath)) {
+                        if (e != null) service.delete(e);
+                        continue;
+                    }
+                    java.io.File f = new java.io.File(e.filePath);
+                    if (!f.exists()) {
+                        service.delete(e);
+                        continue;
+                    }
+                    cleaned.add(e);
+                }
+            }
             runOnUiThread(() -> {
-                List<ApartmentPhotoEntity> safeList = list == null ? new ArrayList<>() : list;
+                List<ApartmentPhotoEntity> safeList = cleaned;
                 adapter.submitList(safeList);
                 emptyView.setVisibility(safeList.isEmpty() ? View.VISIBLE : View.GONE);
             });

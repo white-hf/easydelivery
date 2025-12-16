@@ -24,6 +24,20 @@
             android:textSize="24sp"
             android:textColor="@android:color/black"/>
 
+        <TextView
+            android:id="@+id/tv_large_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="大件"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:background="@android:color/holo_orange_dark"
+            android:visibility="gone" />
+
         <ImageView
             android:id="@+id/btn_expand"
             android:layout_width="32dp"
@@ -78,12 +92,14 @@
             android:background="?selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_share"
             android:contentDescription="分享" />
-    </LinearLayout>
 
-    <FrameLayout
-        android:id="@+id/map_container"
-        android:layout_width="match_parent"
-        android:layout_height="160dp"
-        android:visibility="gone"
-        android:layout_marginTop="8dp" />
+        <ImageButton
+            android:id="@+id/btn_locate"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="12dp"
+            android:background="?selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_mylocation"
+            android:contentDescription="定位到地图" />
+    </LinearLayout>
 </LinearLayout>

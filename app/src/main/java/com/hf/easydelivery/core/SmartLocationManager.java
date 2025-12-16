@@ -46,6 +46,8 @@ import android.util.Log;
 import androidx.core.app.ActivityCompat;
 
 import android.hardware.Sensor;
+import androidx.annotation.Nullable;
+import androidx.annotation.NonNull;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
@@ -72,7 +74,7 @@ import java.util.List;
 /**
  * The SmartLocationManager class provides location-related functionality and
  * try to reduce consumption of battery.
- * 
+ *
  * @author jvtang
  * @since 2024-08-21
  */
@@ -87,6 +89,12 @@ public class SmartLocationManager {
     private Location lastLocation;
     private Location lastSmoothedLocation;
     private Location lastPredictedLocation;
+    // --- Split caches to avoid low-accuracy pollution / UI stalls ---
+    // lastRawLocation: always the most recent fix (even if poor)
+    // lastLocation: last GOOD fix used for speed/state logic (kept for backward compatibility)
+    private Location lastRawLocation;
+    private Location lastDispatchedLocation;
+    private long lastGoodLocationUptimeMs = 0L;
     private long lastDispatchUptimeMs = 0L;
     private float speed;
     private long lastUpdateTime;
@@ -156,15 +164,15 @@ public class SmartLocationManager {
     private boolean singleUpdateInFlight = false;
 
     // 常量定义
-    private static final long DELIVERING_IDLE_THRESHOLD_MS = 10_000L; // 停车/步行超过此时间认为司机不看地图
+    private static final long DELIVERING_IDLE_THRESHOLD_MS = 180_000L; // 3min: avoid red-light/traffic mis-downgrade
     private static final long INTERVAL_DRIVING_NORMAL_MS = 1_500L;
     private static final long INTERVAL_DRIVING_SLOW_MS = 2_500L;
-    private static final long INTERVAL_WALKING_MS = 5_000L;
+    private static final long INTERVAL_WALKING_MS = 2_000L;
     private static final long INTERVAL_DELIVERING_MS = 45_000L;
 
     private static final long MIN_INTERVAL_DRIVING_NORMAL_MS = 800L;
     private static final long MIN_INTERVAL_DRIVING_SLOW_MS = 1_500L;
-    private static final long MIN_INTERVAL_WALKING_MS = 3_000L;
+    private static final long MIN_INTERVAL_WALKING_MS = 1_000L;
     private static final long MIN_INTERVAL_DELIVERING_MS = 30_000L;
 
     public interface WeakSignalListener extends LocationUpdateListener {
@@ -195,10 +203,19 @@ public class SmartLocationManager {
 
     /**
      * 请求一段时间的高频定位（可叠加延长保持时间）。
-     * 
+     *
      * @param durationMs 例如 20_000（20 秒）
      */
     public void requestBoost(long durationMs) {
+        requestBoostInternal(durationMs, false);
+    }
+
+    /** 用户手势/强制提频，绕过静止>3分钟限制。 */
+    public void requestBoostForce(long durationMs) {
+        requestBoostInternal(durationMs, true);
+    }
+
+    private void requestBoostInternal(long durationMs, boolean force) {
         long now = System.currentTimeMillis();
 
         // ✅ 架构师建议#9: 2秒内防止Boost叠加
@@ -210,11 +227,23 @@ public class SmartLocationManager {
 
         // ✅ 架构师建议：只有真·静止3分钟以上才拒绝提频
         // 允许红灯、塞车时仍保持高频
-        if (speed < 0.3f && (now - lastMovingTimeMs > 180_000L)) {
-            FileLog.getInstance().debug(TAG,
-                    "requestBoost refused: truly stationary for " +
-                            (now - lastMovingTimeMs) / 1000 + "s");
-            return;
+        // 启动后还没有任何有效移动时，允许一次提频获取首 fix
+        if (lastMovingTimeMs == 0L) {
+            lastMovingTimeMs = now;
+        } else if (!force && speed < 0.3f && (now - lastMovingTimeMs > 180_000L)) {
+            long sinceMotionWake = SystemClock.uptimeMillis() - lastMotionWakeUptime;
+            if (sinceMotionWake > 15_000L) {
+                FileLog.getInstance().debug(TAG,
+                        "requestBoost refused: truly stationary for " +
+                                (now - lastMovingTimeMs) / 1000 + "s");
+                return;
+            } else {
+                FileLog.getInstance().debug(TAG,
+                        "requestBoost allowed after motion wake, stationary for "
+                                + (now - lastMovingTimeMs) / 1000 + "s");
+            }
+        } else if (force) {
+            FileLog.getInstance().debug(TAG, "requestBoost forced by user/gesture");
         }
 
         if (durationMs <= 0)
@@ -229,7 +258,7 @@ public class SmartLocationManager {
 
     /**
      * 便捷：地图检测到"边缘风险/不平滑风险"时调用。
-     * 
+     *
      * @param offsetMeters 蓝点相对目标中心的米偏移
      * @param speedMps     当前速度 m/s
      */
@@ -296,6 +325,9 @@ public class SmartLocationManager {
             return;
         }
 
+        // 启动时重置静止计时，避免继承上次会话的“长时间静止”状态
+        lastMovingTimeMs = System.currentTimeMillis();
+
         locationCallback = new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult locationResult) {
@@ -330,7 +362,7 @@ public class SmartLocationManager {
                 .setIntervalMillis(interval)
                 .setMinUpdateIntervalMillis(minInterval)
                 .setMaxUpdateDelayMillis(0)
-                .setMinUpdateDistanceMeters(2.0f)
+                .setMinUpdateDistanceMeters(0.5f)
                 .setWaitForAccurateLocation(false)
                 .build();
 
@@ -366,8 +398,15 @@ public class SmartLocationManager {
 
     private void updateLocation(Location newLocation) {
 
-        Location prevLast = lastLocation;
+        Location prevGood = lastLocation;
         long nowMillis = System.currentTimeMillis();
+
+        // Always keep raw (even if poor) so we can diagnose/repair without UI stalls
+        lastRawLocation = newLocation;
+
+        // Treat very old fixes as poor (can happen with batched / cached results)
+        long ageMs = nowMillis - newLocation.getTime();
+        boolean staleFix = ageMs > 5_000L;
 
         // ✅ Bug#4修复：动态精度检查（但不立即return）
         long timeSinceGoodFix = nowMillis - lastGoodFixTime;
@@ -376,17 +415,66 @@ public class SmartLocationManager {
                 : ACCURACY_THRESHOLD_GOOD;
 
         boolean lowAccuracy = newLocation.getAccuracy() > accuracyThreshold;
-        if (lowAccuracy) {
+        boolean poorFix = staleFix || lowAccuracy;
+
+        if (poorFix) {
             FileLog.getInstance().debug(TAG,
-                    String.format("Low accuracy: %.1fm (threshold: %.1fm) - updating state only",
-                            newLocation.getAccuracy(), accuracyThreshold));
+                    String.format("Poor fix: acc=%.1fm(thr=%.1fm) stale=%s age=%dms -> dispatch fallback (no state update)",
+                            newLocation.getAccuracy(), accuracyThreshold, String.valueOf(staleFix), ageMs));
         }
 
-        if (newLocation.getAccuracy() <= ACCURACY_THRESHOLD_GOOD) {
+        // Record last good fix time using strict GOOD threshold
+        if (!staleFix && newLocation.getAccuracy() <= ACCURACY_THRESHOLD_GOOD) {
             lastGoodFixTime = nowMillis;
         }
 
-        // ✅ 速度兜底策略（始终执行）
+        // ✅ Bug#4修复：Emergency Boost基于 last GOOD fix 的时间，避免UI断流
+        if (prevGood != null) {
+            long timeSinceLastGood = nowMillis - prevGood.getTime();
+            if (timeSinceLastGood > EMERGENCY_BOOST_THRESHOLD_MS && !inBurstMode) {
+                FileLog.getInstance().debug(TAG,
+                        String.format("Emergency boost: no good fix for %ds", timeSinceLastGood / 1000));
+                requestBoost(10_000L);
+            }
+        }
+
+        // =========================================================
+        // POOR FIX PATH: never stop dispatching, but DO NOT pollute state/speed
+        // =========================================================
+        if (poorFix) {
+            // If we still don't have any good fix, try single high accuracy fix to bootstrap
+            if (lastGoodFixTime == 0L && !singleUpdateInFlight) {
+                requestSingleHighAccuracyFix();
+            }
+
+            // Build a fallback location to keep UI moving smoothly
+            Location fallback = buildFallbackForDispatch(newLocation, nowMillis);
+            if (fallback == null) {
+                fallback = new Location(newLocation);
+            }
+
+            // Update lastDispatchedLocation for continuity
+            lastDispatchedLocation = fallback;
+
+            // If we have never had a good fix, keep lastLocation as something usable
+            if (lastLocation == null) {
+                lastLocation = fallback;
+                lastUpdateTime = fallback.getTime();
+            }
+
+            // Dispatch to listeners (do not update movement state from poor fix)
+            dispatchToListeners(fallback);
+            lastDispatchUptimeMs = SystemClock.uptimeMillis();
+
+            // Do NOT forward poor fixes to distance tracker
+            return;
+        }
+
+        // =========================================================
+        // GOOD FIX PATH: update speed/state and normal smoothing/prediction
+        // =========================================================
+
+        // ✅ 速度兜底策略（仅在 good fix 时更新，避免 low-accuracy 污染）
         float gpsSpeed = newLocation.hasSpeed() ? newLocation.getSpeed() : 0f;
         float displacementSpeed = 0f;
         float distance = 0f;
@@ -401,48 +489,12 @@ public class SmartLocationManager {
         }
         speed = Math.max(gpsSpeed, displacementSpeed);
 
-        // ✅ lastMovingTimeMs更新（始终执行）
+        // ✅ lastMovingTimeMs更新（good fix）
         if (speed > 0.3f || distance > 2.0f) {
             lastMovingTimeMs = nowMillis;
         }
 
-        // ✅ Bug#4修复：Emergency Boost基于lastLocation时间而非lastDispatch
-        if (lastLocation != null) {
-            long timeSinceLastLocation = nowMillis - lastLocation.getTime();
-            if (timeSinceLastLocation > EMERGENCY_BOOST_THRESHOLD_MS && !inBurstMode) {
-                FileLog.getInstance().debug(TAG,
-                        String.format("Emergency boost: no location for %ds",
-                                timeSinceLastLocation / 1000));
-                requestBoost(10_000L);
-            }
-        }
-
-        // ✅ Bug#4修复：低精度时只更新状态，不分发
-        if (lowAccuracy) {
-            lastLocation = newLocation;
-            lastUpdateTime = newLocation.getTime();
-            updateMovementState();
-            return; // 不继续分发
-        }
-
-        // ✅ 双层过滤 Layer 1: 粗过滤（防抖），避免静止/步行时的GPS抖动刷屏
-        // 静止/步行状态下：时间<2s 且 位移<2m => 不分发（但仍更新state）
-        boolean shouldDispatch = true;
-        if ((currentState == MovementState.STATIONARY || currentState == MovementState.WALKING)
-                && lastLocation != null) {
-            long timeDiff = newLocation.getTime() - lastUpdateTime;
-            // ✅ 修复Bug：复用外层distance（不要重新声明）
-            distance = lastLocation.distanceTo(newLocation);
-
-            if (timeDiff < 2000 && distance < 2.0f) {
-                shouldDispatch = false;
-                FileLog.getInstance().debug(TAG,
-                        String.format("Location update filtered: state=%s, time=%dms, dist=%.1fm",
-                                currentState, timeDiff, distance));
-            }
-        }
-
-        // ✅ 架构师建议：位移>8米立即唤醒（最关键！）
+        // ✅ 架构师建议：位移>8米立即唤醒（仅 good fix 可信）
         if (lastLocation != null) {
             float displacement = lastLocation.distanceTo(newLocation);
             if (displacement > 8.0f) {
@@ -453,18 +505,32 @@ public class SmartLocationManager {
         }
 
         // Jump risk：两次点位跨度较大且在快速移动 → 临时提频以避免"到边再跳回"的突兀
-        if (!inBurstMode && prevLast != null) {
-            float jumpMeters = prevLast.distanceTo(newLocation);
+        if (!inBurstMode && prevGood != null) {
+            float jumpMeters = prevGood.distanceTo(newLocation);
             boolean movingFast = speed > 10f;
             if (movingFast && jumpMeters > 30f) {
                 requestBoost(20_000L);
             }
         }
 
+        // Commit GOOD fix as lastLocation (used for state/speed)
         lastLocation = newLocation;
-        lastUpdateTime = newLocation.getTime();
+        lastGoodLocationUptimeMs = SystemClock.uptimeMillis();
+        long prevUpdateTime = lastUpdateTime;
 
         boolean stateChanged = updateMovementState();
+
+        // ✅ 双层过滤 Layer 1: 粗过滤（防抖），避免静止/步行时的GPS抖动刷屏
+        // 静止/步行状态下：时间<2s 且 位移<2m => 不分发（但仍更新state）
+        boolean shouldDispatch = true;
+        if ((currentState == MovementState.STATIONARY || currentState == MovementState.WALKING)
+                && lastSmoothedLocation != null) {
+            long timeDiff = prevUpdateTime <= 0L ? Long.MAX_VALUE : newLocation.getTime() - prevUpdateTime;
+            float d = lastSmoothedLocation.distanceTo(newLocation);
+            if (timeDiff < 2000 && d < 2.0f) {
+                shouldDispatch = false;
+            }
+        }
 
         if (!shouldDispatch) {
             return;
@@ -482,18 +548,15 @@ public class SmartLocationManager {
         } else {
             outputLoc = newLocation;
         }
+
         lastSmoothedLocation = outputLoc;
         float bearingInput = newLocation.hasBearing() ? newLocation.getBearing() : Float.NaN;
         lastPredictedLocation = predictFutureLocation(outputLoc, speed, bearingInput);
 
-        if (!listeners.isEmpty()) {
-            for (LocationUpdateListener l : listeners) {
-                try {
-                    l.onLocationUpdate(outputLoc, currentState);
-                } catch (Exception ignored) {
-                }
-            }
-        }
+        // Dispatch
+        lastDispatchedLocation = outputLoc;
+        dispatchToListeners(outputLoc);
+        lastUpdateTime = newLocation.getTime();
 
         // ✅ 弱信号检测优化：连续次数 + 时间窗口
         if (newLocation.getAccuracy() > WEAK_SIGNAL_THRESHOLD) {
@@ -526,12 +589,9 @@ public class SmartLocationManager {
             updateLocationParametersForState();
         }
 
-        // ❌ 移除Boost强制退出 - 让其自然过期，避免红灯时误退
-
         lastDispatchUptimeMs = SystemClock.uptimeMillis();
 
         this.forwardToDrivingDistanceTracker(outputLoc, currentState);
-
     }
 
     private boolean updateMovementState() {
@@ -1016,6 +1076,8 @@ public class SmartLocationManager {
             return;
         }
         lastMotionWakeUptime = nowUptime;
+        // 上报运动唤醒，确保不再被“长期静止”挡住
+        lastMovingTimeMs = System.currentTimeMillis();
         FileLog.getInstance().debug(TAG, "motion wake detected -> boost + single fix");
         try {
             requestBoost(8_000L);
@@ -1122,4 +1184,51 @@ public class SmartLocationManager {
         }
     }
 
+
+    @Nullable
+    private Location buildFallbackForDispatch(@NonNull Location raw, long nowMillis) {
+        // 1) Prefer a very recent prediction
+        if (lastPredictedLocation != null) {
+            long age = nowMillis - lastPredictedLocation.getTime();
+            if (age >= 0 && age <= 2_000L) {
+                Location p = new Location(lastPredictedLocation);
+                p.setTime(nowMillis);
+                return p;
+            }
+        }
+
+        // 2) Short-horizon predict from last dispatched / smoothed location
+        Location base = null;
+        if (lastDispatchedLocation != null) {
+            base = lastDispatchedLocation;
+        } else if (lastSmoothedLocation != null) {
+            base = lastSmoothedLocation;
+        } else if (lastLocation != null) {
+            base = lastLocation;
+        }
+
+        if (base == null) return null;
+
+        float bearingInput = raw.hasBearing() ? raw.getBearing() : Float.NaN;
+        Location predicted = predictFutureLocation(base, speed, bearingInput);
+        if (predicted != null) {
+            predicted.setTime(nowMillis);
+            return predicted;
+        }
+
+        // 3) As a last resort, reuse base to keep UI stable
+        Location reuse = new Location(base);
+        reuse.setTime(nowMillis);
+        return reuse;
+    }
+
+    private void dispatchToListeners(@NonNull Location loc) {
+        if (listeners.isEmpty()) return;
+        for (LocationUpdateListener l : listeners) {
+            try {
+                l.onLocationUpdate(loc, currentState);
+            } catch (Exception ignored) {
+            }
+        }
+    }
 }

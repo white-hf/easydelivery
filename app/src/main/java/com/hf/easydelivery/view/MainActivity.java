@@ -2,6 +2,8 @@ package com.hf.easydelivery.view;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Build;
+import android.view.WindowManager;
 import androidx.annotation.NonNull;
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
@@ -23,6 +25,8 @@ public class MainActivity extends AppCompatActivity
     private static final String TAG_DELIVER = "tab_deliver";
     private static final String TAG_SCAN = "tab_scan";
     private static final String TAG_ME = "tab_me";
+    private static final String EXTRA_FROM_LOCKSCREEN = "from_lockscreen";
+    private static final String EXTRA_OPEN_DELIVERY_PANEL = "open_delivery_panel";
     private BottomNavigationView bottomNav;
     private ViewPager2 viewPager;
     private MapViewModel mapViewModel;
@@ -32,6 +36,10 @@ public class MainActivity extends AppCompatActivity
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // If launched from a lock-screen full-screen intent, allow showing above the keyguard.
+        // NOTE: We do NOT dismiss/unlock the device; we only allow display while locked.
+        handleLockScreenLaunch(getIntent());
 
         // Use OnBackPressedDispatcher to handle back presses normally without overlay
         // logic
@@ -132,6 +140,13 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleLockScreenLaunch(intent);
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         // Start monitoring deliveries for lock screen notification
@@ -174,6 +189,31 @@ public class MainActivity extends AppCompatActivity
         if (isFinishing() && lockScreenManager != null && mapViewModel != null) {
             lockScreenManager.stopMonitoring(mapViewModel);
         }
+    }
+
+    private void handleLockScreenLaunch(Intent intent) {
+        if (intent == null) return;
+        boolean fromLockscreen = intent.getBooleanExtra(EXTRA_FROM_LOCKSCREEN, false)
+                || intent.getBooleanExtra(EXTRA_OPEN_DELIVERY_PANEL, false);
+        if (!fromLockscreen) return;
+
+        // Enable display on lock screen for this Activity instance.
+        // This is required for Pixel devices where full-screen intent launches the Activity,
+        // but the UI may remain behind the keyguard unless explicitly allowed.
+        enableShowWhenLocked();
+    }
+
+    private void enableShowWhenLocked() {
+        // Android 8.1+ official APIs
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+        }
+        // Backward / OEM compatibility flags (safe to apply even on newer versions)
+        getWindow().addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                        | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                        | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
     // ViewPager2 adapter

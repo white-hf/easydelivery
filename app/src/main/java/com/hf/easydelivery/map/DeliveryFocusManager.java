@@ -72,10 +72,7 @@ public class DeliveryFocusManager {
     private static final String TAG = "DeliveryFocusManager";
 
     private static void logI(String msg) {
-        try {
-            FileLog.i(TAG, msg);
-        } catch (Throwable ignore) {
-        }
+        // silence verbose logs
     }
 
     // Pretty printer for distance logs: hide sentinel/absurd values

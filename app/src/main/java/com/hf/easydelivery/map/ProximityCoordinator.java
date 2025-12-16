@@ -37,10 +37,7 @@ public final class ProximityCoordinator {
     }
 
     private static void logD(String msg) {
-        try {
-            FileLog.getInstance().debug(TAG, msg);
-        } catch (Throwable ignore) {
-        }
+        // silence verbose logs
     }
 
     // ==== Listener for UI layer ====

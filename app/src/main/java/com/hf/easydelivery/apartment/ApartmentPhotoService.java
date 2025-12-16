@@ -127,7 +127,15 @@ public class ApartmentPhotoService {
                              String addressKey,
                              String displayAddress,
                              boolean manualSource) {
-        if (TextUtils.isEmpty(addressKey) || sourceFile == null || !sourceFile.exists()) {
+        if (sourceFile == null || !sourceFile.exists()) {
+            return false;
+        }
+        String keyToUse = addressKey;
+        if (TextUtils.isEmpty(keyToUse)) {
+            // 使用司机编辑的展示地址生成手动 key，确保后续能模糊匹配
+            keyToUse = ApartmentAddressKeyBuilder.manualKeyFromInput(displayAddress);
+        }
+        if (TextUtils.isEmpty(keyToUse)) {
             return false;
         }
         File dest = new File(storageDir, "apt_" + System.currentTimeMillis() + ".jpg");

@@ -12,10 +12,23 @@ import java.util.List;
  * Encapsulates all state required for CameraFollowController to make decisions.
  */
 public class CameraUpdateContext {
+    public enum LocationSource {
+        RAW,
+        LAST_GOOD,
+        PREDICTED,
+        UNKNOWN
+    }
+
     @NonNull
     public final Location location;
     @NonNull
     public final SmartLocationManager.MovementState movementState;
+    public final float accuracyMeters;
+    public final long locationAgeMs;
+    public final LocationSource locationSource;
+    public final float speedMps;
+    public final float bearingDeg;
+    public final float headingDeg;
     public final float nearestPackageDistanceMeters;
     @Nullable
     public final List<DeliveryInfo> nearbyDeliveries;
@@ -29,6 +42,12 @@ public class CameraUpdateContext {
     public CameraUpdateContext(
             @NonNull Location location,
             @NonNull SmartLocationManager.MovementState movementState,
+            float accuracyMeters,
+            long locationAgeMs,
+            @NonNull LocationSource locationSource,
+            float speedMps,
+            float bearingDeg,
+            float headingDeg,
             float nearestPackageDistanceMeters,
             @Nullable List<DeliveryInfo> nearbyDeliveries,
             boolean insideDeliveryZone,
@@ -39,6 +58,12 @@ public class CameraUpdateContext {
             boolean isNavigationMode) {
         this.location = location;
         this.movementState = movementState;
+        this.accuracyMeters = accuracyMeters;
+        this.locationAgeMs = locationAgeMs;
+        this.locationSource = locationSource;
+        this.speedMps = speedMps;
+        this.bearingDeg = bearingDeg;
+        this.headingDeg = headingDeg;
         this.nearestPackageDistanceMeters = nearestPackageDistanceMeters;
         this.nearbyDeliveries = nearbyDeliveries;
         this.insideDeliveryZone = insideDeliveryZone;

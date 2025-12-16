@@ -23,6 +23,13 @@
         android:layout_marginTop="16dp" />
 
     <Button
+        android:id="@+id/btn_my_large"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="我的大件"
+        android:layout_marginTop="16dp" />
+
+    <Button
         android:id="@+id/btn_share_log"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

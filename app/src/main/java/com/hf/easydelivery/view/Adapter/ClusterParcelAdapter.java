@@ -8,12 +8,6 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.android.gms.maps.CameraUpdateFactory;
-import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.MapView;
-import com.google.android.gms.maps.OnMapReadyCallback;
-import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.MarkerOptions;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.dao.DeliveryInfo;
 
@@ -32,6 +26,7 @@ public class ClusterParcelAdapter extends RecyclerView.Adapter<ClusterParcelAdap
         void onCall(DeliveryInfo info);
         void onSms(DeliveryInfo info);
         void onShare(DeliveryInfo info);
+        void onLocate(DeliveryInfo info);
     }
 
     private final List<DeliveryInfo> data = new ArrayList<>();
@@ -57,6 +52,8 @@ public class ClusterParcelAdapter extends RecyclerView.Adapter<ClusterParcelAdap
     public void onBindViewHolder(@NonNull VH h, int pos) {
         DeliveryInfo info = data.get(pos);
         h.tvRoute.setText(info.getRouteNumber());
+        boolean isLarge = com.hf.easydelivery.core.LargeParcelStore.isLarge(h.itemView.getContext(), info);
+        h.tvLargeBadge.setVisibility(isLarge ? View.VISIBLE : View.GONE);
 
         String streetNo = String.valueOf(info.getCivilNumber());
         String unitNo = info.getUnitNumber() != null ? info.getUnitNumber() : "无";
@@ -77,12 +74,6 @@ public class ClusterParcelAdapter extends RecyclerView.Adapter<ClusterParcelAdap
 
         boolean expanded = expandedPosition == pos;
         h.actions.setVisibility(expanded ? View.VISIBLE : View.GONE);
-        h.mapContainer.setVisibility(expanded ? View.VISIBLE : View.GONE);
-        if (expanded) {
-            h.bindMap(info);
-        } else {
-            h.destroyMap();
-        }
 
         h.btnCall.setOnClickListener(v -> {
             if (actionClick != null) actionClick.onCall(info);
@@ -93,12 +84,14 @@ public class ClusterParcelAdapter extends RecyclerView.Adapter<ClusterParcelAdap
         h.btnShare.setOnClickListener(v -> {
             if (actionClick != null) actionClick.onShare(info);
         });
+        h.btnLocate.setOnClickListener(v -> {
+            if (actionClick != null) actionClick.onLocate(info);
+        });
     }
 
     @Override
     public void onViewRecycled(@NonNull VH holder) {
         super.onViewRecycled(holder);
-        holder.destroyMap();
     }
 
     @Override
@@ -107,80 +100,22 @@ public class ClusterParcelAdapter extends RecyclerView.Adapter<ClusterParcelAdap
     }
 
     static class VH extends RecyclerView.ViewHolder {
-        final TextView tvRoute, tvDetail;
+        final TextView tvRoute, tvDetail, tvLargeBadge;
         final View btnExpand;
         final View actions;
-        final View btnCall, btnSms, btnShare;
-        final ViewGroup mapContainer;
-        MapView mapView;
-        GoogleMap miniMap;
+        final View btnCall, btnSms, btnShare, btnLocate;
 
         VH(@NonNull View itemView) {
             super(itemView);
             tvRoute = itemView.findViewById(R.id.tv_route);
+            tvLargeBadge = itemView.findViewById(R.id.tv_large_badge);
             tvDetail = itemView.findViewById(R.id.tv_detail);
             btnExpand = itemView.findViewById(R.id.btn_expand);
             actions = itemView.findViewById(R.id.actions_container);
             btnCall = itemView.findViewById(R.id.btn_call);
             btnSms = itemView.findViewById(R.id.btn_sms);
             btnShare = itemView.findViewById(R.id.btn_share);
-            mapContainer = itemView.findViewById(R.id.map_container);
-        }
-
-        void bindMap(DeliveryInfo info) {
-            if (mapContainer == null) return;
-            if (mapView == null) {
-                mapView = new MapView(itemView.getContext());
-                mapContainer.setVisibility(View.VISIBLE);
-                mapContainer.post(() -> {
-                    if (mapView.getParent() == null) {
-                        mapContainer.setTag(mapView);
-                        mapContainer.setClickable(false);
-                        mapContainer.setFocusable(false);
-                        mapContainer.setEnabled(false);
-                        mapContainer.addView(mapView,
-                                new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                                        ViewGroup.LayoutParams.MATCH_PARENT));
-                        mapView.onCreate(null);
-                        mapView.onResume();
-                        mapView.getMapAsync(new OnMapReadyCallback() {
-                            @Override
-                            public void onMapReady(@NonNull GoogleMap googleMap) {
-                                miniMap = googleMap;
-                                miniMap.getUiSettings().setAllGesturesEnabled(false);
-                                miniMap.getUiSettings().setMapToolbarEnabled(false);
-                                miniMap.clear();
-                                LatLng target = new LatLng(info.getLatitude(), info.getLongitude());
-                                miniMap.addMarker(new MarkerOptions().position(target).title(info.getRouteNumber()));
-                                miniMap.moveCamera(CameraUpdateFactory.newLatLngZoom(target, 16f));
-                            }
-                        });
-                    }
-                });
-            } else {
-                mapView.onResume();
-                if (miniMap != null) {
-                    miniMap.clear();
-                    LatLng target = new LatLng(info.getLatitude(), info.getLongitude());
-                    miniMap.addMarker(new MarkerOptions().position(target).title(info.getRouteNumber()));
-                    miniMap.moveCamera(CameraUpdateFactory.newLatLngZoom(target, 16f));
-                }
-            }
-        }
-
-        void destroyMap() {
-            if (mapView != null) {
-                try {
-                    mapView.onPause();
-                    mapView.onDestroy();
-                    if (mapContainer instanceof ViewGroup) {
-                        ((ViewGroup) mapContainer).removeAllViews();
-                    }
-                } catch (Exception ignored) {
-                }
-                mapView = null;
-                miniMap = null;
-            }
+            btnLocate = itemView.findViewById(R.id.btn_locate);
         }
     }
 }
