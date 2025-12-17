@@ -14,22 +14,24 @@ import android.os.IBinder;
 import android.text.TextUtils;
 import android.widget.RemoteViews;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.dao.DeliveryInfo;
-import com.hf.easydelivery.map.MapConfig;
-import com.hf.easydelivery.view.MainActivity;
+// import com.hf.easydelivery.view.MainActivity;
 import com.hf.easydelivery.view.CameraActivity;
 import com.hf.courierservice.apihelper.FileLog;
 
 import java.util.Locale;
-import java.util.ArrayList;
-import java.util.List;
 
 import android.content.BroadcastReceiver;
 import android.content.IntentFilter;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.os.SystemClock;
 
 /**
  * Foreground service to display delivery information on lock screen
@@ -44,28 +46,34 @@ public class LockScreenNotificationService extends Service {
 
     // ✅ Lockscreen strong visibility compat toggles
     // Full-screen intent is intrusive. Enable ONLY for lockscreen use.
-    private static final boolean ENABLE_FULL_SCREEN_INTENT = true;
+    private static final boolean ENABLE_FULL_SCREEN_INTENT = false;
     // Heads-up needs a channel with sound/vibration to reliably appear on Pixel devices.
     // Keep OFF by default; full-screen already covers the lockscreen UX.
     private static final boolean ENABLE_HEADS_UP = false;
 
     private final IBinder binder = new LocalBinder();
     private NotificationManager notificationManager;
-    private DeliveryInfo currentDelivery;
-    // ✅ After notifying once, do not notify again for the same parcel (orderSn)
-    private String lastNotifiedOrderSn = null;
-    private float currentDistance = -1f;
-    private int packageCount = 1;
-    private int nearbyCount = 0;
-    private int sameAddressCount = 1;
+    @Nullable
+    private FocusState currentFocus;
+    // After showing once, do not update again for the same stableId
+    private String lastShownStableId = null;
 
     // Only track foreground state for lockscreen notification
     private boolean isForeground = false;
 
+    // Worker thread to build RemoteViews/Notification off the main thread
+    private HandlerThread workerThread;
+    private Handler workerHandler;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    // Debounce notification updates to avoid spamming NotificationManager / RemoteViews on the main thread
+    private static final long NOTIFY_DEBOUNCE_MS = 5_000L;
+    private long lastNotifyUptimeMs = 0L;
+    private Runnable pendingNotify;
+
     // Action request codes
     private static final int REQUEST_CODE_CAMERA = 100;
     private static final int REQUEST_CODE_NAVIGATION = 101;
-    private static final int REQUEST_CODE_MAIN = 102;
 
     public class LocalBinder extends Binder {
         public LockScreenNotificationService getService() {
@@ -79,6 +87,10 @@ public class LockScreenNotificationService extends Service {
         notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         createNotificationChannel();
         FileLog.getInstance().debug(TAG, "Service created");
+        // Start worker thread for notification building
+        workerThread = new HandlerThread("LockScreenNotifyWorker");
+        workerThread.start();
+        workerHandler = new Handler(workerThread.getLooper());
         registerReceiver(lockStateReceiver, new IntentFilter(Intent.ACTION_USER_PRESENT));
         IntentFilter screen = new IntentFilter();
         screen.addAction(Intent.ACTION_SCREEN_OFF);
@@ -88,9 +100,31 @@ public class LockScreenNotificationService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // Do not show anything on start. We only show when device is locked AND we have delivery data.
-        // updateDelivery(...) will promote to foreground when needed.
-        return START_STICKY;
+        // IMPORTANT: If this service is started via startForegroundService(), the system requires
+        // that we call startForeground(...) within a short time window, otherwise the app will crash
+        // with ForegroundServiceDidNotStartInTimeException.
+        //
+        // This service is lockscreen-only: when the device is locked we promote immediately to
+        // foreground (showing a placeholder if needed). When unlocked, we stop and keep it clean.
+        if (isDeviceLocked()) {
+            // Fast foreground promotion to avoid ForegroundServiceDidNotStartInTimeException
+            if (!isForeground) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(NOTIFICATION_ID, buildMinimalNotification(),
+                            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+                } else {
+                    startForeground(NOTIFICATION_ID, buildMinimalNotification());
+                }
+                isForeground = true;
+            }
+            // Build and update the full RemoteViews notification off the main thread
+            scheduleNotify("onStartCommand");
+            return START_STICKY;
+        } else {
+            stopForegroundAndRemoveNotification();
+            stopSelf();
+            return START_NOT_STICKY;
+        }
     }
 
     @Nullable
@@ -100,58 +134,118 @@ public class LockScreenNotificationService extends Service {
     }
 
     /**
-     * Update the notification with new delivery information
+     * Update lockscreen UI from the single source of truth (InfoPill decision pipeline).
+     * No calculations and only shows when locked.
      */
-    /**
-     * Update notification with detailed delivery info
-     */
-    public void updateDelivery(DeliveryInfo delivery, float distanceMeters, int count) {
-        updateDelivery(delivery, distanceMeters, count, 0, 1);
-    }
-
-    /**
-     * Update with full info including nearby and same-address counts
-     */
-    public void updateDelivery(DeliveryInfo delivery, float distanceMeters, int count,
-            int nearbyCount, int sameAddressCount) {
-        updateDelivery(delivery, distanceMeters, count, nearbyCount, sameAddressCount, -1f);
-    }
-
-    /**
-     * Update with full info including nearby/same-address counts and current speed (m/s)
-     */
-    public void updateDelivery(DeliveryInfo delivery, float distanceMeters, int count,
-                               int nearbyCount, int sameAddressCount, float speedMps) {
+    public void updateFocus(@NonNull FocusState focus) {
         // ✅ LOCKSCREEN-ONLY: If device is not locked, never show any notification.
         if (!isDeviceLocked()) {
             stopForegroundAndRemoveNotification();
             return;
         }
 
-        // ✅ Do not notify again for the same parcel (orderSn)
-        final String newSn = (delivery != null) ? delivery.getOrderSn() : null;
-        if (!TextUtils.isEmpty(newSn) && newSn.equals(lastNotifiedOrderSn)) {
+        if (focus == null || focus.delivery == null || TextUtils.isEmpty(focus.stableId)) {
+            clearNotification();
             return;
         }
 
-        // ✅ If no delivery info, still allow showing a placeholder (optional)
-        this.currentDelivery = delivery;
-        this.currentDistance = distanceMeters;
-        this.packageCount = count;
-        this.nearbyCount = nearbyCount;
-        this.sameAddressCount = sameAddressCount;
+        // Dedup by stableId
+        if (focus.stableId.equals(lastShownStableId)) {
+            return;
+        }
+        lastShownStableId = focus.stableId;
+        currentFocus = focus;
 
-        // Record that we have notified this parcel once
-        if (!TextUtils.isEmpty(newSn)) {
-            lastNotifiedOrderSn = newSn;
+        // Promote fast (minimal) to satisfy foreground timing; heavy notify is debounced on worker.
+        if (!isForeground) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, buildMinimalNotification(),
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+            } else {
+                startForeground(NOTIFICATION_ID, buildMinimalNotification());
+            }
+            isForeground = true;
+        }
+        scheduleNotify("updateFocus");
+    }
+    /**
+     * Build a lightweight minimal notification for fast foreground promotion (no RemoteViews)
+     */
+    private Notification buildMinimalNotification() {
+        final String channelId = ENABLE_HEADS_UP ? CHANNEL_ID_ALERT : CHANNEL_ID;
+        return new NotificationCompat.Builder(this, channelId)
+                .setSmallIcon(R.drawable.ic_nav_mode_on)
+                .setContentTitle("配送导航")
+                .setContentText("准备中...")
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setOngoing(true)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                .build();
+    }
+
+    /**
+     * Debounce and build notification off the main thread, then update on the main thread.
+     */
+    private void scheduleNotify(final String reason) {
+        if (workerHandler == null) {
+            // Fallback: run on main if worker isn't ready
+            if (notificationManager != null) {
+                notificationManager.notify(NOTIFICATION_ID, buildNotification());
+            }
+            return;
         }
 
-        // Promote to foreground ONLY on lockscreen.
-        ensureForegroundIfNeeded();
-
-        if (notificationManager != null) {
-            notificationManager.notify(NOTIFICATION_ID, buildNotification());
+        if (pendingNotify != null) {
+            workerHandler.removeCallbacks(pendingNotify);
         }
+
+        pendingNotify = new Runnable() {
+            @Override
+            public void run() {
+                // Coalesce bursts
+                final long now = SystemClock.uptimeMillis();
+                if (now - lastNotifyUptimeMs < NOTIFY_DEBOUNCE_MS) {
+                    workerHandler.postDelayed(this, NOTIFY_DEBOUNCE_MS);
+                    return;
+                }
+                lastNotifyUptimeMs = now;
+
+                if (!isDeviceLocked()) {
+                    return;
+                }
+
+                // Build the heavy notification off main thread
+                final Notification n = buildNotification();
+
+                // Apply/startForeground + notify on the main thread
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!isDeviceLocked()) {
+                            stopForegroundAndRemoveNotification();
+                            return;
+                        }
+                        if (!isForeground) {
+                            // Promote with the already-built notification
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                startForeground(NOTIFICATION_ID, n,
+                                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+                            } else {
+                                startForeground(NOTIFICATION_ID, n);
+                            }
+                            isForeground = true;
+                        }
+                        if (notificationManager != null) {
+                            notificationManager.notify(NOTIFICATION_ID, n);
+                        }
+                    }
+                });
+            }
+        };
+
+        workerHandler.postDelayed(pendingNotify, NOTIFY_DEBOUNCE_MS);
     }
 
 
@@ -161,7 +255,8 @@ public class LockScreenNotificationService extends Service {
     public void clearNotification() {
         FileLog.getInstance().debug(TAG, "Clearing notification and stopping service");
         stopForegroundAndRemoveNotification();
-        lastNotifiedOrderSn = null;
+        lastShownStableId = null;
+        currentFocus = null;
         stopSelf();
     }
 
@@ -242,7 +337,6 @@ public class LockScreenNotificationService extends Service {
         RemoteViews customView = buildCustomNotificationView();
 
         // Create PendingIntents for actions
-        PendingIntent mainIntent = createMainActivityIntent();
         PendingIntent cameraIntent = createCameraIntent();
         PendingIntent navigationIntent = createNavigationIntent();
 
@@ -259,17 +353,10 @@ public class LockScreenNotificationService extends Service {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setOngoing(true)
                 .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-                .setContentIntent(mainIntent)
+                // No MainActivity dependency; tapping notification opens camera flow.
+                .setContentIntent(cameraIntent)
                 .setAutoCancel(false)
-                // ✅ Optional: full-screen intent (very intrusive; only enable if you must)
                 ;
-
-        if (ENABLE_FULL_SCREEN_INTENT) {
-            // Full-screen intent shows an activity over the lockscreen.
-            // We pass a flag so MainActivity can route to the relevant screen.
-            PendingIntent fullScreen = createFullScreenIntent();
-            builder.setFullScreenIntent(fullScreen, true);
-        }
 
         // ✅ Optional: heads-up tuning for Android < O (channels control this on O+)
         if (ENABLE_HEADS_UP && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -284,17 +371,6 @@ public class LockScreenNotificationService extends Service {
         return builder.build();
     }
 
-    private PendingIntent createFullScreenIntent() {
-        Intent intent = new Intent(this, MainActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        intent.putExtra("from_lockscreen", true);
-        intent.putExtra("open_delivery_panel", true);
-        return PendingIntent.getActivity(
-                this,
-                1003,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-    }
     // BroadcastReceiver to handle lockscreen and screen state changes
     private final BroadcastReceiver lockStateReceiver = new BroadcastReceiver() {
         @Override
@@ -307,11 +383,18 @@ public class LockScreenNotificationService extends Service {
             }
             if (Intent.ACTION_SCREEN_ON.equals(action) || Intent.ACTION_SCREEN_OFF.equals(action)) {
                 // When screen toggles, if we are on keyguard and have delivery data, ensure the notification is present.
-                if (isDeviceLocked() && currentDelivery != null) {
-                    ensureForegroundIfNeeded();
-                    if (notificationManager != null) {
-                        notificationManager.notify(NOTIFICATION_ID, buildNotification());
+                if (isDeviceLocked() && currentFocus != null && currentFocus.delivery != null) {
+                    // Ensure foreground quickly and update later via debounce
+                    if (!isForeground) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            startForeground(NOTIFICATION_ID, buildMinimalNotification(),
+                                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+                        } else {
+                            startForeground(NOTIFICATION_ID, buildMinimalNotification());
+                        }
+                        isForeground = true;
                     }
+                    scheduleNotify("screen_toggle");
                 } else {
                     // If not locked, keep it clean.
                     stopForegroundAndRemoveNotification();
@@ -336,67 +419,38 @@ public class LockScreenNotificationService extends Service {
     private RemoteViews buildCustomNotificationView() {
         RemoteViews views = new RemoteViews(getPackageName(), R.layout.notification_lockscreen);
 
-        if (currentDelivery == null) {
+        if (currentFocus == null || currentFocus.delivery == null) {
             views.setTextViewText(R.id.notification_route_text, "配送导航");
             views.setTextViewText(R.id.notification_address_text, "准备中...");
             views.setTextViewText(R.id.notification_recipient_text, "等待包裹信息");
             return views;
         }
 
-        // Line 1: Route info (matches InfoPill pillRouteText logic)
-        List<String> routeParts = new ArrayList<>();
-
-        // Street number
-        if (currentDelivery.getCivilNumber() > 0) {
-            routeParts.add(currentDelivery.getCivilNumber() + "号");
-        }
-
-        // Unit number
-        String unitNumber = currentDelivery.getUnitNumber();
-        if (!TextUtils.isEmpty(unitNumber)) {
-            routeParts.add(unitNumber + "单元");
-        }
-
-        // Route number
-        String routeNumber = currentDelivery.getRouteNumber();
-        if (!TextUtils.isEmpty(routeNumber)) {
-            routeParts.add(routeNumber + "包裹");
-        }
-
-        // Same address count
-        if (sameAddressCount > 1) {
-            routeParts.add(String.format(Locale.getDefault(), "同址共%d票", sameAddressCount));
-        }
-
-        // Nearby count
-        if (nearbyCount > 1) {
-            routeParts.add(String.format(Locale.getDefault(), "附近共%d票", nearbyCount));
-        }
-
-        views.setTextViewText(R.id.notification_route_text,
-                TextUtils.join("  ", routeParts));
+        DeliveryInfo d = currentFocus.delivery;
+        String routeNumber = d.getRouteNumber();
+        String title = !TextUtils.isEmpty(routeNumber) ? ("下一单 · #" + routeNumber) : "下一单";
+        views.setTextViewText(R.id.notification_route_text, title);
 
         // Line 2: Address
-        String address = currentDelivery.getAddress();
+        String address = d.getAddress();
         views.setTextViewText(R.id.notification_address_text,
                 TextUtils.isEmpty(address) ? "地址未知" : address);
 
-        // Line 3: Recipient and distance
+        // Line 3: distance (optional) + recipient (optional)
         StringBuilder line3 = new StringBuilder();
-        String recipient = currentDelivery.getName();
+        String recipient = d.getName();
         if (!TextUtils.isEmpty(recipient)) {
             line3.append("收件人: ").append(recipient);
         }
-
-        if (currentDistance >= 0) {
-            if (line3.length() > 0) {
+        if (currentFocus.distanceMeters != null && currentFocus.distanceMeters >= 0f) {
+            float dist = currentFocus.distanceMeters;
+            if (line3.length() > 0)
                 line3.append("\n");
-            }
             line3.append("距离: ");
-            if (currentDistance < 1000) {
-                line3.append(String.format(Locale.getDefault(), "%.0fm", currentDistance));
+            if (dist < 1000f) {
+                line3.append(String.format(Locale.getDefault(), "%.0fm", dist));
             } else {
-                line3.append(String.format(Locale.getDefault(), "%.1fkm", currentDistance / 1000));
+                line3.append(String.format(Locale.getDefault(), "%.1fkm", dist / 1000f));
             }
         }
 
@@ -410,10 +464,10 @@ public class LockScreenNotificationService extends Service {
      * Build simple title for fallback
      */
     private String buildSimpleTitle() {
-        if (currentDelivery == null) {
+        if (currentFocus == null || currentFocus.delivery == null) {
             return "配送导航";
         }
-        String routeNumber = currentDelivery.getRouteNumber();
+        String routeNumber = currentFocus.delivery.getRouteNumber();
         return !TextUtils.isEmpty(routeNumber) ? "包裹 #" + routeNumber : "配送导航";
     }
 
@@ -421,46 +475,39 @@ public class LockScreenNotificationService extends Service {
      * Build simple content for fallback
      */
     private String buildSimpleContent() {
-        if (currentDelivery == null) {
+        if (currentFocus == null || currentFocus.delivery == null) {
             return "准备中...";
         }
 
         StringBuilder sb = new StringBuilder();
-        String address = currentDelivery.getAddress();
+        String address = currentFocus.delivery.getAddress();
         if (!TextUtils.isEmpty(address)) {
             sb.append(address);
         }
 
-        if (currentDistance >= 0) {
+        if (currentFocus.distanceMeters != null && currentFocus.distanceMeters >= 0f) {
             if (sb.length() > 0)
                 sb.append(" • ");
-            if (currentDistance < 1000) {
-                sb.append(String.format(Locale.getDefault(), "%.0fm", currentDistance));
+            float dist = currentFocus.distanceMeters;
+            if (dist < 1000f) {
+                sb.append(String.format(Locale.getDefault(), "%.0fm", dist));
             } else {
-                sb.append(String.format(Locale.getDefault(), "%.1fkm", currentDistance / 1000));
+                sb.append(String.format(Locale.getDefault(), "%.1fkm", dist / 1000f));
             }
         }
 
         return sb.length() > 0 ? sb.toString() : "准备中...";
     }
 
-    private PendingIntent createMainActivityIntent() {
-        Intent intent = new Intent(this, MainActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        return PendingIntent.getActivity(
-                this,
-                REQUEST_CODE_MAIN,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-    }
 
     private PendingIntent createCameraIntent() {
         Intent intent = new Intent(this, CameraActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        if (currentDelivery != null) {
-            intent.putExtra("order_id", currentDelivery.getOrderId());
-            intent.putExtra("latitude", currentDelivery.getLatitude());
-            intent.putExtra("longitude", currentDelivery.getLongitude());
+        if (currentFocus != null && currentFocus.delivery != null) {
+            DeliveryInfo d = currentFocus.delivery;
+            intent.putExtra("order_id", d.getOrderId());
+            intent.putExtra("latitude", d.getLatitude());
+            intent.putExtra("longitude", d.getLongitude());
         }
         return PendingIntent.getActivity(
                 this,
@@ -470,10 +517,12 @@ public class LockScreenNotificationService extends Service {
     }
 
     private PendingIntent createNavigationIntent() {
-        if (currentDelivery == null) {
-            return createMainActivityIntent();
+        if (currentFocus == null || currentFocus.delivery == null) {
+            // No MainActivity dependency; open camera flow as a safe fallback.
+            return createCameraIntent();
         }
 
+        DeliveryInfo currentDelivery = currentFocus.delivery;
         // Create navigation intent to external app
         String uriString = String.format(Locale.getDefault(),
                 "google.navigation:q=%f,%f",
@@ -491,6 +540,17 @@ public class LockScreenNotificationService extends Service {
 
     @Override
     public void onDestroy() {
+        if (workerHandler != null && pendingNotify != null) {
+            workerHandler.removeCallbacks(pendingNotify);
+        }
+        if (workerThread != null) {
+            try {
+                workerThread.quitSafely();
+            } catch (Exception ignore) {
+            }
+            workerThread = null;
+            workerHandler = null;
+        }
         try {
             unregisterReceiver(lockStateReceiver);
         } catch (Exception ignore) {

@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.graphics.Point;
 import android.os.IBinder;
 import android.location.Location;
 import android.os.Build;
@@ -82,7 +83,8 @@ import com.hf.easydelivery.view.model.MapViewModel;
 import com.hf.easydelivery.view.model.ScanViewModel;
 import com.hf.easydelivery.map.config.ProfileManager;
 import com.hf.easydelivery.view.DeveloperPanelBottomSheet;
-import com.hf.easydelivery.service.LockScreenNotificationService;
+import com.hf.easydelivery.service.FocusState;
+import com.hf.easydelivery.service.FocusStateRepository;
 import com.hf.easydelivery.map.CameraUpdateContext;
 
 import android.animation.ValueAnimator;
@@ -207,9 +209,17 @@ public class MapInnerFragment extends Fragment
     private long lastInsideBoostMs = 0L;
     private boolean forceProximityEvaluation = false;
     private long autoFollowPausedAtMs = 0L;
+    private long locationUpdateSeq = 0L;
 
     private SmartLocationManager mSmartLocationManager;
     private Location mLastLocation = null;
+    private CameraUpdateContext pendingCameraContext;
+    private final Handler cameraUpdateHandler = new Handler(Looper.getMainLooper());
+    private final Runnable cameraUpdateRunnable = () -> {
+        if (cameraController != null && pendingCameraContext != null) {
+            cameraController.updateCamera(pendingCameraContext);
+        }
+    };
 
     // ===== Map-layer location smoothing / gating state =====
     private Location mLastEffectiveUiLocation = null; // what marker/camera used last time
@@ -227,42 +237,6 @@ public class MapInnerFragment extends Fragment
     private ImageButton btnFullscreen;
     private boolean isFullscreenMode = false;
 
-    // Lock screen notification service
-    private LockScreenNotificationService lockScreenService;
-    private boolean lockScreenServiceBound = false;
-    private final ServiceConnection lockScreenServiceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            LockScreenNotificationService.LocalBinder binder = (LockScreenNotificationService.LocalBinder) service;
-            lockScreenService = binder.getService();
-            lockScreenServiceBound = true;
-            logD("Lock screen service connected");
-            // Update with current delivery if available
-            if (currentPrimaryDelivery != null && !Float.isNaN(lastNearestDistanceMeters)) {
-                int count = currentCloseDeliveries != null ? currentCloseDeliveries.size() : 1;
-
-                // Calculate detailed counts
-                int nearbyCount = 0;
-                int sameAddressCount = 1;
-                if (focusManager != null && currentCloseDeliveries != null) {
-                    DeliveryFocusManager.InfoGroup infoGroup = focusManager.buildInfoGroup(currentPrimaryDelivery,
-                            currentCloseDeliveries);
-                    nearbyCount = infoGroup.nearbyCount;
-                    sameAddressCount = infoGroup.sameAddress.size();
-                }
-
-                lockScreenService.updateDelivery(currentPrimaryDelivery, lastNearestDistanceMeters, count, nearbyCount,
-                        sameAddressCount);
-            }
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            lockScreenServiceBound = false;
-            lockScreenService = null;
-            logD("Lock screen service disconnected");
-        }
-    };
     private MapViewModel mapViewModel;
     // 支持两种数据源：派送中(地图) / 未扫描(扫码)
     private ScanViewModel scanViewModel;
@@ -591,12 +565,7 @@ public class MapInnerFragment extends Fragment
                     // 进入时退出通勤抑制
                     commuteSuppressUntilMs = 0L;
                     showInfoPill(target, nearby);
-
-                    // Calculate counts for notification
-                    DeliveryFocusManager.InfoGroup infoGroup = focusManager.buildInfoGroup(target, nearby);
-                    // Update lock screen notification
-                    updateLockScreenNotification(target, distanceMeters, nearby.size(), infoGroup.nearbyCount,
-                            infoGroup.sameAddress.size());
+                    publishLockscreenFocus(target, distanceMeters);
                 }
 
                 @Override
@@ -612,12 +581,7 @@ public class MapInnerFragment extends Fragment
                     // 更新时退出通勤抑制
                     commuteSuppressUntilMs = 0L;
                     showInfoPill(target, nearby);
-
-                    // Calculate counts for notification
-                    DeliveryFocusManager.InfoGroup infoGroup = focusManager.buildInfoGroup(target, nearby);
-                    // Update lock screen notification
-                    updateLockScreenNotification(target, distanceMeters, nearby.size(), infoGroup.nearbyCount,
-                            infoGroup.sameAddress.size());
+                    publishLockscreenFocus(target, distanceMeters);
                 }
 
                 @Override
@@ -625,8 +589,7 @@ public class MapInnerFragment extends Fragment
                     // 隐藏时清当前主键（允许下次策略自由选择）
                     currentPrimaryKey = null;
                     hideInfoPillCompletely();
-                    // Clear lock screen notification
-                    stopLockScreenService();
+                    publishLockscreenFocus(null, Float.NaN);
                 }
             });
 
@@ -1327,10 +1290,14 @@ public class MapInnerFragment extends Fragment
 
     @Override
     public void onLocationUpdate(Location location, SmartLocationManager.MovementState state) {
+        long seq = ++locationUpdateSeq;
+        long rawElapsedMs = getElapsedRealtimeMsSafe(location);
         logD("onLocationUpdate loc=" + location.getLatitude() + "," + location.getLongitude()
                 + ", mv=" + state
                 + ", items=" + (currentMapDeliveries == null ? 0 : currentMapDeliveries.size())
-                + ", pausedByGesture=" + autoFollowPausedByGesture);
+                + ", pausedByGesture=" + autoFollowPausedByGesture
+                + ", seq=" + seq
+                + ", rawElapsedMs=" + rawElapsedMs);
         // Capture previous movement state BEFORE overwriting lastMovementState
         final SmartLocationManager.MovementState prevState = lastMovementState;
         // 通知 ViewModel 更新定位
@@ -1358,6 +1325,11 @@ public class MapInnerFragment extends Fragment
         // Decide what the map UI should use for marker/camera.
         Location effective = chooseEffectiveLocationForUi(location, predicted, state);
         mLastEffectiveUiLocation = effective;
+        long effElapsedMs = getElapsedRealtimeMsSafe(effective);
+        logD("locUpdate#" + seq + " effective src=" + mLastEffectiveSource
+                + " effElapsedMs=" + effElapsedMs
+                + " rawGood=" + rawGood
+                + " predicted=" + (predicted != null));
 
         // If raw fix is poor/stale, request a short boost to recover accuracy quickly.
         if (!rawGood && mSmartLocationManager != null) {
@@ -1452,7 +1424,9 @@ public class MapInnerFragment extends Fragment
             Utils.vibrate(requireContext(), 30);
         }
 
-        cameraController.updateCamera(cameraContext);
+        pendingCameraContext = cameraContext;
+        cameraUpdateHandler.removeCallbacks(cameraUpdateRunnable);
+        cameraUpdateHandler.postDelayed(cameraUpdateRunnable, 250);
     }
 
     private int controlInsetFor(@Nullable View control) {
@@ -1849,6 +1823,15 @@ public class MapInnerFragment extends Fragment
         return age <= MAX_PREDICTED_UI_AGE_MS;
     }
 
+    private long getElapsedRealtimeMsSafe(@Nullable Location loc) {
+        if (loc == null) return -1L;
+        try {
+            return loc.getElapsedRealtimeNanos() / 1_000_000L;
+        } catch (Throwable t) {
+            return -1L;
+        }
+    }
+
     @NonNull
     private Location chooseEffectiveLocationForUi(@NonNull Location raw,
                                                  @Nullable Location predicted,
@@ -1858,15 +1841,14 @@ public class MapInnerFragment extends Fragment
 
         final boolean rawGood = isGoodFixForUi(raw, state) && !isStaleForUi(raw, state);
 
-        // Driving: only use predicted when raw is poor/stale to keep UI continuous.
         if (driving) {
-            if (rawGood) {
-                mLastEffectiveSource = CameraUpdateContext.LocationSource.RAW;
-                return new Location(raw);
-            }
             if (isPredictedUsableForUi(predicted)) {
                 mLastEffectiveSource = CameraUpdateContext.LocationSource.PREDICTED;
                 return new Location(predicted);
+            }
+            if (rawGood) {
+                mLastEffectiveSource = CameraUpdateContext.LocationSource.RAW;
+                return new Location(raw);
             }
             if (mLastGoodLocation != null && isLocationFresh(mLastGoodLocation)) {
                 mLastEffectiveSource = CameraUpdateContext.LocationSource.LAST_GOOD;
@@ -1996,8 +1978,6 @@ public class MapInnerFragment extends Fragment
             mSmartLocationManager.addLocationUpdateListener(this);
             mSmartLocationManager.startLocationUpdates();
         }
-        // Start lock screen notification service if we have deliveries
-        startLockScreenServiceIfNeeded();
     }
 
     @Override
@@ -2076,8 +2056,7 @@ public class MapInnerFragment extends Fragment
         nearestDeliveries = Collections.emptyList();
         currentCloseDeliveries = Collections.emptyList();
 
-        // Stop and unbind lock screen notification service
-        stopLockScreenService();
+        // Lockscreen notification is managed by a global controller; no Fragment lifecycle coupling.
 
         if (mapView != null)
             mapView.onDestroy();
@@ -2110,19 +2089,26 @@ public class MapInnerFragment extends Fragment
                 }
             }
 
-            LatLng myLatLng = new LatLng(mLastEffectiveUiLocation.getLatitude(), mLastEffectiveUiLocation.getLongitude());
-            LatLng center = googleMap.getCameraPosition().target;
-            float distance = distanceBetweenMeters(center, myLatLng);
+            if (mapView != null) {
+                LatLng myLatLng = new LatLng(mLastEffectiveUiLocation.getLatitude(), mLastEffectiveUiLocation.getLongitude());
+                Point screenPoint = googleMap.getProjection().toScreenLocation(myLatLng);
+                int width = mapView.getWidth();
+                int height = mapView.getHeight();
 
-            boolean isDriving = lastMovementState == SmartLocationManager.MovementState.SLOW_DRIVING
-                    || lastMovementState == SmartLocationManager.MovementState.NORMAL_DRIVING;
+                if (width > 0 && height > 0) {
+                    // 安全区：左右各留 15%，上下各留 20%，超出才兜底
+                    int marginX = (int) (width * 0.15f);
+                    int marginY = (int) (height * 0.20f);
+                    boolean outside = screenPoint.x < marginX || screenPoint.x > (width - marginX)
+                            || screenPoint.y < marginY || screenPoint.y > (height - marginY);
 
-            // 蓝点离中心 > 80米 且 在开车 → 强制拉回 + 提频
-            if (distance > 80f && isDriving) {
-                logD("边缘兜底触发：蓝点偏离 " + distance + "m，强制居中");
-                centerOnMyLocation(true);
-                if (mSmartLocationManager != null) {
-                    mSmartLocationManager.requestBoost(10_000L);
+                    if (outside) {
+                        logD("边缘兜底触发：蓝点离开安全区，强制居中");
+                        centerOnMyLocation(true);
+                        if (mSmartLocationManager != null) {
+                            mSmartLocationManager.requestBoost(10_000L);
+                        }
+                    }
                 }
             }
 
@@ -2130,60 +2116,17 @@ public class MapInnerFragment extends Fragment
         }
     };
 
-    // ──────────────────────────────────────────────────────
-    // Lock Screen Notification Helper Methods
-    // ──────────────────────────────────────────────────────
-
-    /**
-     * Start lock screen notification service if we have deliveries
-     */
-    private void startLockScreenServiceIfNeeded() {
-        if (currentPrimaryDelivery != null && !lockScreenServiceBound) {
-            try {
-                Intent intent = new Intent(requireContext(), LockScreenNotificationService.class);
-                requireContext().startForegroundService(intent);
-                requireContext().bindService(intent, lockScreenServiceConnection, Context.BIND_AUTO_CREATE);
-                logD("Starting lock screen notification service");
-            } catch (Throwable t) {
-                FileLog.getInstance().error(TAG, "Failed to start lock screen service", t);
+    private void publishLockscreenFocus(@Nullable DeliveryInfo target, float distanceMeters) {
+        try {
+            FocusStateRepository repo = FocusStateRepository.get();
+            if (target == null) {
+                repo.setLatest(null);
+                return;
             }
-        }
-    }
-
-    /**
-     * Update lock screen notification with current delivery info
-     */
-    /**
-     * Update lock screen notification with current delivery info
-     */
-    private void updateLockScreenNotification(DeliveryInfo delivery, float distanceMeters, int count, int nearbyCount,
-            int sameAddressCount) {
-        if (lockScreenServiceBound && lockScreenService != null) {
-            lockScreenService.updateDelivery(delivery, distanceMeters, count, nearbyCount, sameAddressCount);
-        } else {
-            // Service not bound yet, start it
-            startLockScreenServiceIfNeeded();
-        }
-    }
-
-    /**
-     * Stop and unbind lock screen notification service
-     */
-    private void stopLockScreenService() {
-        if (lockScreenServiceBound) {
-            try {
-                requireContext().unbindService(lockScreenServiceConnection);
-                lockScreenServiceBound = false;
-                logD("Unbound lock screen service");
-            } catch (Throwable ignore) {
-            }
-        }
-        if (lockScreenService != null) {
-            try {
-                lockScreenService.clearNotification();
-            } catch (Throwable ignore) {
-            }
-            lockScreenService = null;
+            String stableId = buildPrimaryKey(target);
+            Float dist = Float.isNaN(distanceMeters) ? null : distanceMeters;
+            repo.setLatest(new FocusState(stableId, target, dist));
+        } catch (Throwable ignore) {
         }
     }
 

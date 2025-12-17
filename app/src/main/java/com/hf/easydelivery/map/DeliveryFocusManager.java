@@ -549,14 +549,10 @@ public class DeliveryFocusManager {
     public List<DeliveryInfo> sortByDistance(@Nullable Location location,
             @Nullable List<DeliveryInfo> deliveries,
             int limit) {
-        logI("sortByDistance() start: deliveries=" + (deliveries == null ? 0 : deliveries.size()) + ", limit=" + limit
-                + ", loc=" + (location == null ? "null" : (location.getLatitude() + "," + location.getLongitude())));
         if (location == null || deliveries == null || deliveries.isEmpty() || limit <= 0) {
             return Collections.emptyList();
         }
         List<DeliveryInfo> out = distanceRankStrategy.rank(location, deliveries, limit);
-        logI("sortByDistance() done: resultSize=" + (out == null ? 0 : out.size()) + ", strategy="
-                + distanceRankProfile);
         return out == null ? Collections.emptyList() : out;
     }
 
@@ -594,8 +590,6 @@ public class DeliveryFocusManager {
     @NonNull
     public List<DeliveryInfo> collectWithinRadius(@Nullable List<DeliveryInfo> sorted,
             float radiusMeters) {
-        logI("collectWithinRadius() start: sorted=" + (sorted == null ? 0 : sorted.size()) + ", radius="
-                + radiusMeters);
         if (sorted == null || sorted.isEmpty()) {
             return Collections.emptyList();
         }
@@ -611,7 +605,6 @@ public class DeliveryFocusManager {
                 break; // list is sorted, so we can stop once outside the radius
             }
         }
-        logI("collectWithinRadius() done: out=" + result.size());
         return result;
     }
 

@@ -9,6 +9,9 @@ import android.os.LocaleList;
 
 import java.util.Locale;
 
+import com.hf.easydelivery.service.FocusStateRepository;
+import com.hf.easydelivery.service.LockScreenFocusController;
+
 public class MyApplication extends Application {
 
     public MyApplication() {
@@ -25,6 +28,10 @@ public class MyApplication extends Application {
         ResourceMgr.getInstance().init(ctx);
 
         setLocale(ctx);
+
+        // Lockscreen focus pipeline init (lightweight; no location subscriptions)
+        FocusStateRepository.init(ctx);
+        LockScreenFocusController.init(ctx);
     }
 
     @Override

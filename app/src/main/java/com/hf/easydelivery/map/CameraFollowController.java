@@ -317,6 +317,7 @@ public class CameraFollowController {
     private float currentHeadingDeg = Float.NaN;
     // 是否曾经进入过“真实驾驶”模式（速度超过阈值），用于控制居中策略
     private boolean hasEverEnteredDrivingMode = false;
+    private GateSnapshot lastGateSnapshot;
     // Paused-by-user state (map gestures or light intervention)
     private boolean pausedByUser = false;
     private long lastCameraUpdateUptime = 0L;
@@ -335,6 +336,9 @@ public class CameraFollowController {
     // Smooth speed→zoom transitions
     private float lastSpeedZoom = Float.NaN;
     private int lastSpeedBand = -1; // 0:near,1:city,2:suburb,3:highway
+    // Dedup keys for camera updates
+    private String lastCameraKey = null;
+    private long lastCameraKeyTimeMs = 0L;
 
     // ✅ 修复进入驾驶时zoom突变：跟踪驾驶模式开始时间
     private long drivingModeStartTime = 0;
@@ -575,6 +579,17 @@ public class CameraFollowController {
         // ============================================================
         boolean driving = context.isDriving() || navMode;
 
+        GateSnapshot gateSnapshot = new GateSnapshot();
+        gateSnapshot.movementState = context.movementState;
+        gateSnapshot.navMode = navMode;
+        gateSnapshot.driving = driving;
+        gateSnapshot.allowAutoFollow = allowAutoFollow;
+        gateSnapshot.shouldForce = shouldForce;
+        gateSnapshot.isUserInteracting = isUserInteracting;
+        gateSnapshot.isAutoFollowPaused = isAutoFollowPaused;
+        gateSnapshot.hasEverEnteredDrivingMode = hasEverEnteredDrivingMode;
+        logGateChanges(gateSnapshot);
+
         boolean allowCameraMove = followStrategy.allowCameraMove(
                 shouldForce,
                 allowAutoFollow,
@@ -636,6 +651,11 @@ public class CameraFollowController {
         if (targetCamera == null)
             return false;
 
+        if (isDuplicateCameraRequest(targetCamera, context)) {
+            logD("updateCamera(): duplicate request skipped");
+            return false;
+        }
+
         // ============================================================
         // 8. Micro-update skip（保留 + 静止去抖）
         // ============================================================
@@ -683,6 +703,7 @@ public class CameraFollowController {
         lastCameraTargetLatLng = targetCamera.target;
         lastCameraBearing = targetCamera.bearing;
         lastLocationLatLng = new LatLng(context.location.getLatitude(), context.location.getLongitude());
+        rememberCameraKey(targetCamera, context);
 
         // --- Enter driving mode (>10km/h) ---
         if (context.isDriving()
@@ -701,6 +722,35 @@ public class CameraFollowController {
         }
 
         return true;
+    }
+
+    private boolean isDuplicateCameraRequest(@NonNull CameraPosition targetCamera,
+            @NonNull CameraUpdateContext context) {
+        long now = SystemClock.uptimeMillis();
+        String key = buildCameraKey(targetCamera, context);
+        if (key != null && key.equals(lastCameraKey) && (now - lastCameraKeyTimeMs) < 300L) {
+            return true;
+        }
+        return false;
+    }
+
+    private void rememberCameraKey(@NonNull CameraPosition cam, @NonNull CameraUpdateContext ctx) {
+        lastCameraKey = buildCameraKey(cam, ctx);
+        lastCameraKeyTimeMs = SystemClock.uptimeMillis();
+    }
+
+    private String buildCameraKey(@NonNull CameraPosition cam, @NonNull CameraUpdateContext ctx) {
+        try {
+            double lat = Math.round(cam.target.latitude * 1_000_000d) / 1_000_000d;
+            double lng = Math.round(cam.target.longitude * 1_000_000d) / 1_000_000d;
+            float zoom = Math.round(cam.zoom * 100f) / 100f;
+            float bearing = Math.round(cam.bearing);
+            float tilt = Math.round(cam.tilt);
+            boolean driving = ctx.isDriving();
+            return lat + "," + lng + "|z=" + zoom + "|b=" + bearing + "|t=" + tilt + "|d=" + driving;
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     private CameraUpdate buildListViewCamera(CameraUpdateContext context) {
@@ -1112,7 +1162,6 @@ public class CameraFollowController {
 
     private void animateCameraTo(@NonNull CameraPosition targetCamera) {
         CameraPosition start = googleMap.getCameraPosition();
-        cancelAnimations();
         long nowUptime = SystemClock.uptimeMillis();
         long dt = (lastCameraAnimStartUptime <= 0L) ? LOOKAHEAD_BASE_DT_MS : (nowUptime - lastCameraAnimStartUptime);
         if (dt < 0L)
@@ -1201,6 +1250,78 @@ public class CameraFollowController {
         } catch (Exception ignore) {
             return 0f;
         }
+    }
+
+    private void logGateChanges(@NonNull GateSnapshot current) {
+        boolean changed = false;
+        StringBuilder sb = new StringBuilder();
+        if (lastGateSnapshot == null) {
+            changed = true;
+            sb.append("gates init: state=").append(current.movementState)
+                    .append(", navMode=").append(current.navMode)
+                    .append(", driving=").append(current.driving)
+                    .append(", allowAutoFollow=").append(current.allowAutoFollow)
+                    .append(", shouldForce=").append(current.shouldForce)
+                    .append(", interacting=").append(current.isUserInteracting)
+                    .append(", autoFollowPaused=").append(current.isAutoFollowPaused)
+                    .append(", hasEverEnteredDrivingMode=").append(current.hasEverEnteredDrivingMode);
+        } else {
+            if (lastGateSnapshot.movementState != current.movementState) {
+                changed = true;
+                sb.append("state ").append(lastGateSnapshot.movementState).append("->").append(current.movementState);
+            }
+            if (lastGateSnapshot.navMode != current.navMode) {
+                appendChange(sb, "navMode", lastGateSnapshot.navMode, current.navMode);
+                changed = true;
+            }
+            if (lastGateSnapshot.driving != current.driving) {
+                appendChange(sb, "driving", lastGateSnapshot.driving, current.driving);
+                changed = true;
+            }
+            if (lastGateSnapshot.allowAutoFollow != current.allowAutoFollow) {
+                appendChange(sb, "allowAutoFollow", lastGateSnapshot.allowAutoFollow, current.allowAutoFollow);
+                changed = true;
+            }
+            if (lastGateSnapshot.shouldForce != current.shouldForce) {
+                appendChange(sb, "shouldForce", lastGateSnapshot.shouldForce, current.shouldForce);
+                changed = true;
+            }
+            if (lastGateSnapshot.isUserInteracting != current.isUserInteracting) {
+                appendChange(sb, "interacting", lastGateSnapshot.isUserInteracting, current.isUserInteracting);
+                changed = true;
+            }
+            if (lastGateSnapshot.isAutoFollowPaused != current.isAutoFollowPaused) {
+                appendChange(sb, "autoFollowPaused", lastGateSnapshot.isAutoFollowPaused, current.isAutoFollowPaused);
+                changed = true;
+            }
+            if (lastGateSnapshot.hasEverEnteredDrivingMode != current.hasEverEnteredDrivingMode) {
+                appendChange(sb, "hasEverEnteredDrivingMode", lastGateSnapshot.hasEverEnteredDrivingMode,
+                        current.hasEverEnteredDrivingMode);
+                changed = true;
+            }
+        }
+        if (changed && sb.length() > 0) {
+            logD("gates change: " + sb);
+        }
+        lastGateSnapshot = current;
+    }
+
+    private void appendChange(StringBuilder sb, String label, boolean oldVal, boolean newVal) {
+        if (sb.length() > 0) {
+            sb.append(", ");
+        }
+        sb.append(label).append(" ").append(oldVal).append("->").append(newVal);
+    }
+
+    private static final class GateSnapshot {
+        private SmartLocationManager.MovementState movementState;
+        private boolean navMode;
+        private boolean driving;
+        private boolean allowAutoFollow;
+        private boolean shouldForce;
+        private boolean isUserInteracting;
+        private boolean isAutoFollowPaused;
+        private boolean hasEverEnteredDrivingMode;
     }
 
     private boolean isDrivingState(@NonNull SmartLocationManager.MovementState state) {
