@@ -1181,6 +1181,10 @@ public class MapInnerFragment extends Fragment
     }
 
     private void centerOnMyLocation(boolean resumeAutoFollow) {
+        centerOnMyLocation(resumeAutoFollow, Float.NaN);
+    }
+
+    private void centerOnMyLocation(boolean resumeAutoFollow, float preferredZoom) {
         if (googleMap == null)
             return;
         Location loc = getBestAvailableLocation();
@@ -1209,7 +1213,9 @@ public class MapInnerFragment extends Fragment
                     ? DEFAULT_DISTANCE_METERS
                     : lastNearestDistanceMeters;
             logD("centerOnMyLocation zoomFromDist=" + distanceMeters);
-            float zoom = focusManager.computeZoomForDistance(distanceMeters);
+            float zoom = Float.isNaN(preferredZoom)
+                    ? focusManager.computeZoomForDistance(distanceMeters)
+                    : preferredZoom;
             boolean alignToCenter = !resumeAutoFollow
                     || currentRegionState == InfoPillProximityController.RegionState.INSIDE;
             boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
@@ -1843,6 +1849,7 @@ public class MapInnerFragment extends Fragment
 
         if (driving) {
             if (isPredictedUsableForUi(predicted)) {
+                alignPredictedTiming(predicted, raw);
                 mLastEffectiveSource = CameraUpdateContext.LocationSource.PREDICTED;
                 return new Location(predicted);
             }
@@ -1860,6 +1867,7 @@ public class MapInnerFragment extends Fragment
 
         // Walking/Stationary: prefer predicted when fresh (smoother), otherwise use raw.
         if (isPredictedUsableForUi(predicted)) {
+            alignPredictedTiming(predicted, raw);
             mLastEffectiveSource = CameraUpdateContext.LocationSource.PREDICTED;
             return new Location(predicted);
         }
@@ -1980,6 +1988,19 @@ public class MapInnerFragment extends Fragment
         }
     }
 
+    private void alignPredictedTiming(@NonNull Location predicted, @NonNull Location raw) {
+        try {
+            predicted.setTime(raw.getTime());
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+                long elapsed = raw.getElapsedRealtimeNanos();
+                if (elapsed > 0) {
+                    predicted.setElapsedRealtimeNanos(elapsed);
+                }
+            }
+        } catch (Throwable ignore) {
+        }
+    }
+
     @Override
     public void onPause() {
         super.onPause();
@@ -2072,6 +2093,7 @@ public class MapInnerFragment extends Fragment
 
     // Patch 3: 边缘检测兜底
     private final Handler edgeCheckHandler = new Handler(Looper.getMainLooper());
+    private long lastEdgeCenterUptimeMs = 0L;
     private final Runnable edgeCheckRunnable = new Runnable() {
         @Override
         public void run() {
@@ -2103,10 +2125,24 @@ public class MapInnerFragment extends Fragment
                             || screenPoint.y < marginY || screenPoint.y > (height - marginY);
 
                     if (outside) {
+                        long now = SystemClock.uptimeMillis();
+                        boolean isDriving = lastMovementState == SmartLocationManager.MovementState.SLOW_DRIVING
+                                || lastMovementState == SmartLocationManager.MovementState.NORMAL_DRIVING;
+                        // 步行/静止不触发兜底，避免低速频繁抢镜头
+                        if (!isDriving) {
+                            edgeCheckHandler.postDelayed(this, 1000);
+                            return;
+                        }
+                        // 驾驶态节流：至少 2s 才允许一次兜底
+                        if (now - lastEdgeCenterUptimeMs < 2000L) {
+                            edgeCheckHandler.postDelayed(this, 1000);
+                            return;
+                        }
                         logD("边缘兜底触发：蓝点离开安全区，强制居中");
-                        centerOnMyLocation(true);
+                        centerOnMyLocationWithSafeZoom();
+                        lastEdgeCenterUptimeMs = now;
                         if (mSmartLocationManager != null) {
-                            mSmartLocationManager.requestBoost(10_000L);
+                            mSmartLocationManager.requestBoost(8_000L);
                         }
                     }
                 }
@@ -2115,6 +2151,23 @@ public class MapInnerFragment extends Fragment
             edgeCheckHandler.postDelayed(this, 1000);
         }
     };
+
+    /**
+     * 居中时根据已有目标距离或当前缩放选择安全缩放，避免无目标时跳到 1000m 造成闪动。
+     */
+    private void centerOnMyLocationWithSafeZoom() {
+        float zoom = Float.NaN;
+        if (!Float.isNaN(lastNearestDistanceMeters) && lastNearestDistanceMeters > 0f) {
+            zoom = focusManager.computeZoomForDistance(lastNearestDistanceMeters);
+        }
+        if (Float.isNaN(zoom) && googleMap != null) {
+            zoom = googleMap.getCameraPosition().zoom;
+        }
+        if (Float.isNaN(zoom)) {
+            zoom = 17f; // 温和的默认缩放，避免 1000m 拉远闪动
+        }
+        centerOnMyLocation(true, zoom);
+    }
 
     private void publishLockscreenFocus(@Nullable DeliveryInfo target, float distanceMeters) {
         try {

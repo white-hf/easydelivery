@@ -164,6 +164,8 @@ public class SmartLocationManager {
     private boolean accelBufferFilled = false;
     private int accelConsecutiveHits = 0;
     private boolean singleUpdateInFlight = false;
+    private long lastSingleFixRequestMs = 0L;
+    private long lastBurstWatchdogMs = 0L;
 
     // 常量定义
     private static final long DELIVERING_IDLE_THRESHOLD_MS = 180_000L; // 3min: avoid red-light/traffic mis-downgrade
@@ -176,6 +178,12 @@ public class SmartLocationManager {
     private static final long MIN_INTERVAL_DRIVING_SLOW_MS = 1_500L;
     private static final long MIN_INTERVAL_WALKING_MS = 1_000L;
     private static final long MIN_INTERVAL_DELIVERING_MS = 30_000L;
+    private static final long SINGLE_FIX_THROTTLE_MS = 30_000L;
+    private static final long BURST_WATCHDOG_MS = 15_000L;
+
+    // Movement hysteresis
+    private int walkingVotes = 0;
+    private int stationaryVotes = 0;
 
     public interface WeakSignalListener extends LocationUpdateListener {
         void onWeakSignal();
@@ -459,13 +467,20 @@ public class SmartLocationManager {
         // =========================================================
         // POOR FIX PATH: never stop dispatching, but DO NOT pollute state/speed
         // =========================================================
+        // Burst watchdog：长时间没有 GOOD fix 时尝试单次高精度拉一把
+        if (inBurstMode && lastGoodFixTime > 0 && (nowMillis - lastGoodFixTime) > BURST_WATCHDOG_MS
+                && shouldRequestSingleFixThrottle() && !singleUpdateInFlight) {
+            requestSingleHighAccuracyFix();
+            lastBurstWatchdogMs = nowMillis;
+        }
+
         if (poorFix) {
             // If we still don't have any good fix, try single high accuracy fix to bootstrap
             if (lastGoodFixTime == 0L && !singleUpdateInFlight) {
                 requestSingleHighAccuracyFix();
             }
             // Stale fix even after having good ones: try to pull a fresh high-accuracy fix once
-            if (staleFix && !singleUpdateInFlight) {
+            if (staleFix && !singleUpdateInFlight && shouldRequestSingleFixThrottle()) {
                 requestSingleHighAccuracyFix();
             }
 
@@ -649,6 +664,31 @@ public class SmartLocationManager {
             newState = MovementState.SLOW_DRIVING;
         } else {
             newState = MovementState.NORMAL_DRIVING;
+        }
+
+        // Hysteresis for Stationary/Walking transitions
+        if (newState == MovementState.WALKING && currentState == MovementState.STATIONARY) {
+            if (speed >= 0.8f) {
+                walkingVotes++;
+            } else {
+                walkingVotes = 0;
+            }
+            if (walkingVotes < 2) {
+                return false;
+            }
+        } else if (newState == MovementState.STATIONARY
+                && (currentState == MovementState.WALKING || currentState == MovementState.STATIONARY)) {
+            if (speed <= 0.3f) {
+                stationaryVotes++;
+            } else {
+                stationaryVotes = 0;
+            }
+            if (stationaryVotes < 2) {
+                return false;
+            }
+        } else {
+            walkingVotes = 0;
+            stationaryVotes = 0;
         }
 
         if (newState != currentState) {
@@ -1126,7 +1166,7 @@ public class SmartLocationManager {
         FileLog.getInstance().debug(TAG, "motion wake detected -> boost + single fix");
         try {
             // 起步瞬间直接拉高频窗口，避免等待 GPS 速度上升
-            requestBoostForce(15_000L);
+            requestBoost(15_000L);
         } catch (Throwable ignore) {
         }
         requestSingleHighAccuracyFix();
@@ -1142,6 +1182,7 @@ public class SmartLocationManager {
             return;
         }
         singleUpdateInFlight = true;
+        lastSingleFixRequestMs = System.currentTimeMillis();
         CancellationTokenSource tokenSource = new CancellationTokenSource();
         try {
             fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, tokenSource.getToken())
@@ -1164,6 +1205,11 @@ public class SmartLocationManager {
     /** Returns current heading in degrees [0,360), or NaN if unavailable. */
     public float getCurrentHeading() {
         return currentHeadingDegrees;
+    }
+
+    private boolean shouldRequestSingleFixThrottle() {
+        long now = System.currentTimeMillis();
+        return (now - lastSingleFixRequestMs) > SINGLE_FIX_THROTTLE_MS;
     }
 
     /** Returns last smoothed location (may be null). */

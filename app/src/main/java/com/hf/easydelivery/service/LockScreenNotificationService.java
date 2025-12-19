@@ -5,9 +5,10 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
-import android.content.Intent;
 import android.app.KeyguardManager;
 import android.content.Context;
+import android.content.Intent;
+import android.Manifest;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
@@ -17,6 +18,7 @@ import android.widget.RemoteViews;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.PermissionChecker;
 
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.dao.DeliveryInfo;
@@ -109,7 +111,10 @@ public class LockScreenNotificationService extends Service {
         if (isDeviceLocked()) {
             // Fast foreground promotion to avoid ForegroundServiceDidNotStartInTimeException
             if (!isForeground) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Android 10+ requires explicit foreground type for location; if permission is
+                // missing, fall back to a generic FGS to avoid SecurityException.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                        && hasLocationPermission()) {
                     startForeground(NOTIFICATION_ID, buildMinimalNotification(),
                             android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
                 } else {
@@ -125,6 +130,13 @@ public class LockScreenNotificationService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+    }
+
+    private boolean hasLocationPermission() {
+        return PermissionChecker.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                == PermissionChecker.PERMISSION_GRANTED
+                || PermissionChecker.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+                == PermissionChecker.PERMISSION_GRANTED;
     }
 
     @Nullable
