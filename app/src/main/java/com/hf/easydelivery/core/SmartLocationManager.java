@@ -91,7 +91,8 @@ public class SmartLocationManager {
     private Location lastPredictedLocation;
     // --- Split caches to avoid low-accuracy pollution / UI stalls ---
     // lastRawLocation: always the most recent fix (even if poor)
-    // lastLocation: last GOOD fix used for speed/state logic (kept for backward compatibility)
+    // lastLocation: last GOOD fix used for speed/state logic (kept for backward
+    // compatibility)
     private Location lastRawLocation;
     private Location lastDispatchedLocation;
     private long lastGoodLocationUptimeMs = 0L;
@@ -123,15 +124,30 @@ public class SmartLocationManager {
     private long continuousStationaryStartMs = 0L; // ✅ Bug#3: 跟踪连续静止开始时间
     private MovementState previousState = MovementState.STATIONARY;
     private long lastGoodFixTime = 0L;
+    private long lastDrivingUptimeMs = 0L;
+    private long lastInVehicleUptimeMs = 0L;
+    private float lastDisplacementMeters = 0f;
+    private boolean movingFlag = false;
+    private long movingHoldUntilMs = 0L;
+    private long lastUiDispatchUptimeMs = 0L;
+    private Location lastUiLocation = null;
     private static final float ACCURACY_THRESHOLD_GOOD = 35f;
+    private static final float ACCURACY_THRESHOLD_GOOD_DRIVING = 50f;
     private static final float ACCURACY_THRESHOLD_POOR = 50f;
+    private static final float ACCURACY_THRESHOLD_STATE_MAX = 120f;
     private static final long POOR_SIGNAL_GRACE_PERIOD = 15_000L;
     private static final long EMERGENCY_BOOST_THRESHOLD_MS = 15_000L;
+    private static final long DRIVING_DOWNGRADE_GRACE_MS = 5_000L;
+    private static final long IN_VEHICLE_GRACE_MS = 15_000L;
+    private static final float DISPLACEMENT_DRIVING_OVERRIDE_M = 12f;
+    private static final long MOVING_HOLD_MS = 15_000L;
+    private static final long UI_FORCE_DISPATCH_MS = 1_200L;
 
     // === Heading (bearing) support via sensors ===
     private SensorManager sensorManager;
     private Sensor rotationVectorSensor;
     private Sensor linearAccelerationSensor;
+    private Sensor accelerometerSensor; // ✅ Fallback
     private final float[] rotationMatrix = new float[9];
     private final float[] orientationAngles = new float[3];
     private float currentHeadingDegrees = Float.NaN; // 0..360, NaN if unknown
@@ -297,6 +313,10 @@ public class SmartLocationManager {
         if (sensorManager != null) {
             rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
             linearAccelerationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
+            if (linearAccelerationSensor == null) {
+                accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+                FileLog.i(TAG, "Linear acceleration sensor missing, using basic accelerometer as fallback");
+            }
         }
     }
 
@@ -346,7 +366,8 @@ public class SmartLocationManager {
                 // 完整处理最后一个
                 Location last = locations.get(locations.size() - 1);
                 FileLog.getInstance().debug(TAG,
-                        String.format("onLocationResult: provider=%s acc=%.1fm speed=%.2f hasSpeed=%s mock=%s elapsedMs=%d",
+                        String.format(
+                                "onLocationResult: provider=%s acc=%.1fm speed=%.2f hasSpeed=%s mock=%s elapsedMs=%d",
                                 last.getProvider(),
                                 last.getAccuracy(),
                                 last.hasSpeed() ? last.getSpeed() : 0f,
@@ -411,12 +432,16 @@ public class SmartLocationManager {
 
         Location prevGood = lastLocation;
         long nowMillis = System.currentTimeMillis();
+        long nowUptime = SystemClock.elapsedRealtime();
+        boolean recentMoving = movingHoldUntilMs > 0 && nowUptime <= movingHoldUntilMs;
+        movingFlag = recentMoving;
 
         // Always keep raw (even if poor) so we can diagnose/repair without UI stalls
         lastRawLocation = newLocation;
 
         // Treat very old fixes as poor (can happen with batched / cached results)
-        // Prefer monotonic elapsedRealtime to avoid wall-clock skew and cached timestamps.
+        // Prefer monotonic elapsedRealtime to avoid wall-clock skew and cached
+        // timestamps.
         long ageMs;
         long locElapsedMs = getElapsedRealtimeMsSafe(newLocation);
         if (locElapsedMs > 0L) {
@@ -428,21 +453,36 @@ public class SmartLocationManager {
 
         // ✅ Bug#4修复：动态精度检查（但不立即return）
         long timeSinceGoodFix = nowMillis - lastGoodFixTime;
+        boolean drivingState = currentState == MovementState.SLOW_DRIVING
+                || currentState == MovementState.NORMAL_DRIVING;
+        float goodThreshold = drivingState ? ACCURACY_THRESHOLD_GOOD_DRIVING : ACCURACY_THRESHOLD_GOOD;
         float accuracyThreshold = timeSinceGoodFix > POOR_SIGNAL_GRACE_PERIOD
                 ? ACCURACY_THRESHOLD_POOR
-                : ACCURACY_THRESHOLD_GOOD;
+                : goodThreshold;
 
         boolean lowAccuracy = newLocation.getAccuracy() > accuracyThreshold;
         boolean poorFix = staleFix || lowAccuracy;
 
         if (poorFix) {
             FileLog.getInstance().debug(TAG,
-                    String.format("Poor fix: acc=%.1fm(thr=%.1fm) stale=%s age=%dms -> dispatch fallback (no state update)",
+                    String.format("Poor fix: acc=%.1fm(thr=%.1fm) stale=%s age=%dms",
                             newLocation.getAccuracy(), accuracyThreshold, String.valueOf(staleFix), ageMs));
+
+            // ✅ Bugfix: 即使点很旧，如果位移很大且精度尚可，也预研判为“运动开始”触发提频
+            if (staleFix && lastLocation != null && newLocation.getAccuracy() <= ACCURACY_THRESHOLD_POOR) {
+                float displacement = lastLocation.distanceTo(newLocation);
+                if (displacement > 10.0f) {
+                    FileLog.i(TAG,
+                            String.format("Stale fix displacement wake: %.1fm -> boosting to refresh", displacement));
+                    requestBoost(20_000L);
+                    requestSingleHighAccuracyFix(); // 强制拉取最新点
+                }
+            }
+            FileLog.getInstance().debug(TAG, "dispatch fallback (limited motion update)");
         }
 
         // Record last good fix time using strict GOOD threshold
-        if (!staleFix && newLocation.getAccuracy() <= ACCURACY_THRESHOLD_GOOD) {
+        if (!staleFix && newLocation.getAccuracy() <= goodThreshold) {
             lastGoodFixTime = nowMillis;
         }
 
@@ -453,6 +493,8 @@ public class SmartLocationManager {
                 FileLog.getInstance().debug(TAG,
                         String.format("Emergency boost: no good fix for %ds", timeSinceLastGood / 1000));
                 requestBoost(10_000L);
+                // ✅ Emergency Boost 时，强拉一次定位，强制跳过 hardware 内部 sleep
+                requestSingleHighAccuracyFix();
             }
         }
 
@@ -460,13 +502,43 @@ public class SmartLocationManager {
         // POOR FIX PATH: never stop dispatching, but DO NOT pollute state/speed
         // =========================================================
         if (poorFix) {
-            // If we still don't have any good fix, try single high accuracy fix to bootstrap
+            // If we still don't have any good fix, try single high accuracy fix to
+            // bootstrap
             if (lastGoodFixTime == 0L && !singleUpdateInFlight) {
                 requestSingleHighAccuracyFix();
             }
-            // Stale fix even after having good ones: try to pull a fresh high-accuracy fix once
+            // Stale fix even after having good ones: try to pull a fresh high-accuracy fix
+            // once
             if (staleFix && !singleUpdateInFlight) {
                 requestSingleHighAccuracyFix();
+            }
+
+            // Use poor-fix motion evidence to avoid freezing driving state
+            if (!staleFix && lastLocation != null && newLocation.getAccuracy() <= ACCURACY_THRESHOLD_STATE_MAX) {
+                float displacement = lastLocation.distanceTo(newLocation);
+                long newElapsed = getElapsedRealtimeMsSafe(newLocation);
+                long lastElapsed = getElapsedRealtimeMsSafe(lastLocation);
+                long dtMs = (newElapsed > 0 && lastElapsed > 0) ? (newElapsed - lastElapsed)
+                        : (newLocation.getTime() - lastLocation.getTime());
+                float speedFromDisp = 0f;
+                if (dtMs > 0 && displacement > 2.0f) {
+                    speedFromDisp = displacement / (dtMs / 1000f);
+                }
+                float speedFromGps = newLocation.hasSpeed() ? newLocation.getSpeed() : 0f;
+                float motionSpeed = Math.max(speedFromGps, speedFromDisp);
+                lastDisplacementMeters = displacement;
+                if (motionSpeed >= 2.0f || displacement >= DISPLACEMENT_DRIVING_OVERRIDE_M) {
+                    lastMovingTimeMs = nowMillis;
+                    lastDrivingUptimeMs = SystemClock.elapsedRealtime();
+                    movingHoldUntilMs = nowUptime + MOVING_HOLD_MS;
+                    movingFlag = true;
+                    if (currentState == MovementState.STATIONARY || currentState == MovementState.WALKING) {
+                        currentState = (motionSpeed >= 8.0f)
+                                ? MovementState.NORMAL_DRIVING
+                                : MovementState.SLOW_DRIVING;
+                        updateLocationParametersForState();
+                    }
+                }
             }
 
             // Build a fallback location to keep UI moving smoothly
@@ -475,7 +547,8 @@ public class SmartLocationManager {
                 // Use the raw fix as-is if we couldn't build a synthetic fallback
                 fallback = new Location(newLocation);
             } else {
-                // Synthetic fallback: ensure monotonic time advances so dispatch de-dup doesn't drop it
+                // Synthetic fallback: ensure monotonic time advances so dispatch de-dup doesn't
+                // drop it
                 stampElapsedRealtimeNow(fallback);
             }
 
@@ -491,6 +564,8 @@ public class SmartLocationManager {
             // Dispatch to listeners (do not update movement state from poor fix)
             dispatchToListeners(fallback);
             lastDispatchUptimeMs = SystemClock.uptimeMillis();
+            lastUiDispatchUptimeMs = lastDispatchUptimeMs;
+            lastUiLocation = fallback;
 
             // Do NOT forward poor fixes to distance tracker
             return;
@@ -520,11 +595,17 @@ public class SmartLocationManager {
                 displacementSpeed = distForSpeed / dtSec;
             }
         }
+        lastDisplacementMeters = distance;
         speed = Math.max(gpsSpeed, displacementSpeed);
 
         // ✅ lastMovingTimeMs更新（good fix）
         if (speed > 0.3f || distance > 2.0f) {
             lastMovingTimeMs = nowMillis;
+            movingHoldUntilMs = nowUptime + MOVING_HOLD_MS;
+            movingFlag = true;
+        }
+        if (speed >= 2.0f) {
+            lastDrivingUptimeMs = SystemClock.elapsedRealtime();
         }
 
         // ✅ 架构师建议：位移>8米立即唤醒（仅 good fix 可信）
@@ -566,16 +647,19 @@ public class SmartLocationManager {
             if (elapsedMs > 0 && elapsedMs == getElapsedRealtimeMsSafe(lastSmoothedLocation)) {
                 shouldDispatch = false;
             }
-            // 静止/步行额外去抖：时间<2s 且 位移<2m
+            // 静止去抖：低速 + 低位移 + 最近未处于驾驶
             if (shouldDispatch
-                    && (currentState == MovementState.STATIONARY || currentState == MovementState.WALKING)
+                    && speed < 0.5f
+                    && (SystemClock.elapsedRealtime() - lastDrivingUptimeMs) > DRIVING_DOWNGRADE_GRACE_MS
                     && timeDiff < 2000L && d < 2.0f) {
                 shouldDispatch = false;
             }
         }
 
         if (!shouldDispatch) {
-            return;
+            if (!movingFlag || nowUptime - lastUiDispatchUptimeMs < UI_FORCE_DISPATCH_MS) {
+                return;
+            }
         }
 
         Location outputLoc;
@@ -588,7 +672,8 @@ public class SmartLocationManager {
             outputLoc = new Location(newLocation);
             outputLoc.setLatitude(lat);
             outputLoc.setLongitude(lon);
-            // Synthetic point: stamp monotonic time so downstream de-dup doesn't treat it as old
+            // Synthetic point: stamp monotonic time so downstream de-dup doesn't treat it
+            // as old
             stampElapsedRealtimeNow(outputLoc);
         } else {
             outputLoc = newLocation;
@@ -601,6 +686,8 @@ public class SmartLocationManager {
         // Dispatch
         lastDispatchedLocation = outputLoc;
         dispatchToListeners(outputLoc);
+        lastUiDispatchUptimeMs = SystemClock.uptimeMillis();
+        lastUiLocation = outputLoc;
         lastUpdateTime = newLocation.getTime();
 
         // ✅ 弱信号检测优化：连续次数 + 时间窗口
@@ -634,7 +721,7 @@ public class SmartLocationManager {
             updateLocationParametersForState();
         }
 
-        lastDispatchUptimeMs = SystemClock.uptimeMillis();
+        lastDispatchUptimeMs = lastUiDispatchUptimeMs;
 
         this.forwardToDrivingDistanceTracker(outputLoc, currentState);
     }
@@ -651,12 +738,25 @@ public class SmartLocationManager {
             newState = MovementState.NORMAL_DRIVING;
         }
 
+        long nowUptime = SystemClock.elapsedRealtime();
+        boolean wasDriving = currentState == MovementState.SLOW_DRIVING
+                || currentState == MovementState.NORMAL_DRIVING;
+        if (newState == MovementState.STATIONARY && wasDriving) {
+            boolean recentDriving = nowUptime - lastDrivingUptimeMs < DRIVING_DOWNGRADE_GRACE_MS;
+            boolean recentVehicle = nowUptime - lastInVehicleUptimeMs < IN_VEHICLE_GRACE_MS;
+            boolean displacementOverride = lastDisplacementMeters >= DISPLACEMENT_DRIVING_OVERRIDE_M;
+            if (recentDriving || recentVehicle || displacementOverride) {
+                newState = currentState;
+            }
+        }
+
         if (newState != currentState) {
             boolean isDrivingNow = newState == MovementState.SLOW_DRIVING || newState == MovementState.NORMAL_DRIVING;
             boolean wasNotDriving = currentState == MovementState.STATIONARY || currentState == MovementState.WALKING;
 
-            if (isDrivingNow && wasNotDriving) {
+            if (wasNotDriving && newState != MovementState.STATIONARY) {
                 requestBoost(15_000L);
+                // ✅ 从静止状态离开时（不管是 WALKING 还是 DRIVING），都强刷一次定位
                 requestSingleHighAccuracyFix();
             }
 
@@ -758,7 +858,8 @@ public class SmartLocationManager {
      */
     private boolean isDeliveringAndIdle() {
         long timeSinceLastMovement = System.currentTimeMillis() - lastMovingTimeMs;
-        return (currentState == MovementState.STATIONARY || currentState == MovementState.WALKING)
+        // ✅ 优化闲置判定：只有 STATIONARY 且长时间未动才降频；WALKING 状态不进入极低频模式
+        return (currentState == MovementState.STATIONARY)
                 && timeSinceLastMovement > DELIVERING_IDLE_THRESHOLD_MS;
     }
 
@@ -853,6 +954,11 @@ public class SmartLocationManager {
         return currentState;
     }
 
+    public boolean isMovingLikely() {
+        long nowUptime = SystemClock.elapsedRealtime();
+        return movingFlag || (movingHoldUntilMs > 0 && nowUptime <= movingHoldUntilMs);
+    }
+
     public static void updateActivityState(Context ctx, int activityType, int transitionType) {
         MovementState newState;
         switch (activityType) {
@@ -876,6 +982,11 @@ public class SmartLocationManager {
     }
 
     private void updateStateFromActivity(MovementState newState) {
+        if (newState == MovementState.SLOW_DRIVING || newState == MovementState.NORMAL_DRIVING) {
+            lastInVehicleUptimeMs = SystemClock.elapsedRealtime();
+            movingHoldUntilMs = lastInVehicleUptimeMs + MOVING_HOLD_MS;
+            movingFlag = true;
+        }
         if (newState != currentState) {
             currentState = newState;
             updateLocationParametersForState();
@@ -1031,13 +1142,18 @@ public class SmartLocationManager {
     }
 
     private void startMotionWakeMonitoring() {
-        if (sensorManager != null && linearAccelerationSensor != null) {
-            sensorManager.registerListener(accelListener, linearAccelerationSensor, SensorManager.SENSOR_DELAY_GAME);
+        if (sensorManager != null) {
+            if (linearAccelerationSensor != null) {
+                sensorManager.registerListener(accelListener, linearAccelerationSensor,
+                        SensorManager.SENSOR_DELAY_GAME);
+            } else if (accelerometerSensor != null) {
+                sensorManager.registerListener(accelListener, accelerometerSensor, SensorManager.SENSOR_DELAY_GAME);
+            }
         }
     }
 
     private void stopMotionWakeMonitoring() {
-        if (sensorManager != null && linearAccelerationSensor != null) {
+        if (sensorManager != null) {
             sensorManager.unregisterListener(accelListener);
         }
         accelConsecutiveHits = 0;
@@ -1046,13 +1162,19 @@ public class SmartLocationManager {
     private final SensorEventListener accelListener = new SensorEventListener() {
         @Override
         public void onSensorChanged(SensorEvent event) {
-            if (event.sensor.getType() != Sensor.TYPE_LINEAR_ACCELERATION)
+            int type = event.sensor.getType();
+            if (type != Sensor.TYPE_LINEAR_ACCELERATION && type != Sensor.TYPE_ACCELEROMETER)
                 return;
 
             float ax = event.values[0];
             float ay = event.values[1];
             float az = event.values[2];
             float magnitude = (float) Math.sqrt(ax * ax + ay * ay + az * az);
+
+            // ✅ 如果是基础加速度计，减去重力近似值 (9.8)，只保留波动部分
+            if (type == Sensor.TYPE_ACCELEROMETER) {
+                magnitude = Math.abs(magnitude - 9.81f);
+            }
 
             // ✅ 更新buffer
             accelBuffer[accelBufferIndex] = magnitude;
@@ -1182,7 +1304,8 @@ public class SmartLocationManager {
         switch (state) {
             case NORMAL_DRIVING:
             case SLOW_DRIVING:
-                // Higher alpha in driving to avoid 5–10s visual lag (urban speeds are often 5–11 m/s)
+                // Higher alpha in driving to avoid 5–10s visual lag (urban speeds are often
+                // 5–11 m/s)
                 if (speedMps > 8f)
                     return 0.8;
                 if (speedMps > 5f)
@@ -1253,7 +1376,6 @@ public class SmartLocationManager {
         }
     }
 
-
     @Nullable
     private Location buildFallbackForDispatch(@NonNull Location raw, long nowMillis) {
         // 1) Prefer a very recent prediction
@@ -1277,7 +1399,8 @@ public class SmartLocationManager {
             base = lastLocation;
         }
 
-        if (base == null) return null;
+        if (base == null)
+            return null;
 
         float bearingInput = raw.hasBearing() ? raw.getBearing() : Float.NaN;
         Location predicted = predictFutureLocation(base, speed, bearingInput);
@@ -1295,7 +1418,8 @@ public class SmartLocationManager {
     }
 
     /**
-     * For synthetic locations (smoothed/predicted/fallback), stamp monotonic time so downstream
+     * For synthetic locations (smoothed/predicted/fallback), stamp monotonic time
+     * so downstream
      * de-duplication based on elapsedRealtime does not accidentally drop updates.
      */
     private void stampElapsedRealtimeNow(@NonNull Location loc) {
@@ -1314,7 +1438,8 @@ public class SmartLocationManager {
     }
 
     private void dispatchToListeners(@NonNull Location loc) {
-        if (listeners.isEmpty()) return;
+        if (listeners.isEmpty())
+            return;
         long elapsedMs = getElapsedRealtimeMsSafe(loc);
         if (elapsedMs > 0 && elapsedMs == lastDispatchElapsedMs) {
             FileLog.getInstance().debug(TAG,

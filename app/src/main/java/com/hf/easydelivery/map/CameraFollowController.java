@@ -69,6 +69,9 @@ public class CameraFollowController {
     private static final float SPEED_ZOOM_SUBURB = 16.5f;
     private static final float SPEED_ZOOM_HIGHWAY = 15.5f;
     private static final float EDGE_FORCE_METERS = 25f;
+    private static final float SMART_ZOOM_NEAR_METERS = 800f;
+    private static final float LIST_VIEW_NEAR_METERS = 800f;
+    private static final int LIST_VIEW_MIN_ITEMS = 1;
 
     // Adaptive animation + lookAhead smoothing
     private static final long CAMERA_ANIM_MIN_MS = 120L;
@@ -80,7 +83,8 @@ public class CameraFollowController {
     private static final double LOOKAHEAD_MAX_DELTA_MIN = 10d;
     private static final double LOOKAHEAD_MAX_DELTA_MAX = 30d;
 
-    // If camera hasn't moved for too long, force an update to avoid "stuck" feeling.
+    // If camera hasn't moved for too long, force an update to avoid "stuck"
+    // feeling.
     private static final long DRIVING_FORCE_UPDATE_STALE_MS = 1500L;
 
     private long suppressFollowUntilMs = 0L;
@@ -161,7 +165,8 @@ public class CameraFollowController {
                 boolean hasCentered) {
             long now = SystemClock.uptimeMillis();
             long dt = (lastUpdateUptime <= 0L) ? Long.MAX_VALUE : (now - lastUpdateUptime);
-            // If camera hasn't moved for too long, force an update to avoid "stuck" feeling.
+            // If camera hasn't moved for too long, force an update to avoid "stuck"
+            // feeling.
             boolean staleForce = dt > DRIVING_FORCE_UPDATE_STALE_MS;
             boolean timeOk = staleForce || (dt > FOLLOW_CONFIG.stdIntervalMs);
 
@@ -511,10 +516,22 @@ public class CameraFollowController {
         // ============================================================
         // 1. List View Strategy
         // ============================================================
-        boolean smartZoomApplicable = context.isStationaryOrWalking() &&
+        boolean drivingLikely = context.isDrivingLikely();
+        boolean stationaryOrWalking = !drivingLikely;
+        boolean allowSmartZoom = !drivingLikely
+                || (context.nearestPackageDistanceMeters > 0
+                        && context.nearestPackageDistanceMeters <= SMART_ZOOM_NEAR_METERS);
+        boolean smartZoomApplicable = allowSmartZoom &&
                 context.nearestPackageDistanceMeters > 0;
 
-        if (context.isStationaryOrWalking()
+        int nearbyCount = context.nearbyDeliveries == null ? 0 : context.nearbyDeliveries.size();
+        boolean allowListView = stationaryOrWalking
+                || (drivingLikely
+                        && context.nearestPackageDistanceMeters > 0
+                        && context.nearestPackageDistanceMeters <= LIST_VIEW_NEAR_METERS
+                        && nearbyCount >= LIST_VIEW_MIN_ITEMS);
+
+        if (allowListView
                 && !smartZoomApplicable
                 && context.nearbyDeliveries != null
                 && !context.nearbyDeliveries.isEmpty()) {
@@ -548,7 +565,7 @@ public class CameraFollowController {
         }
 
         // --- Driving always forces (old behavior) ---
-        if (!shouldForce && context.isDriving() && allowAutoFollow) {
+        if (!shouldForce && drivingLikely && allowAutoFollow) {
             resetHasCenteredOnUser();
             shouldForce = true;
             // noisy
@@ -566,7 +583,8 @@ public class CameraFollowController {
         boolean lowSpeedInside = context.isLowSpeedInsideDeliveryZone() || navMode;
         if (!shouldForce && lowSpeedInside && allowAutoFollow) {
             LatLng driverLL = new LatLng(context.location.getLatitude(), context.location.getLongitude());
-            LatLng edgeRef = (context.isDriving() && lastCameraTargetLatLng != null) ? lastCameraTargetLatLng : driverLL;
+            LatLng edgeRef = (context.isDriving() && lastCameraTargetLatLng != null) ? lastCameraTargetLatLng
+                    : driverLL;
             float offsetMeters = estimateEdgeOffsetMeters(edgeRef);
             if (offsetMeters > EDGE_FORCE_METERS) {
                 shouldForce = true;
@@ -577,7 +595,7 @@ public class CameraFollowController {
         // ============================================================
         // 5. Determine AllowCameraMove（必须根据 force 先算）
         // ============================================================
-        boolean driving = context.isDriving() || navMode;
+        boolean driving = drivingLikely || navMode;
 
         GateSnapshot gateSnapshot = new GateSnapshot();
         gateSnapshot.movementState = context.movementState;
@@ -686,7 +704,7 @@ public class CameraFollowController {
                 return false;
             }
             // 仅静止/步行时做额外去抖，驾驶态不屏蔽更新
-            if (!context.isDriving() && stationaryOrWalk && shortInterval
+            if (!drivingLikely && stationaryOrWalk && shortInterval
                     && px < MIN_PIXEL_DELTA && zoomDelta < 0.02f && !shouldForce) {
                 logD("updateCamera(): stationary debounce skipped");
                 return false;
@@ -706,7 +724,7 @@ public class CameraFollowController {
         rememberCameraKey(targetCamera, context);
 
         // --- Enter driving mode (>10km/h) ---
-        if (context.isDriving()
+        if (drivingLikely
                 && context.location.hasSpeed()
                 && context.location.getSpeed() * 3.6f >= 10f) {
             hasEverEnteredDrivingMode = true;
@@ -716,7 +734,8 @@ public class CameraFollowController {
         // --- Edge Boost for location manager ---
         if (smartLocationManager != null && driving) {
             LatLng driverLL2 = new LatLng(context.location.getLatitude(), context.location.getLongitude());
-            LatLng edgeRef2 = (context.isDriving() && lastCameraTargetLatLng != null) ? lastCameraTargetLatLng : driverLL2;
+            LatLng edgeRef2 = (context.isDriving() && lastCameraTargetLatLng != null) ? lastCameraTargetLatLng
+                    : driverLL2;
             float offset = estimateEdgeOffsetMeters(edgeRef2);
             smartLocationManager.requestBoostIfEdgeRisk(offset, context.location.getSpeed());
         }
@@ -782,7 +801,18 @@ public class CameraFollowController {
             return DRIVING_MIN_ZOOM;
         }
 
-        if (context.isStationaryOrWalking()) {
+        boolean allowSmartZoom = !context.isDrivingLikely()
+                || (context.nearestPackageDistanceMeters > 0
+                        && context.nearestPackageDistanceMeters <= SMART_ZOOM_NEAR_METERS);
+        if (allowSmartZoom) {
+            // ✅ Fix: Only use "Smart Zoom" (fit-to-package) when close to the target.
+            // When far away (e.g. 20km commute), stay in cruise zoom even when stationary
+            // to prevent annoying zoom jumps (e.g. from 14.9 to 16.5) when stopping at
+            // lights.
+            if (context.nearestPackageDistanceMeters > 1500f) {
+                return DRIVING_MIN_ZOOM;
+            }
+
             float smartZoom = DeliveryFocusManager.computeSmartZoom(
                     context.nearestPackageDistanceMeters,
                     context.location.getLatitude(),
@@ -796,6 +826,34 @@ public class CameraFollowController {
 
         float result = computeSpeedZoom(context.location, DRIVING_MIN_ZOOM);
         return result;
+    }
+
+    public float computePreferredZoomForManualCenter(@NonNull Location location,
+            @NonNull SmartLocationManager.MovementState state,
+            float nearestPackageDistanceMeters,
+            int visibleMapHeightPx) {
+        if (nearestPackageDistanceMeters <= 0) {
+            return DRIVING_MIN_ZOOM;
+        }
+
+        boolean stationaryOrWalking = state == SmartLocationManager.MovementState.STATIONARY
+                || state == SmartLocationManager.MovementState.WALKING;
+        if (stationaryOrWalking) {
+            if (nearestPackageDistanceMeters > 1500f) {
+                return DRIVING_MIN_ZOOM;
+            }
+
+            float smartZoom = DeliveryFocusManager.computeSmartZoom(
+                    nearestPackageDistanceMeters,
+                    location.getLatitude(),
+                    visibleMapHeightPx);
+
+            if (smartZoom < 18.9f) {
+                return Math.max(14.9f, smartZoom);
+            }
+        }
+
+        return computeSpeedZoom(location, DRIVING_MIN_ZOOM);
     }
 
     private boolean shouldAllowAutoFollow(CameraUpdateContext context) {
@@ -1140,7 +1198,8 @@ public class CameraFollowController {
 
         // Smooth transition (dt-adaptive): allow larger change when updates are sparse
         long nowUptime = SystemClock.uptimeMillis();
-        long dtUptime = (lastCameraAnimStartUptime <= 0L) ? LOOKAHEAD_BASE_DT_MS : (nowUptime - lastCameraAnimStartUptime);
+        long dtUptime = (lastCameraAnimStartUptime <= 0L) ? LOOKAHEAD_BASE_DT_MS
+                : (nowUptime - lastCameraAnimStartUptime);
         if (dtUptime < 0L)
             dtUptime = LOOKAHEAD_BASE_DT_MS;
 
@@ -1168,7 +1227,8 @@ public class CameraFollowController {
             dt = LOOKAHEAD_BASE_DT_MS;
         lastCameraAnimStartUptime = nowUptime;
 
-        // Adaptive duration: if updates are sparse, animate faster to avoid "trailing" feeling.
+        // Adaptive duration: if updates are sparse, animate faster to avoid "trailing"
+        // feeling.
         long duration;
         if (dt > 1200L) {
             duration = CAMERA_ANIM_STALE_FAST_MS;

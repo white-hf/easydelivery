@@ -127,6 +127,10 @@ public class MapInnerFragment extends Fragment
     private static final long INSIDE_MANUAL_CENTER_HOLD_MS = 500L;
     private static final long INSIDE_BOOST_DURATION_MS = 5_000L;
     private static final long INSIDE_BOOST_COOLDOWN_MS = 25_000L;
+    private static final int EDGE_OUTSIDE_REQUIRED = 2;
+    private static final float EDGE_MARGIN_X = 0.15f;
+    private static final float EDGE_MARGIN_Y = 0.20f;
+    private static final float EDGE_MARGIN_Y_DRIVING = 0.30f;
 
     // ===== UI location quality gating (map-layer) =====
     private static final float GOOD_ACCURACY_DRIVING_M = 35f;
@@ -223,7 +227,7 @@ public class MapInnerFragment extends Fragment
 
     // ===== Map-layer location smoothing / gating state =====
     private Location mLastEffectiveUiLocation = null; // what marker/camera used last time
-    private Location mLastGoodLocation = null;        // last good (accurate + not stale) raw fix
+    private Location mLastGoodLocation = null; // last good (accurate + not stale) raw fix
     private long mLastGoodUptimeMs = 0L;
     private CameraUpdateContext.LocationSource mLastEffectiveSource = CameraUpdateContext.LocationSource.UNKNOWN;
 
@@ -258,7 +262,7 @@ public class MapInnerFragment extends Fragment
 
     // --- Developer panel shortcut (double-tap toolbar) ---
     private static final long DEV_DOUBLE_TAP_WINDOW_MS = 450L;
-    private static final long AUTO_FOLLOW_PAUSE_MS = 5500L; // 用户手势后，约 5.5 秒保护窗口
+    private static final long AUTO_FOLLOW_PAUSE_MS = 3000L; // 用户手势后，约 3 秒保护窗口
     private long lastToolbarTapMs = 0L;
 
     // ===== Top-3 主案：Fragment 侧轻量采样/抑制配置 =====
@@ -281,6 +285,7 @@ public class MapInnerFragment extends Fragment
     private LatLng commuteAnchorLatLng = null; // 区域通勤锚点
     private long commuteSuppressUntilMs = 0L; // 通勤抑制到期时间
     private long lastCommuteSuppressedKey = 0L;
+    private int edgeOutsideConsecutive = 0;
 
     /** Expose for developer panel to apply follow config at runtime. */
     @Nullable
@@ -1161,7 +1166,8 @@ public class MapInnerFragment extends Fragment
     }
 
     private void focusOnDelivery(DeliveryInfo info) {
-        if (googleMap == null) return;
+        if (googleMap == null)
+            return;
         LatLng target = new LatLng(info.getLatitude(), info.getLongitude());
         googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(target, 17f));
         currentPrimaryDelivery = info;
@@ -1209,7 +1215,11 @@ public class MapInnerFragment extends Fragment
                     ? DEFAULT_DISTANCE_METERS
                     : lastNearestDistanceMeters;
             logD("centerOnMyLocation zoomFromDist=" + distanceMeters);
-            float zoom = focusManager.computeZoomForDistance(distanceMeters);
+            float zoom = cameraController.computePreferredZoomForManualCenter(
+                    loc,
+                    lastMovementState,
+                    distanceMeters,
+                    getRealMapVisibleHeightPx());
             boolean alignToCenter = !resumeAutoFollow
                     || currentRegionState == InfoPillProximityController.RegionState.INSIDE;
             boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
@@ -1798,8 +1808,10 @@ public class MapInnerFragment extends Fragment
             lastMarkerBearing = toBearing;
         }
     }
+
     private boolean isGoodFixForUi(@NonNull Location loc, @NonNull SmartLocationManager.MovementState state) {
-        if (!loc.hasAccuracy()) return false;
+        if (!loc.hasAccuracy())
+            return false;
         float acc = loc.getAccuracy();
         boolean driving = (state == SmartLocationManager.MovementState.SLOW_DRIVING
                 || state == SmartLocationManager.MovementState.NORMAL_DRIVING);
@@ -1817,14 +1829,16 @@ public class MapInnerFragment extends Fragment
     }
 
     private boolean isPredictedUsableForUi(@Nullable Location predicted) {
-        if (predicted == null) return false;
+        if (predicted == null)
+            return false;
         long now = System.currentTimeMillis();
         long age = Math.abs(now - predicted.getTime());
         return age <= MAX_PREDICTED_UI_AGE_MS;
     }
 
     private long getElapsedRealtimeMsSafe(@Nullable Location loc) {
-        if (loc == null) return -1L;
+        if (loc == null)
+            return -1L;
         try {
             return loc.getElapsedRealtimeNanos() / 1_000_000L;
         } catch (Throwable t) {
@@ -1834,8 +1848,8 @@ public class MapInnerFragment extends Fragment
 
     @NonNull
     private Location chooseEffectiveLocationForUi(@NonNull Location raw,
-                                                 @Nullable Location predicted,
-                                                 @NonNull SmartLocationManager.MovementState state) {
+            @Nullable Location predicted,
+            @NonNull SmartLocationManager.MovementState state) {
         final boolean driving = (state == SmartLocationManager.MovementState.SLOW_DRIVING
                 || state == SmartLocationManager.MovementState.NORMAL_DRIVING);
 
@@ -1858,7 +1872,8 @@ public class MapInnerFragment extends Fragment
             return new Location(raw);
         }
 
-        // Walking/Stationary: prefer predicted when fresh (smoother), otherwise use raw.
+        // Walking/Stationary: prefer predicted when fresh (smoother), otherwise use
+        // raw.
         if (isPredictedUsableForUi(predicted)) {
             mLastEffectiveSource = CameraUpdateContext.LocationSource.PREDICTED;
             return new Location(predicted);
@@ -2056,7 +2071,8 @@ public class MapInnerFragment extends Fragment
         nearestDeliveries = Collections.emptyList();
         currentCloseDeliveries = Collections.emptyList();
 
-        // Lockscreen notification is managed by a global controller; no Fragment lifecycle coupling.
+        // Lockscreen notification is managed by a global controller; no Fragment
+        // lifecycle coupling.
 
         if (mapView != null)
             mapView.onDestroy();
@@ -2076,6 +2092,7 @@ public class MapInnerFragment extends Fragment
         @Override
         public void run() {
             if (googleMap == null || mLastEffectiveUiLocation == null || navigationModeEnabled) {
+                edgeOutsideConsecutive = 0;
                 edgeCheckHandler.postDelayed(this, 1000);
                 return;
             }
@@ -2084,30 +2101,52 @@ public class MapInnerFragment extends Fragment
             if (autoFollowPausedByGesture) {
                 long now = SystemClock.uptimeMillis();
                 if (autoFollowPausedAtMs != 0L && now - autoFollowPausedAtMs < AUTO_FOLLOW_PAUSE_MS) {
+                    edgeOutsideConsecutive = 0;
                     edgeCheckHandler.postDelayed(this, 1000);
                     return;
                 }
             }
 
+            boolean uiFixGood = isGoodFixForUi(mLastEffectiveUiLocation, lastMovementState)
+                    && !isStaleForUi(mLastEffectiveUiLocation, lastMovementState);
+            if (!uiFixGood) {
+                edgeOutsideConsecutive = 0;
+                edgeCheckHandler.postDelayed(this, 1000);
+                return;
+            }
+
             if (mapView != null) {
-                LatLng myLatLng = new LatLng(mLastEffectiveUiLocation.getLatitude(), mLastEffectiveUiLocation.getLongitude());
+                LatLng myLatLng = new LatLng(mLastEffectiveUiLocation.getLatitude(),
+                        mLastEffectiveUiLocation.getLongitude());
                 Point screenPoint = googleMap.getProjection().toScreenLocation(myLatLng);
                 int width = mapView.getWidth();
                 int height = mapView.getHeight();
 
                 if (width > 0 && height > 0) {
                     // 安全区：左右各留 15%，上下各留 20%，超出才兜底
-                    int marginX = (int) (width * 0.15f);
-                    int marginY = (int) (height * 0.20f);
+                    boolean driving = lastMovementState == SmartLocationManager.MovementState.SLOW_DRIVING
+                            || lastMovementState == SmartLocationManager.MovementState.NORMAL_DRIVING;
+                    int marginX = (int) (width * EDGE_MARGIN_X);
+                    int marginY = (int) (height * (driving ? EDGE_MARGIN_Y_DRIVING : EDGE_MARGIN_Y));
                     boolean outside = screenPoint.x < marginX || screenPoint.x > (width - marginX)
                             || screenPoint.y < marginY || screenPoint.y > (height - marginY);
 
                     if (outside) {
+                        edgeOutsideConsecutive++;
+                        if (edgeOutsideConsecutive < EDGE_OUTSIDE_REQUIRED) {
+                            edgeCheckHandler.postDelayed(this, 1000);
+                            return;
+                        }
+                        edgeOutsideConsecutive = 0;
                         logD("边缘兜底触发：蓝点离开安全区，强制居中");
                         centerOnMyLocation(true);
                         if (mSmartLocationManager != null) {
                             mSmartLocationManager.requestBoost(10_000L);
+                            // ✅ 边缘兜底触发时，额外拉取一次强特定 fix，强制 GPS 跳过当前轮询周期立即工作
+                            mSmartLocationManager.requestSingleHighAccuracyFix();
                         }
+                    } else {
+                        edgeOutsideConsecutive = 0;
                     }
                 }
             }

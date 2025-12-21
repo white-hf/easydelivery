@@ -79,6 +79,14 @@ public class CameraUpdateContext {
                 movementState == SmartLocationManager.MovementState.NORMAL_DRIVING;
     }
 
+    public boolean isMovingBySpeed() {
+        return !Float.isNaN(speedMps) && speedMps >= 1.5f;
+    }
+
+    public boolean isDrivingLikely() {
+        return isDriving() || isMovingBySpeed();
+    }
+
     public boolean isStationaryOrWalking() {
         return movementState == SmartLocationManager.MovementState.STATIONARY ||
                 movementState == SmartLocationManager.MovementState.WALKING;
