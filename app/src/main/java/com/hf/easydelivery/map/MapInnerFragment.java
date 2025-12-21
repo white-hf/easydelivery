@@ -227,7 +227,7 @@ public class MapInnerFragment extends Fragment
 
     // ===== Map-layer location smoothing / gating state =====
     private Location mLastEffectiveUiLocation = null; // what marker/camera used last time
-    private Location mLastGoodLocation = null; // last good (accurate + not stale) raw fix
+    private Location mLastGoodLocation = null;        // last good (accurate + not stale) raw fix
     private long mLastGoodUptimeMs = 0L;
     private CameraUpdateContext.LocationSource mLastEffectiveSource = CameraUpdateContext.LocationSource.UNKNOWN;
 
