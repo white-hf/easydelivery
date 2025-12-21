@@ -1254,7 +1254,7 @@ public class SmartLocationManager {
         requestSingleHighAccuracyFix();
     }
 
-    private void requestSingleHighAccuracyFix() {
+    public void requestSingleHighAccuracyFix() {
         if (singleUpdateInFlight)
             return;
         if (fusedLocationClient == null)
