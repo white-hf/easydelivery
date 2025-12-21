@@ -25,6 +25,8 @@ public final class LockScreenFocusController implements FocusStateRepository.Lis
     private static volatile LockScreenFocusController instance;
 
     private static final long UPDATE_DEBOUNCE_MS = 400L;
+    // Prevent tight loops of startForegroundService/bindService when the system rejects or delays startup.
+    private static final long START_ATTEMPT_COOLDOWN_MS = 3_000L;
 
     @NonNull
     private final Context appContext;
@@ -38,6 +40,7 @@ public final class LockScreenFocusController implements FocusStateRepository.Lis
     private String lastShownStableId;
 
     private long lastUpdateUptimeMs = 0L;
+    private long lastStartAttemptUptimeMs = 0L;
 
     @Nullable
     private LockScreenNotificationService service;
@@ -152,6 +155,14 @@ public final class LockScreenFocusController implements FocusStateRepository.Lis
 
     private void ensureServiceBound() {
         if (bound || binding) return;
+
+        // Cooldown to avoid repeatedly starting/binding in a short window (can cause ANR / battery drain).
+        long now = SystemClock.uptimeMillis();
+        if ((now - lastStartAttemptUptimeMs) < START_ATTEMPT_COOLDOWN_MS) {
+            return;
+        }
+        lastStartAttemptUptimeMs = now;
+
         binding = true;
         try {
             Intent intent = new Intent(appContext, LockScreenNotificationService.class);
@@ -164,6 +175,11 @@ public final class LockScreenFocusController implements FocusStateRepository.Lis
         } catch (Throwable t) {
             binding = false;
             FileLog.getInstance().error(TAG, "Failed to start/bind LockScreenNotificationService", t);
+            // Best-effort cleanup: if service got started but bind failed, stop it to avoid a stray foreground notification.
+            try {
+                appContext.stopService(new Intent(appContext, LockScreenNotificationService.class));
+            } catch (Throwable ignore) {
+            }
         }
     }
 
@@ -207,4 +223,3 @@ public final class LockScreenFocusController implements FocusStateRepository.Lis
         }
     }
 }
-
