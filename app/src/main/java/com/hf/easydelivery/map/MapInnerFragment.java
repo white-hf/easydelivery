@@ -86,6 +86,7 @@ import com.hf.easydelivery.view.DeveloperPanelBottomSheet;
 import com.hf.easydelivery.service.FocusState;
 import com.hf.easydelivery.service.FocusStateRepository;
 import com.hf.easydelivery.map.CameraUpdateContext;
+import com.hf.easydelivery.telemetry.Telemetry;
 
 import android.animation.ValueAnimator;
 import android.view.animation.LinearInterpolator;
@@ -221,6 +222,7 @@ public class MapInnerFragment extends Fragment
     private final Handler cameraUpdateHandler = new Handler(Looper.getMainLooper());
     private final Runnable cameraUpdateRunnable = () -> {
         if (cameraController != null && pendingCameraContext != null) {
+            Telemetry.counter("ui.cameraUpdate");
             cameraController.updateCamera(pendingCameraContext);
         }
     };
@@ -551,7 +553,7 @@ public class MapInnerFragment extends Fragment
             proximityCoordinator.setBoostable(ms -> {
                 if (mSmartLocationManager != null) {
                     try {
-                        mSmartLocationManager.requestBoost(ms);
+                        mSmartLocationManager.requestBoost(ms, "proximity");
                     } catch (Throwable ignore) {
                     }
                 }
@@ -1205,15 +1207,21 @@ public class MapInnerFragment extends Fragment
         // 用户手动回中心，强制提频一次，避免静止锁导致无首fix
         if (mSmartLocationManager != null) {
             try {
-                mSmartLocationManager.requestBoostForce(8_000L);
+                mSmartLocationManager.requestBoostForce(8_000L, "manual_center");
             } catch (Throwable ignore) {
             }
         }
         if (cameraController != null) {
             cameraController.resetHasCenteredOnUser();
-            float distanceMeters = Float.isNaN(lastNearestDistanceMeters)
-                    ? DEFAULT_DISTANCE_METERS
-                    : lastNearestDistanceMeters;
+            float distanceMeters;
+            if (!Float.isNaN(lastNearestDistanceMeters)) {
+                distanceMeters = lastNearestDistanceMeters;
+            } else if (!Float.isNaN(lastValidNearestDistanceMeters)) {
+                distanceMeters = lastValidNearestDistanceMeters;
+            } else {
+                // Unknown distance: avoid smart-zoom jumps, keep cruising zoom.
+                distanceMeters = -1f;
+            }
             logD("centerOnMyLocation zoomFromDist=" + distanceMeters);
             float zoom = cameraController.computePreferredZoomForManualCenter(
                     loc,
@@ -1308,6 +1316,7 @@ public class MapInnerFragment extends Fragment
                 + ", pausedByGesture=" + autoFollowPausedByGesture
                 + ", seq=" + seq
                 + ", rawElapsedMs=" + rawElapsedMs);
+        Telemetry.counter("ui.onLocationUpdate");
         // Capture previous movement state BEFORE overwriting lastMovementState
         final SmartLocationManager.MovementState prevState = lastMovementState;
         // 通知 ViewModel 更新定位
@@ -1344,7 +1353,7 @@ public class MapInnerFragment extends Fragment
         // If raw fix is poor/stale, request a short boost to recover accuracy quickly.
         if (!rawGood && mSmartLocationManager != null) {
             try {
-                mSmartLocationManager.requestBoost(8_000L);
+                mSmartLocationManager.requestBoost(8_000L, "poor_fix");
             } catch (Throwable ignore) {
             }
         }
@@ -1355,6 +1364,7 @@ public class MapInnerFragment extends Fragment
         try {
             if (proximityCoordinator != null) {
                 if (shouldEvaluateProximity(effective, state)) {
+                    Telemetry.counter("ui.proximityEval");
                     proximityCoordinator.onLocation(effective, state, currentMapDeliveries);
                     // 进入/更新后：若上次手动折叠且仍锁定同一目标，UI 侧增加一点回差以防抖（兜底）
                     if (infoPillCollapsed && currentPrimaryDelivery != null
@@ -1408,6 +1418,10 @@ public class MapInnerFragment extends Fragment
         boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
         boolean manualHold = isManualCenterHoldActive();
 
+        long stationaryDurationMs = 0L;
+        if (mSmartLocationManager != null) {
+            stationaryDurationMs = mSmartLocationManager.getStationaryDurationMs();
+        }
         CameraUpdateContext cameraContext = new CameraUpdateContext(
                 effective,
                 state,
@@ -1418,6 +1432,7 @@ public class MapInnerFragment extends Fragment
                 effective.hasBearing() ? effective.getBearing() : Float.NaN,
                 mSmartLocationManager != null ? mSmartLocationManager.getCurrentHeading() : Float.NaN,
                 distanceMeters,
+                stationaryDurationMs,
                 currentMapDeliveries,
                 insideZone,
                 getRealMapVisibleHeightPx(),
@@ -1474,6 +1489,9 @@ public class MapInnerFragment extends Fragment
         autoFollowPausedAtMs = SystemClock.uptimeMillis();
         showResumeFollowButton(); // 像 Google Maps 一样在用户干预时显示
         logD("auto-follow paused by user gesture");
+        if (mSmartLocationManager != null) {
+            mSmartLocationManager.setUiFollowActive(false);
+        }
     }
 
     private void clearAutoFollowPause() {
@@ -1483,6 +1501,9 @@ public class MapInnerFragment extends Fragment
         autoFollowPausedAtMs = 0L;
         hideResumeFollowButton(); // 点击“重新跟随”后隐藏
         logD("auto-follow pause cleared");
+        if (mSmartLocationManager != null) {
+            mSmartLocationManager.setUiFollowActive(true);
+        }
     }
 
     private void clearCommuteSuppression() {
@@ -1618,7 +1639,7 @@ public class MapInnerFragment extends Fragment
         if (mSmartLocationManager == null)
             return;
         try {
-            mSmartLocationManager.requestBoost(8_000L);
+            mSmartLocationManager.requestBoost(8_000L, "resume_follow");
         } catch (Throwable ignore) {
         }
     }
@@ -1665,7 +1686,7 @@ public class MapInnerFragment extends Fragment
         if (now - lastInsideBoostMs < INSIDE_BOOST_COOLDOWN_MS)
             return;
         try {
-            mSmartLocationManager.requestBoost(INSIDE_BOOST_DURATION_MS);
+            mSmartLocationManager.requestBoost(INSIDE_BOOST_DURATION_MS, "inside_zone");
             lastInsideBoostMs = now;
             logD("inside boost requested for " + INSIDE_BOOST_DURATION_MS + " ms");
         } catch (Throwable ignore) {
@@ -1990,6 +2011,7 @@ public class MapInnerFragment extends Fragment
         if (mSmartLocationManager != null) {
             // CRITICAL: Re-register listener to prevent CameraActivity or other components
             // from stealing updates
+            mSmartLocationManager.setUiFollowActive(true);
             mSmartLocationManager.addLocationUpdateListener(this);
             mSmartLocationManager.startLocationUpdates();
         }
@@ -2005,8 +2027,10 @@ public class MapInnerFragment extends Fragment
         if (cameraController != null) {
             cameraController.cancelAnimations();
         }
-        if (mSmartLocationManager != null)
+        if (mSmartLocationManager != null) {
+            mSmartLocationManager.setUiFollowActive(false);
             mSmartLocationManager.stopLocationUpdates();
+        }
         requireActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
@@ -2141,7 +2165,7 @@ public class MapInnerFragment extends Fragment
                         logD("边缘兜底触发：蓝点离开安全区，强制居中");
                         centerOnMyLocation(true);
                         if (mSmartLocationManager != null) {
-                            mSmartLocationManager.requestBoost(10_000L);
+                            mSmartLocationManager.requestBoost(10_000L, "edge_fallback");
                             // ✅ 边缘兜底触发时，额外拉取一次强特定 fix，强制 GPS 跳过当前轮询周期立即工作
                             mSmartLocationManager.requestSingleHighAccuracyFix();
                         }

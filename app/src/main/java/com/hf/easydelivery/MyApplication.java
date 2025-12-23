@@ -11,6 +11,9 @@ import java.util.Locale;
 
 import com.hf.easydelivery.service.FocusStateRepository;
 import com.hf.easydelivery.service.LockScreenFocusController;
+import com.hf.easydelivery.telemetry.Telemetry;
+import com.hf.easydelivery.telemetry.TelemetryConfig;
+import android.content.pm.ApplicationInfo;
 
 public class MyApplication extends Application {
 
@@ -28,6 +31,12 @@ public class MyApplication extends Application {
         ResourceMgr.getInstance().init(ctx);
 
         setLocale(ctx);
+
+        boolean debuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        TelemetryConfig telemetryConfig = debuggable
+                ? TelemetryConfig.debugDefaults()
+                : TelemetryConfig.disabled();
+        Telemetry.init(telemetryConfig);
 
         // Lockscreen focus pipeline init (lightweight; no location subscriptions)
         FocusStateRepository.init(ctx);

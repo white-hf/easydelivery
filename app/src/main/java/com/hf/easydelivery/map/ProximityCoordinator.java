@@ -128,7 +128,7 @@ public final class ProximityCoordinator {
     public static Boostable asBoostable(@NonNull SmartLocationManager mgr) {
         return durationMs -> {
             try {
-                mgr.requestBoost(durationMs);
+                mgr.requestBoost(durationMs, "proximity");
             } catch (Throwable ignore) {
             }
         };
