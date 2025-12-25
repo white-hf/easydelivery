@@ -759,7 +759,7 @@ public class MapInnerFragment extends Fragment
             requestImmediateProximityRefresh();
         }
 
-        if (!sanitized.isEmpty()) {
+        if (currentMode == DataMode.DELIVERY && !sanitized.isEmpty()) {
             if (savedPosition == null) {
                 LatLngBounds.Builder builder = new LatLngBounds.Builder();
                 for (DeliveryInfo info : sanitized) {
@@ -786,11 +786,13 @@ public class MapInnerFragment extends Fragment
         lastProximityEvalMs = 0L;
 
         // 首次加载后定位到第一个包裹
-        if (firstItem != null && savedPosition == null) {
-            LatLng firstPosition = new LatLng(firstItem.getLatitude(), firstItem.getLongitude());
-            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstPosition, 14));
-        } else if (sanitized.isEmpty() && savedPosition == null) {
-            centerOnMyLocation(true);
+        if (currentMode == DataMode.DELIVERY) {
+            if (firstItem != null && savedPosition == null) {
+                LatLng firstPosition = new LatLng(firstItem.getLatitude(), firstItem.getLongitude());
+                googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstPosition, 14));
+            } else if (sanitized.isEmpty() && savedPosition == null) {
+                centerOnMyLocation(true);
+            }
         }
         if (sanitized.isEmpty()) {
             hideInfoPillCompletely();
