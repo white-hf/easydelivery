@@ -13,10 +13,8 @@ import com.hf.easydelivery.dao.ScanRecord;
 import com.hf.easydelivery.dao.ScanRecordDao;
 
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class BatchSubmitHelper {
@@ -48,68 +46,57 @@ public class BatchSubmitHelper {
         AtomicInteger successCount = new AtomicInteger();
         AtomicInteger failCount    = new AtomicInteger();
 
-        // 首次进度
+        // first progress
         postProgress(0, total, 0, 0, cb);
+        submitNext(list, 0, total, successCount, failCount, cb);
+    }
 
-        for (int i = 0; i < total; i++) {
-            ScanRecord rec = list.get(i);
-
-            CountDownLatch latch = new CountDownLatch(1);
-            courierService.scan(
-                    rec.trackingNo, rec.scanBatchId,
-                    new IResponseCallBack<ParcelScanData>() {
-                        @Override
-                        public void onComplete(Result<ParcelScanData> result) {
-                            successCount.incrementAndGet();
-
-                            // 标记已上传（在当前线程快速执行）
-                            dbHandler.post(() -> {
-                                        scanDao.markUploadedByTrackingNo(rec.trackingNo);
-                                    });
-
-                            FileLog.getInstance().writeLog("Scanned " + rec.trackingNo);
-                            latch.countDown();
-
-                            uiHandler.post(() -> cb.onSingleComplete(rec.trackingNo));
-                        }
-                        @Override
-                        public void onFail(Exception e) {
-                            FileLog.getInstance().writeLog("Failed to set scanned status  " + rec.trackingNo + e.getMessage());
-
-                            if (e instanceof UnAuthorizedException)
-                            {
-                                cb.onFail(e);
-                                return;
-                            }
-
-                            failCount.incrementAndGet();
-                            latch.countDown();
-                        }
-                    }
-            );
-
-            // 等待网络或超时
-            try {
-                latch.await(50, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException ignored) {}
-
-            // 轻微休息
-            //try { TimeUnit.MILLISECONDS.sleep(10); } catch (InterruptedException ignored){}
-
-            int done = successCount.get() + failCount.get();
-            // 每隔 2 条 或 最后一条 更新一次 UI
-            if (done % 2 == 0 || done == total) {
-                postProgress(done, total,
-                        successCount.get(),
-                        failCount.get(),
-                        cb);
-            }
+    private void submitNext(List<ScanRecord> list,
+                            int index,
+                            int total,
+                            AtomicInteger successCount,
+                            AtomicInteger failCount,
+                            BatchSubmitCallback cb) {
+        if (index >= total) {
+            uiHandler.post(() -> cb.onComplete(successCount.get(), failCount.get()));
+            return;
         }
 
-        // 完成回调
-        uiHandler.post(() -> cb.onComplete(
-                successCount.get(), failCount.get()
-        ));
+        ScanRecord rec = list.get(index);
+        courierService.scan(
+                rec.trackingNo, rec.scanBatchId,
+                new IResponseCallBack<ParcelScanData>() {
+                    @Override
+                    public void onComplete(Result<ParcelScanData> result) {
+                        successCount.incrementAndGet();
+
+                        dbHandler.post(() -> scanDao.markUploadedByTrackingNo(rec.trackingNo));
+                        FileLog.getInstance().writeLog("Scanned " + rec.trackingNo);
+                        uiHandler.post(() -> cb.onSingleComplete(rec.trackingNo));
+
+                        postProgress(successCount.get() + failCount.get(), total,
+                                successCount.get(), failCount.get(), cb);
+
+                        executor.execute(() -> submitNext(list, index + 1, total, successCount, failCount, cb));
+                    }
+
+                    @Override
+                    public void onFail(Exception e) {
+                        FileLog.getInstance().writeLog("Failed to set scanned status  " + rec.trackingNo + e.getMessage());
+
+                        if (e instanceof UnAuthorizedException) {
+                            uiHandler.post(() -> cb.onFail(e));
+                            return;
+                        }
+
+                        failCount.incrementAndGet();
+                        postProgress(successCount.get() + failCount.get(), total,
+                                successCount.get(), failCount.get(), cb);
+
+                        executor.execute(() -> submitNext(list, index + 1, total, successCount, failCount, cb));
+                    }
+                }
+        );
     }
 
     private void postProgress(int done, int total,

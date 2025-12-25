@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.RadioButton;
+import android.widget.SeekBar;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -39,6 +40,7 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
     private EditText etFollowStdInterval, etFollowStdDist, etFollowStdHeading;
     private EditText etZoomCloseMeters, etZoomCloseZoom, etZoomApproachMeters, etZoomApproachZoom;
     private SwitchCompat switchInsideBoost;
+    private SeekBar seekPerfBalance;
 
     // Profile UI (optional – depends on layout availability)
     private RadioButton rbProfilePowerSaver;
@@ -102,6 +104,7 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
         etZoomApproachMeters = view.findViewById(R.id.et_zoom_approach_meters);
         etZoomApproachZoom = view.findViewById(R.id.et_zoom_approach_zoom);
         switchInsideBoost = view.findViewById(R.id.switch_inside_boost);
+        seekPerfBalance = view.findViewById(R.id.seek_perf_balance);
     }
 
     private void setupProfileSection(@NonNull View view) {
@@ -113,6 +116,7 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
             final Context ctx = requireContext();
             final ProfileManager pm = ProfileManager.get(ctx);
             final ProfileManager.AppProfile current = pm.getCurrent();
+            final int balanceProgress = Math.round(pm.getPerfBalance() * 100f);
 
             // Reflect current profile (if widgets exist)
             if (rbProfilePowerSaver != null) {
@@ -120,6 +124,9 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
             }
             if (rbProfileAdvanced != null) {
                 rbProfileAdvanced.setChecked(current == ProfileManager.AppProfile.ADVANCED);
+            }
+            if (seekPerfBalance != null) {
+                seekPerfBalance.setProgress(balanceProgress);
             }
 
             View.OnClickListener applyAction = v -> {
@@ -139,6 +146,26 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
                 // Fallback: clicking radios immediately applies (if no explicit Apply button)
                 if (rbProfilePowerSaver != null) rbProfilePowerSaver.setOnClickListener(applyAction);
                 if (rbProfileAdvanced != null)   rbProfileAdvanced.setOnClickListener(applyAction);
+            }
+
+            if (seekPerfBalance != null) {
+                seekPerfBalance.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                    @Override
+                    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                        if (!fromUser) return;
+                        pm.setPerfBalance(progress / 100f);
+                    }
+
+                    @Override
+                    public void onStartTrackingTouch(SeekBar seekBar) {
+                        // no-op
+                    }
+
+                    @Override
+                    public void onStopTrackingTouch(SeekBar seekBar) {
+                        // no-op
+                    }
+                });
             }
         } catch (Throwable t) {
             FileLog.getInstance().error(TAG, "setupProfileSection failed", t);

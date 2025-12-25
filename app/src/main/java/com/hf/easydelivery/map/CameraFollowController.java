@@ -21,6 +21,9 @@ import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.telemetry.Telemetry;
 import com.hf.easydelivery.telemetry.TelemetryEvent;
+import com.hf.easydelivery.map.policy.EcoFollowPolicy;
+import com.hf.easydelivery.map.policy.FollowPolicy;
+import com.hf.easydelivery.map.policy.RealtimeFollowPolicy;
 import java.util.List;
 import com.hf.easydelivery.map.config.ProfileManager;
 import com.hf.easydelivery.core.SmartLocationManager;
@@ -84,7 +87,6 @@ public class CameraFollowController {
     private static final float SMART_ZOOM_NEAR_METERS = 800f;
     private static final float LIST_VIEW_NEAR_METERS = 800f;
     private static final int LIST_VIEW_MIN_ITEMS = 1;
-    private static final long LIST_ENTRY_STATIONARY_MS = 10_000L;
 
     // Adaptive animation + lookAhead smoothing
     private static final long CAMERA_ANIM_MIN_MS = 120L;
@@ -99,12 +101,10 @@ public class CameraFollowController {
     // If camera hasn't moved for too long, force an update to avoid "stuck"
     // feeling.
     private static final long DRIVING_FORCE_UPDATE_STALE_MS = 1500L;
-    private static final long MODE_SWITCH_COOLDOWN_MS = 15_000L;
-    private static final long LIST_MIN_HOLD_MS = 5_000L;
-    private static final long FOLLOW_MIN_HOLD_MS = 5_000L;
     private long suppressFollowUntilMs = 0L;
     private String lastCameraMode = null;
     private long lastModeChangeUptimeMs = 0L;
+    private FollowPolicy followPolicy = new RealtimeFollowPolicy();
 
     // ==== Auto-Follow Strategy (Basic/Standard/Advanced) ====
     public enum FollowProfile {
@@ -318,6 +318,34 @@ public class CameraFollowController {
                 : FollowProfile.STANDARD;
         logD("applyAppProfile(" + appProfile + ") -> followProfile=" + mapped);
         setFollowProfile(mapped);
+        applyFollowPolicy(appProfile == ProfileManager.AppProfile.POWERSAVER
+                ? new EcoFollowPolicy()
+                : new RealtimeFollowPolicy());
+    }
+
+    public void applyFollowPolicy(@NonNull FollowPolicy policy) {
+        this.followPolicy = policy;
+        applyFollowConfig(policy.getFollowConfig());
+    }
+
+    public long getUiTickMs() {
+        return followPolicy != null ? followPolicy.getUiTickMs() : 250L;
+    }
+
+    private long getModeSwitchCooldownMs() {
+        return followPolicy != null ? followPolicy.getModeSwitchCooldownMs() : 15000L;
+    }
+
+    private long getListMinHoldMs() {
+        return followPolicy != null ? followPolicy.getListMinHoldMs() : 5000L;
+    }
+
+    private long getFollowMinHoldMs() {
+        return followPolicy != null ? followPolicy.getFollowMinHoldMs() : 5000L;
+    }
+
+    private long getListEntryStationaryMs() {
+        return followPolicy != null ? followPolicy.getListEntryStationaryMs() : 10000L;
     }
 
     private final GoogleMap googleMap;
@@ -539,8 +567,8 @@ public class CameraFollowController {
         boolean stationaryOrWalking = !drivingLikely;
         boolean inListMode = "list".equals(lastCameraMode);
         boolean inFollowMode = "follow".equals(lastCameraMode);
-        boolean listHoldActive = inListMode && (nowUptime - lastModeChangeUptimeMs < LIST_MIN_HOLD_MS);
-        boolean followHoldActive = inFollowMode && (nowUptime - lastModeChangeUptimeMs < FOLLOW_MIN_HOLD_MS);
+        boolean listHoldActive = inListMode && (nowUptime - lastModeChangeUptimeMs < getListMinHoldMs());
+        boolean followHoldActive = inFollowMode && (nowUptime - lastModeChangeUptimeMs < getFollowMinHoldMs());
         boolean allowSmartZoom = !drivingLikely
                 || (context.nearestPackageDistanceMeters > 0
                         && context.nearestPackageDistanceMeters <= SMART_ZOOM_NEAR_METERS);
@@ -554,12 +582,12 @@ public class CameraFollowController {
                         && context.nearestPackageDistanceMeters <= LIST_VIEW_NEAR_METERS
                         && nearbyCount >= LIST_VIEW_MIN_ITEMS);
         allowListView = allowListView && !isUserInteracting;
-        if (stationaryOrWalking && context.stationaryDurationMs < LIST_ENTRY_STATIONARY_MS) {
+        if (stationaryOrWalking && context.stationaryDurationMs < getListEntryStationaryMs()) {
             allowListView = false;
         }
         boolean allowEnterList = allowListView
                 && (!inFollowMode || !followHoldActive)
-                && (inListMode || (nowUptime - lastModeChangeUptimeMs >= MODE_SWITCH_COOLDOWN_MS));
+                && (inListMode || (nowUptime - lastModeChangeUptimeMs >= getModeSwitchCooldownMs()));
 
         if (allowListView
                 && !smartZoomApplicable

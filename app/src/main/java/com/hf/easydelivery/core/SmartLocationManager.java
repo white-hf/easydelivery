@@ -68,6 +68,10 @@ import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.CancellationTokenSource;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.telemetry.Telemetry;
+import com.hf.easydelivery.core.policy.LocationPolicy;
+import com.hf.easydelivery.core.policy.LocationPolicyContext;
+import com.hf.easydelivery.core.policy.LocationRequestParams;
+import com.hf.easydelivery.core.policy.RealtimeLocationPolicy;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -115,7 +119,6 @@ public class SmartLocationManager {
     private static final float MIN_PREDICTION_SPEED_MPS = 0.8f;
     private static final long MIN_DISPATCH_INTERVAL_MOVING_MS = 250L;
     private static final long MIN_DISPATCH_INTERVAL_STATIONARY_MS = 800L;
-    private static final long MAX_UPDATE_DELAY_MS = 800L;
     private static final String BOOST_REASON_UNKNOWN = "unknown";
     private static final String BOOST_REASON_FORCE = "force";
     private static final String BOOST_REASON_EDGE_RISK = "edge_risk";
@@ -193,8 +196,12 @@ public class SmartLocationManager {
     private long lastRequestedMinIntervalMs = -1L;
     private int lastRequestedPriority = -1;
     private float lastRequestedMinDistanceM = -1f;
+    private long lastRequestedMaxDelayMs = -1L;
     private long dispatchSeq = 0L;
     private long lastDispatchElapsedMs = -1L;
+    private long currentMinDispatchIntervalMs = MIN_DISPATCH_INTERVAL_MOVING_MS;
+
+    private LocationPolicy locationPolicy = new RealtimeLocationPolicy();
 
     // Low-pass for heading smoothing (0..1). Larger = quicker but noisier
     private static final float HEADING_ALPHA = 0.2f;
@@ -436,6 +443,22 @@ public class SmartLocationManager {
         }
     }
 
+    public void setLocationPolicy(@Nullable LocationPolicy policy) {
+        if (policy != null) {
+            this.locationPolicy = policy;
+            updateLocationParametersForState();
+        }
+    }
+
+    private LocationPolicyContext buildLocationPolicyContext() {
+        return new LocationPolicyContext(
+                currentState,
+                inBurstMode,
+                isDeliveringAndIdle(),
+                uiFollowActive,
+                movingFlag);
+    }
+
     public void removeLocationUpdateListener(LocationUpdateListener listener) {
         if (listener != null) {
             listeners.remove(listener);
@@ -486,7 +509,8 @@ public class SmartLocationManager {
         updateSensorState();
     }
 
-    private void requestLocationUpdates(long interval, long minInterval, int priority, float minDistanceMeters) {
+    private void requestLocationUpdates(long interval, long minInterval, int priority, float minDistanceMeters,
+            long maxUpdateDelayMs) {
         if (ActivityCompat.checkSelfPermission(context,
                 Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
@@ -495,7 +519,7 @@ public class SmartLocationManager {
         LocationRequest locationRequest = new LocationRequest.Builder(priority)
                 .setIntervalMillis(interval)
                 .setMinUpdateIntervalMillis(minInterval)
-                .setMaxUpdateDelayMillis(MAX_UPDATE_DELAY_MS)
+                .setMaxUpdateDelayMillis(maxUpdateDelayMs)
                 .setMinUpdateDistanceMeters(minDistanceMeters)
                 .setWaitForAccurateLocation(false)
                 .build();
@@ -952,15 +976,25 @@ public class SmartLocationManager {
         lastRequestedMinIntervalMs = -1L;
         updateLocationParametersForState();
     }
-
     private void updateLocationParametersForState() {
-        long interval = inBurstMode ? getBurstModeInterval() : getRecommendedUpdateInterval();
-        long minInterval = inBurstMode ? getBurstModeInterval() : getMinUpdateInterval();
-        int priority = getRecommendedPriority();
-        float minDistance = getMinUpdateDistanceMeters();
+        LocationRequestParams params = locationPolicy != null
+                ? locationPolicy.getRequestParams(buildLocationPolicyContext())
+                : null;
+        long interval = params != null ? params.intervalMs
+                : (inBurstMode ? getBurstModeInterval() : getRecommendedUpdateInterval());
+        long minInterval = params != null ? params.minIntervalMs
+                : (inBurstMode ? getBurstModeInterval() : getMinUpdateInterval());
+        int priority = params != null ? params.priority : getRecommendedPriority();
+        float minDistance = params != null ? params.minDistanceMeters : getMinUpdateDistanceMeters();
+        long maxDelay = params != null ? params.maxUpdateDelayMs : 800L;
+        currentMinDispatchIntervalMs = params != null ? params.minDispatchIntervalMs
+                : (currentState == MovementState.STATIONARY && !movingFlag
+                        ? MIN_DISPATCH_INTERVAL_STATIONARY_MS
+                        : MIN_DISPATCH_INTERVAL_MOVING_MS);
 
         if (interval == lastRequestedIntervalMs && minInterval == lastRequestedMinIntervalMs
-                && priority == lastRequestedPriority && minDistance == lastRequestedMinDistanceM) {
+                && priority == lastRequestedPriority && minDistance == lastRequestedMinDistanceM
+                && maxDelay == lastRequestedMaxDelayMs) {
             return;
         }
 
@@ -968,12 +1002,11 @@ public class SmartLocationManager {
         lastRequestedMinIntervalMs = minInterval;
         lastRequestedPriority = priority;
         lastRequestedMinDistanceM = minDistance;
+        lastRequestedMaxDelayMs = maxDelay;
 
-        // ✅ 架构师建议#10: 直接request覆盖，不要remove
-        // Google官方: "requestLocationUpdates with same callback replaces previous
-        // request"
-        requestLocationUpdates(interval, minInterval, priority, minDistance);
+        requestLocationUpdates(interval, minInterval, priority, minDistance, maxDelay);
     }
+
 
     /**
      * 判断司机是否处于“送件且不看地图”状态
@@ -1232,6 +1265,7 @@ public class SmartLocationManager {
     public void setUiFollowActive(boolean active) {
         uiFollowActive = active;
         updateSensorState();
+        updateLocationParametersForState();
     }
 
     private void updateSensorState() {
@@ -1605,9 +1639,13 @@ public class SmartLocationManager {
         if (listeners.isEmpty())
             return;
         long nowUptime = SystemClock.uptimeMillis();
-        long minInterval = (currentState == MovementState.STATIONARY && !movingFlag)
-                ? MIN_DISPATCH_INTERVAL_STATIONARY_MS
-                : MIN_DISPATCH_INTERVAL_MOVING_MS;
+        long minInterval = currentMinDispatchIntervalMs;
+        if (locationPolicy != null) {
+            LocationRequestParams params = locationPolicy.getRequestParams(buildLocationPolicyContext());
+            if (params != null) {
+                minInterval = params.minDispatchIntervalMs;
+            }
+        }
         if (nowUptime - lastDispatchUptimeMs < minInterval) {
             return;
         }
