@@ -27,7 +27,7 @@ public final class TelemetryConfig {
     }
 
     public static TelemetryConfig debugDefaults() {
-        return new TelemetryConfig(true, true, true, 100, 5000L, true);
+        return new TelemetryConfig(true, true, false, 100, 5000L, true);
     }
 
     private static int clampRate(int rate) {

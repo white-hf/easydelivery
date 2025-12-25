@@ -51,8 +51,13 @@ public final class ProfileManager {
         void onProfileChanged(@NonNull AppProfile newProfile);
     }
 
+    public interface PerfBalanceListener {
+        void onPerfBalanceChanged(float newBalance);
+    }
+
     private static final String SP_NAME = "dev_flags";
     private static final String KEY_PROFILE = "profile";
+    private static final String KEY_PERF_BALANCE = "perf_balance";
 
     private static volatile ProfileManager sInstance;
 
@@ -60,9 +65,11 @@ public final class ProfileManager {
     private final SharedPreferences sp;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new CopyOnWriteArrayList<>();
+    private final List<PerfBalanceListener> perfBalanceListeners = new CopyOnWriteArrayList<>();
 
     // 当前内存态（减少反复读取 SP）
     private volatile AppProfile current = AppProfile.ADVANCED; // 默认使用现有高级策略
+    private volatile float perfBalance = 0f; // 0=realtime, 1=power saver
 
     private ProfileManager(@NonNull Context context) {
         this.appContext = context.getApplicationContext();
@@ -70,6 +77,7 @@ public final class ProfileManager {
         // 读取持久化值
         String saved = sp.getString(KEY_PROFILE, null);
         current = AppProfile.fromString(saved, current);
+        perfBalance = clamp01(sp.getFloat(KEY_PERF_BALANCE, perfBalance));
     }
 
     /** 单例入口 */
@@ -92,6 +100,26 @@ public final class ProfileManager {
     /** 是否处于省电档 */
     public boolean isPowerSaver() {
         return current == AppProfile.POWERSAVER;
+    }
+
+    public float getPerfBalance() {
+        return perfBalance;
+    }
+
+    public void setPerfBalance(float balance) {
+        float clamped = clamp01(balance);
+        if (clamped == perfBalance) return;
+        perfBalance = clamped;
+        sp.edit().putFloat(KEY_PERF_BALANCE, perfBalance).apply();
+        mainHandler.post(() -> {
+            for (PerfBalanceListener l : perfBalanceListeners) {
+                try {
+                    l.onPerfBalanceChanged(perfBalance);
+                } catch (Throwable ignore) {
+                    // keep resilient
+                }
+            }
+        });
     }
 
     /** 设置档位（会持久化，并在主线程通知监听者；重复设置同值将被忽略） */
@@ -119,9 +147,27 @@ public final class ProfileManager {
         }
     }
 
+    @MainThread
+    public void addPerfBalanceListener(@NonNull PerfBalanceListener l) {
+        if (!perfBalanceListeners.contains(l)) {
+            perfBalanceListeners.add(l);
+        }
+    }
+
     /** 取消监听 */
     @MainThread
     public void removeListener(@NonNull Listener l) {
         listeners.remove(l);
+    }
+
+    @MainThread
+    public void removePerfBalanceListener(@NonNull PerfBalanceListener l) {
+        perfBalanceListeners.remove(l);
+    }
+
+    private static float clamp01(float v) {
+        if (v < 0f) return 0f;
+        if (v > 1f) return 1f;
+        return v;
     }
 }

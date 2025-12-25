@@ -86,7 +86,9 @@ import com.hf.easydelivery.view.DeveloperPanelBottomSheet;
 import com.hf.easydelivery.service.FocusState;
 import com.hf.easydelivery.service.FocusStateRepository;
 import com.hf.easydelivery.map.CameraUpdateContext;
+import com.hf.easydelivery.core.policy.BlendedLocationPolicy;
 import com.hf.easydelivery.telemetry.Telemetry;
+import com.hf.easydelivery.map.policy.BlendedFollowPolicy;
 
 import android.animation.ValueAnimator;
 import android.view.animation.LinearInterpolator;
@@ -191,12 +193,27 @@ public class MapInnerFragment extends Fragment
             } catch (Throwable ignore) {
             }
             try {
+                updateUiTickInterval();
+            } catch (Throwable ignore) {
+            }
+            try {
                 if (focusManager != null) {
                     focusManager.applyAppProfile(newProfile);
                     logD("profile changed -> focus=" + newProfile);
                 }
             } catch (Throwable ignore) {
             }
+            try {
+                applyPerfBalance(profileManager != null ? profileManager.getPerfBalance() : 0f);
+            } catch (Throwable ignore) {
+            }
+        }
+    };
+
+    private final ProfileManager.PerfBalanceListener perfBalanceListener = new ProfileManager.PerfBalanceListener() {
+        @Override
+        public void onPerfBalanceChanged(float newBalance) {
+            applyPerfBalance(newBalance);
         }
     };
     private List<DeliveryInfo> currentMapDeliveries = Collections.emptyList();
@@ -224,6 +241,22 @@ public class MapInnerFragment extends Fragment
         if (cameraController != null && pendingCameraContext != null) {
             Telemetry.counter("ui.cameraUpdate");
             cameraController.updateCamera(pendingCameraContext);
+        }
+    };
+    private long uiTickIntervalMs = 250L;
+    private final Runnable uiTickRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isAdded()) {
+                return;
+            }
+            if (cameraController != null) {
+                CameraUpdateContext tickContext = buildCameraContextForTick();
+                if (tickContext != null) {
+                    cameraController.updateCamera(tickContext);
+                }
+            }
+            scheduleUiTick();
         }
     };
 
@@ -352,6 +385,11 @@ public class MapInnerFragment extends Fragment
         }
         try {
             profileManager.addListener(profileListener);
+        } catch (Throwable ignore) {
+        }
+        try {
+            profileManager.addPerfBalanceListener(perfBalanceListener);
+            applyPerfBalance(profileManager.getPerfBalance());
         } catch (Throwable ignore) {
         }
 
@@ -808,6 +846,7 @@ public class MapInnerFragment extends Fragment
             }
         } catch (Throwable ignore) {
         }
+        updateUiTickInterval();
         initClusterManager();
         if (savedPosition != null) {
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, googleMap.getCameraPosition().zoom));
@@ -1180,6 +1219,7 @@ public class MapInnerFragment extends Fragment
     private void getLocation() {
         mSmartLocationManager = SmartLocationManager.getInstance(requireContext());
         if (mSmartLocationManager != null) {
+            applyPerfBalance(profileManager != null ? profileManager.getPerfBalance() : 0f);
             mSmartLocationManager.addLocationUpdateListener(this);
             mSmartLocationManager.startLocationUpdates();
         }
@@ -1451,7 +1491,62 @@ public class MapInnerFragment extends Fragment
 
         pendingCameraContext = cameraContext;
         cameraUpdateHandler.removeCallbacks(cameraUpdateRunnable);
-        cameraUpdateHandler.postDelayed(cameraUpdateRunnable, 250);
+        cameraUpdateHandler.postDelayed(cameraUpdateRunnable, uiTickIntervalMs);
+    }
+
+    private void updateUiTickInterval() {
+        if (cameraController != null) {
+            uiTickIntervalMs = Math.max(200L, cameraController.getUiTickMs());
+        } else {
+            uiTickIntervalMs = 250L;
+        }
+    }
+
+    private void scheduleUiTick() {
+        cameraUpdateHandler.removeCallbacks(uiTickRunnable);
+        cameraUpdateHandler.postDelayed(uiTickRunnable, uiTickIntervalMs);
+    }
+
+    @Nullable
+    private CameraUpdateContext buildCameraContextForTick() {
+        if (cameraController == null) {
+            return null;
+        }
+        Location base = mLastEffectiveUiLocation != null ? mLastEffectiveUiLocation : mLastLocation;
+        if (base == null) {
+            return null;
+        }
+        Location predicted = mSmartLocationManager != null ? mSmartLocationManager.getPredictedLocation() : null;
+        Location effective = predicted != null ? predicted : base;
+        CameraUpdateContext.LocationSource source = predicted != null
+                ? CameraUpdateContext.LocationSource.PREDICTED
+                : CameraUpdateContext.LocationSource.RAW;
+
+        float distanceMeters = Float.isNaN(lastNearestDistanceMeters)
+                ? (Float.isNaN(lastValidNearestDistanceMeters) ? -1f : lastValidNearestDistanceMeters)
+                : lastNearestDistanceMeters;
+        boolean insideZone = currentRegionState == InfoPillProximityController.RegionState.INSIDE;
+        boolean manualHold = isManualCenterHoldActive();
+        long stationaryDurationMs = mSmartLocationManager != null ? mSmartLocationManager.getStationaryDurationMs() : 0L;
+
+        return new CameraUpdateContext(
+                effective,
+                lastMovementState,
+                effective.hasAccuracy() ? effective.getAccuracy() : Float.NaN,
+                Math.abs(System.currentTimeMillis() - effective.getTime()),
+                source,
+                effective.hasSpeed() ? effective.getSpeed() : Float.NaN,
+                effective.hasBearing() ? effective.getBearing() : Float.NaN,
+                mSmartLocationManager != null ? mSmartLocationManager.getCurrentHeading() : Float.NaN,
+                distanceMeters,
+                stationaryDurationMs,
+                currentMapDeliveries,
+                insideZone,
+                getRealMapVisibleHeightPx(),
+                isUserInteracting,
+                autoFollowPausedByGesture,
+                manualHold,
+                navigationModeEnabled);
     }
 
     private int controlInsetFor(@Nullable View control) {
@@ -1867,6 +1962,23 @@ public class MapInnerFragment extends Fragment
         }
     }
 
+    private void applyPerfBalance(float balance) {
+        float clamped = balance;
+        if (clamped < 0f) clamped = 0f;
+        if (clamped > 1f) clamped = 1f;
+
+        if (mSmartLocationManager != null) {
+            mSmartLocationManager.setLocationPolicy(new BlendedLocationPolicy(clamped));
+        }
+        if (cameraController != null) {
+            cameraController.setFollowProfile(clamped >= 0.5f
+                    ? CameraFollowController.FollowProfile.BASIC
+                    : CameraFollowController.FollowProfile.STANDARD);
+            cameraController.applyFollowPolicy(new BlendedFollowPolicy(clamped));
+        }
+        updateUiTickInterval();
+    }
+
     @NonNull
     private Location chooseEffectiveLocationForUi(@NonNull Location raw,
             @Nullable Location predicted,
@@ -2015,6 +2127,8 @@ public class MapInnerFragment extends Fragment
             mSmartLocationManager.addLocationUpdateListener(this);
             mSmartLocationManager.startLocationUpdates();
         }
+        updateUiTickInterval();
+        scheduleUiTick();
     }
 
     @Override
@@ -2031,6 +2145,7 @@ public class MapInnerFragment extends Fragment
             mSmartLocationManager.setUiFollowActive(false);
             mSmartLocationManager.stopLocationUpdates();
         }
+        cameraUpdateHandler.removeCallbacks(uiTickRunnable);
         requireActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
@@ -2040,6 +2155,10 @@ public class MapInnerFragment extends Fragment
         if (profileManager != null) {
             try {
                 profileManager.removeListener(profileListener);
+            } catch (Throwable ignore) {
+            }
+            try {
+                profileManager.removePerfBalanceListener(perfBalanceListener);
             } catch (Throwable ignore) {
             }
         }
@@ -2073,6 +2192,7 @@ public class MapInnerFragment extends Fragment
             cameraController.resetRuntimeState();
             cameraController = null;
         }
+        cameraUpdateHandler.removeCallbacks(uiTickRunnable);
         if (proximityCoordinator != null) {
             proximityCoordinator.setListener(null);
             try {
