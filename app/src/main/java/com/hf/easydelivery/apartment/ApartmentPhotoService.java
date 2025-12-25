@@ -146,11 +146,11 @@ public class ApartmentPhotoService {
             if (dest.exists()) dest.delete();
             return false;
         }
-        ApartmentPhotoEntity existing = isStructuredKey(addressKey)
-                ? findEntityByStructuredKey(addressKey)
-                : repository.findByKey(addressKey);
+        ApartmentPhotoEntity existing = isStructuredKey(keyToUse)
+                ? findEntityByStructuredKey(keyToUse)
+                : repository.findByKey(keyToUse);
         ApartmentPhotoEntity entity = existing != null ? existing : new ApartmentPhotoEntity();
-        entity.addressKey = addressKey;
+        entity.addressKey = keyToUse;
         entity.displayAddress = displayAddress;
         entity.filePath = dest.getAbsolutePath();
         entity.savedAt = System.currentTimeMillis();
@@ -224,11 +224,13 @@ public class ApartmentPhotoService {
         final String city;
         final String street;
         final String number;
+        final String unit;
 
-        KeyParts(String city, String street, String number) {
+        KeyParts(String city, String street, String number, String unit) {
             this.city = city;
             this.street = street;
             this.number = number;
+            this.unit = unit;
         }
     }
 
@@ -238,10 +240,11 @@ public class ApartmentPhotoService {
             return null;
         }
         String[] parts = key.split("\\|", -1);
-        if (parts.length != 3) {
+        if (parts.length < 3 || parts.length > 4) {
             return null;
         }
-        return new KeyParts(parts[0], parts[1], parts[2]);
+        String unit = parts.length == 4 ? parts[3] : "";
+        return new KeyParts(parts[0], parts[1], parts[2], unit);
     }
 
     @Nullable
@@ -261,6 +264,9 @@ public class ApartmentPhotoService {
         if (all == null || all.isEmpty()) {
             return null;
         }
+        ApartmentPhotoEntity unitMatch = null;
+        ApartmentPhotoEntity unitEmptyCandidate = null;
+        int unitEmptyMatches = 0;
         for (ApartmentPhotoEntity entity : all) {
             if (entity == null || TextUtils.isEmpty(entity.addressKey)) {
                 continue;
@@ -274,9 +280,25 @@ public class ApartmentPhotoService {
             }
             if (entityParts.street.equalsIgnoreCase(target.street)
                     && entityParts.number.equalsIgnoreCase(target.number)) {
-                return entity;
+                boolean targetHasUnit = !TextUtils.isEmpty(target.unit);
+                boolean entityHasUnit = !TextUtils.isEmpty(entityParts.unit);
+                if (targetHasUnit && entityHasUnit
+                        && entityParts.unit.equalsIgnoreCase(target.unit)) {
+                    unitMatch = entity;
+                    break;
+                }
+                if (!entityHasUnit) {
+                    unitEmptyCandidate = entity;
+                    unitEmptyMatches++;
+                }
             }
         }
-        return null;
+        if (unitMatch != null) {
+            return unitMatch;
+        }
+        if (!TextUtils.isEmpty(target.unit) && unitEmptyMatches > 1) {
+            return null;
+        }
+        return unitEmptyCandidate;
     }
 }
