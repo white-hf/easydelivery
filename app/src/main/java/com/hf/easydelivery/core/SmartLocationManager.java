@@ -515,6 +515,10 @@ public class SmartLocationManager {
                 Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
+        if (locationCallback == null) {
+            FileLog.getInstance().warning(TAG, "requestLocationUpdates skipped: locationCallback not ready");
+            return;
+        }
 
         LocationRequest locationRequest = new LocationRequest.Builder(priority)
                 .setIntervalMillis(interval)
@@ -977,6 +981,9 @@ public class SmartLocationManager {
         updateLocationParametersForState();
     }
     private void updateLocationParametersForState() {
+        if (locationCallback == null) {
+            return;
+        }
         LocationRequestParams params = locationPolicy != null
                 ? locationPolicy.getRequestParams(buildLocationPolicyContext())
                 : null;
