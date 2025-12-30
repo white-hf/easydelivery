@@ -10,7 +10,10 @@ import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
 import com.hf.courierservice.bean.DeliveredUploadParams;
 import com.hf.courierservice.bean.DeliveringListData;
 import com.hf.courierservice.bean.ParcelScanData;
+import com.hf.courierservice.bean.ScanBatchCreateData;
+import com.hf.courierservice.bean.ScanBatchGenerateReportData;
 import com.hf.courierservice.bean.ScanBatchReportData;
+import com.hf.courierservice.bean.ToBePickedUpBriefData;
 import com.hf.democourier.request.AppLoginReq;
 import com.hf.democourier.request.NullReq;
 import com.hf.democourier.request.GetDeliveryTaskApiRequest;
@@ -107,6 +110,22 @@ public class CourierService implements ICourierService {
 
     @Override
     public void fetchDriverReport(int warehouse, int driverId, String date, IResponseCallBack<List<ScanBatchReportData>> callback) {
+
+    }
+
+    @Override
+    public void fetchToBePickedUpBrief(int driverId, IResponseCallBack<ToBePickedUpBriefData> callback) {
+
+    }
+
+    @Override
+    public void createScanBatch(int driverId, int operatorRole, int scanAs,
+            IResponseCallBack<ScanBatchCreateData> callback) {
+
+    }
+
+    @Override
+    public void generateScanBatchReport(long scanBatchId, IResponseCallBack<ScanBatchGenerateReportData> callback) {
 
     }
 

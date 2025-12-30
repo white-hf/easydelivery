@@ -134,6 +134,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         if (!hasLoadedOnce) {
             hasLoadedOnce = true;
             scanViewModel.loadTodayScannedFromDb();    // 从 DB 读取今日已扫（含已提交）
+            scanViewModel.prepareScanBatchOnEnter();   // 进入页面时创建扫描批次
             scanViewModel.queryUnscanned();            // 拉取未扫描数据（网络）
         }
 
@@ -246,6 +247,9 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                     } else if (id == R.id.action_submit_offline) {
                         scanViewModel.submitOfflineScans();
                         return true;
+                    } else if (id == R.id.action_generate_report) {
+                        confirmGenerateReport();
+                        return true;
                     } else if (id == R.id.action_begin_scan) {
                         startCameraIfNeeded();
                         return true;
@@ -276,6 +280,9 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                     return true;
                 } else if (id == R.id.action_submit_offline) {
                     scanViewModel.submitOfflineScans();
+                    return true;
+                } else if (id == R.id.action_generate_report) {
+                    confirmGenerateReport();
                     return true;
                 }
                 return false;
@@ -494,6 +501,24 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                 .setMessage("您有未扫描包裹，是否开始扫描？")
                 .setPositiveButton("是", (dialog, which) -> bindCameraNow())
                 .setNegativeButton("否", null)
+                .show();
+    }
+
+    private void confirmGenerateReport() {
+        int scannedCount = 0;
+        int unscannedCount = 0;
+        List<ScanItem> scanned = scanViewModel.getScannedListLive().getValue();
+        List<DeliveryInfo> unscanned = scanViewModel.getUnscannedFilteredLive().getValue();
+        if (scanned != null) scannedCount = scanned.size();
+        if (unscanned != null) unscannedCount = unscanned.size();
+
+        String message = "已扫描：" + scannedCount + "\n未扫描：" + unscannedCount + "\n确认生成扫描报告？";
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("生成扫描报告")
+                .setMessage(message)
+                .setPositiveButton("生成", (dialog, which) -> scanViewModel.generateScanBatchReport())
+                .setNegativeButton("取消", null)
                 .show();
     }
 

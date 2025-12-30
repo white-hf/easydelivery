@@ -73,6 +73,11 @@ public class DeliveryinfoMgr implements Subscriber {
         return scanBatchStatus;
     }
 
+    public void updateScanBatchInfo(long scanBatchId, int scanBatchStatus) {
+        this.scanBatchId = scanBatchId;
+        this.scanBatchStatus = scanBatchStatus;
+    }
+
     // ...
 
     /**
@@ -305,8 +310,10 @@ public class DeliveryinfoMgr implements Subscriber {
                             scanBatchStatus = lst.get(0).getScan_batch_status();
                         } else {
                             FileLog.getInstance().writeLog("Can't fetch the scanbatchid for " + loginInfo.loginId);
-                            scanBatchId = 0;
-                            scanBatchStatus = 1;
+                            if (scanBatchId <= 0) {
+                                scanBatchId = 0;
+                                scanBatchStatus = 1;
+                            }
                         }
                     }
 
