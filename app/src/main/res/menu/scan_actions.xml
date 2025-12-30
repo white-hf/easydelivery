@@ -18,4 +18,10 @@
         android:icon="@drawable/ic_cloud_upload"
         android:title="提交"
         app:showAsAction="always"/>
+
+    <item
+        android:id="@+id/action_generate_report"
+        android:icon="@drawable/ic_done"
+        android:title="生成报告"
+        app:showAsAction="always"/>
 </menu>
