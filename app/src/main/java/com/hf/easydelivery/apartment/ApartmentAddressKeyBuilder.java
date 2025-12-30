@@ -51,7 +51,7 @@ public final class ApartmentAddressKeyBuilder {
         if (!hasStructuredKey) {
             return new KeyData("", display, isApartment, false);
         }
-        String key = normalizeKey(city, streetName, streetNumber);
+        String key = normalizeKey(city, streetName, streetNumber, unit);
         return new KeyData(key, display, isApartment, true);
     }
 
@@ -95,11 +95,16 @@ public final class ApartmentAddressKeyBuilder {
         return sb.toString();
     }
 
-    private static String normalizeKey(String city, String streetName, String streetNumber) {
+    private static String normalizeKey(String city, String streetName, String streetNumber, String unit) {
         String c = TextUtils.isEmpty(city) ? "" : city.trim().toLowerCase(Locale.US);
         String s = TextUtils.isEmpty(streetName) ? "" : streetName.trim().toLowerCase(Locale.US);
         String n = TextUtils.isEmpty(streetNumber) ? "" : streetNumber.trim().toLowerCase(Locale.US);
-        return (c + "|" + s + "|" + n).replaceAll("\\s+", " ").trim();
+        String u = TextUtils.isEmpty(unit) ? "" : unit.trim().toLowerCase(Locale.US);
+        String key = (c + "|" + s + "|" + n);
+        if (!TextUtils.isEmpty(u)) {
+            key = key + "|" + u;
+        }
+        return key.replaceAll("\\s+", " ").trim();
     }
 
     private static String extractStreetName(@Nullable String address) {

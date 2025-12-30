@@ -5,7 +5,10 @@ import android.content.Context;
 import com.hf.courierservice.bean.DeliveredUploadParams;
 import com.hf.courierservice.bean.DeliveringListData;
 import com.hf.courierservice.bean.ParcelScanData;
+import com.hf.courierservice.bean.ScanBatchCreateData;
+import com.hf.courierservice.bean.ScanBatchGenerateReportData;
 import com.hf.courierservice.bean.ScanBatchReportData;
+import com.hf.courierservice.bean.ToBePickedUpBriefData;
 
 import java.util.List;
 
@@ -91,5 +94,12 @@ public interface ICourierService {
 
     void fetchDriverReport(int warehouse, int driverId, String date,
             IResponseCallBack<List<ScanBatchReportData>> callback);
+
+    void fetchToBePickedUpBrief(int driverId, IResponseCallBack<ToBePickedUpBriefData> callback);
+
+    void createScanBatch(int driverId, int operatorRole, int scanAs,
+            IResponseCallBack<ScanBatchCreateData> callback);
+
+    void generateScanBatchReport(long scanBatchId, IResponseCallBack<ScanBatchGenerateReportData> callback);
 
 }

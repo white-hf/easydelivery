@@ -9,7 +9,12 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MediatorLiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
+import com.hf.courierservice.IResponseCallBack;
+import com.hf.courierservice.Result;
 import com.hf.courierservice.apihelper.FileLog;
+import com.hf.courierservice.bean.ScanBatchCreateData;
+import com.hf.courierservice.bean.ScanBatchGenerateReportData;
+import com.hf.courierservice.bean.ToBePickedUpBriefData;
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.bean.ScanItem;
 import com.hf.easydelivery.core.DeliveryinfoMgr;
@@ -246,6 +251,69 @@ public class ScanViewModel extends ViewModel implements Subscriber {
     }
 
     /**
+     * 进入扫描页时：查询待分拣概要并创建扫描批次
+     */
+    public void prepareScanBatchOnEnter() {
+        Long currentBatchId = scanBatchIdLive.getValue();
+        Integer currentStatus = scanBatchStatusLive.getValue();
+        if (currentBatchId != null && currentBatchId > 0 && currentStatus != null && currentStatus == 0) {
+            return;
+        }
+
+        Integer driverId = resourceMgr.getLoginInfo() != null ? resourceMgr.getLoginInfo().loginId : null;
+        if (driverId == null || driverId <= 0) return;
+
+        resourceMgr.getCourierService().fetchToBePickedUpBrief(driverId,
+                new IResponseCallBack<ToBePickedUpBriefData>() {
+                    @Override
+                    public void onComplete(Result<ToBePickedUpBriefData> result) {
+                        if (result instanceof Result.Success) {
+                            ToBePickedUpBriefData data = ((Result.Success<ToBePickedUpBriefData>) result).data;
+                            int total = data == null ? 0 : data.getTotal_number();
+                            if (total > 0) {
+                                createScanBatch(driverId);
+                            } else {
+                                toastMessage.postValue(new Event<>("您没有包裹需要扫描"));
+                            }
+                        } else if (result instanceof Result.Error) {
+                            toastMessage.postValue(new Event<>("查询待分拣包裹失败"));
+                        }
+                    }
+
+                    @Override
+                    public void onFail(Exception e) {
+                        toastMessage.postValue(new Event<>("查询待分拣包裹失败"));
+                    }
+                });
+    }
+
+    private void createScanBatch(int driverId) {
+        resourceMgr.getCourierService().createScanBatch(driverId, 0, 0,
+                new IResponseCallBack<ScanBatchCreateData>() {
+                    @Override
+                    public void onComplete(Result<ScanBatchCreateData> result) {
+                        if (result instanceof Result.Success) {
+                            ScanBatchCreateData data = ((Result.Success<ScanBatchCreateData>) result).data;
+                            long batchId = data == null ? 0 : data.getScan_batch_id();
+                            if (batchId > 0) {
+                                resourceMgr.getDeliveryinfoMgr().updateScanBatchInfo(batchId, 0);
+                                pushBatchFields();
+                            } else {
+                                toastMessage.postValue(new Event<>("创建扫描批次失败"));
+                            }
+                        } else if (result instanceof Result.Error) {
+                            toastMessage.postValue(new Event<>("创建扫描批次失败"));
+                        }
+                    }
+
+                    @Override
+                    public void onFail(Exception e) {
+                        toastMessage.postValue(new Event<>("创建扫描批次失败"));
+                    }
+                });
+    }
+
+    /**
      * 新增：处理一次成功扫描的内部方法
      */
     private void handleSuccessfulScan(String waybillNo, String packageNo) {
@@ -291,6 +359,36 @@ public class ScanViewModel extends ViewModel implements Subscriber {
             // 回到主线程（或任何有 Looper 的线程）启动提交
             new Handler(resourceMgr.getDbHandler().getLooper()).post(() -> batchSubmit(list));
         });
+    }
+
+    /**
+     * 生成扫描报告
+     */
+    public void generateScanBatchReport() {
+        Long batchId = scanBatchIdLive.getValue();
+        if (batchId == null || batchId < 1) {
+            toastMessage.postValue(new Event<>("扫描批次无效"));
+            return;
+        }
+
+        resourceMgr.getCourierService().generateScanBatchReport(batchId,
+                new IResponseCallBack<ScanBatchGenerateReportData>() {
+                    @Override
+                    public void onComplete(Result<ScanBatchGenerateReportData> result) {
+                        if (result instanceof Result.Success) {
+                            resourceMgr.getDeliveryinfoMgr().updateScanBatchInfo(batchId, 1);
+                            pushBatchFields();
+                            toastMessage.postValue(new Event<>("扫描报告已生成"));
+                        } else if (result instanceof Result.Error) {
+                            toastMessage.postValue(new Event<>("生成扫描报告失败"));
+                        }
+                    }
+
+                    @Override
+                    public void onFail(Exception e) {
+                        toastMessage.postValue(new Event<>("生成扫描报告失败"));
+                    }
+                });
     }
 
     /**
