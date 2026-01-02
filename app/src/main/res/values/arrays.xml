@@ -16,9 +16,9 @@
     </string-array>
 
     <string-array name="status_array">
-        <item>waiting_upload</item>
-        <item>uploaded</item>
-        <item>failed</item>
+        <item>Waiting to upload</item>
+        <item>Uploaded</item>
+        <item>Failed</item>
     </string-array>
 
     <string-array name="sms_tempalte">
@@ -31,17 +31,17 @@
     </string-array>
 
     <string-array name="delviery_data_type">
-        <item>delivering</item>
-        <item>unscanned</item>
-        <item>scanned</item>
+        <item>Delivering</item>
+        <item>Unscanned</item>
+        <item>Scanned</item>
     </string-array>
 
     <string-array name="delivery_fail_reason_labels">
-        <item>P.O.Box</item>
-        <item>地址错误</item>
-        <item>收件人拒收包裹</item>
-        <item>商业场所关闭或大楼锁门</item>
-        <item>缺失建筑单元号</item>
+        <item>P.O. Box</item>
+        <item>Wrong address</item>
+        <item>Recipient refused the parcel</item>
+        <item>Business closed or building locked</item>
+        <item>Missing unit number</item>
     </string-array>
 
     <string-array name="delivery_fail_reason_codes">

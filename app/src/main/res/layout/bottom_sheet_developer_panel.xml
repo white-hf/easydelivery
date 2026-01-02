@@ -22,7 +22,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Developer Panel"
+                android:text="@string/dev_panel_title"
                 android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6" />
 
             <Button
@@ -30,7 +30,7 @@
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Reset" />
+                android:text="@string/dev_panel_reset" />
         </LinearLayout>
 
         <!-- Profile Section -->
@@ -38,7 +38,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Perf Balance"
+            android:text="@string/dev_panel_perf_balance"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
 
         <LinearLayout
@@ -51,7 +51,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Realtime" />
+                android:text="@string/dev_panel_realtime" />
 
             <SeekBar
                 android:id="@+id/seek_perf_balance"
@@ -65,14 +65,14 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="PowerSaver" />
+                android:text="@string/dev_panel_powersaver" />
         </LinearLayout>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Profile"
+            android:text="@string/dev_panel_profile"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
 
         <RadioGroup
@@ -86,14 +86,14 @@
                 android:id="@+id/rb_profile_powersaver"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="PowerSaver" />
+                android:text="@string/dev_panel_powersaver" />
 
             <RadioButton
                 android:id="@+id/rb_profile_advanced"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:text="Advanced" />
+                android:text="@string/dev_panel_advanced" />
         </RadioGroup>
 
         <Button
@@ -102,14 +102,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
-            android:text="Apply Profile" />
+            android:text="@string/dev_panel_apply_profile" />
 
         <!-- Proximity Config Section -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Proximity Config"
+            android:text="@string/dev_panel_proximity_config"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
 
         <GridLayout
@@ -117,14 +117,14 @@
             android:layout_height="wrap_content"
             android:columnCount="4">
 
-            <TextView android:text="enterRadiusM" android:layout_marginEnd="8dp"/>
+            <TextView android:text="@string/dev_panel_enter_radius" android:layout_marginEnd="8dp"/>
             <EditText android:id="@+id/et_enter_radius" android:inputType="numberDecimal" android:layout_width="80dp"/>
-            <TextView android:text="exitRadiusM" android:layout_marginStart="16dp" android:layout_marginEnd="8dp"/>
+            <TextView android:text="@string/dev_panel_exit_radius" android:layout_marginStart="16dp" android:layout_marginEnd="8dp"/>
             <EditText android:id="@+id/et_exit_radius" android:inputType="numberDecimal" android:layout_width="80dp"/>
 
-            <TextView android:text="throttleDrive (ms)" android:layout_marginEnd="8dp"/>
+            <TextView android:text="@string/dev_panel_throttle_drive" android:layout_marginEnd="8dp"/>
             <EditText android:id="@+id/et_throttle_drive" android:inputType="number"/>
-            <TextView android:text="throttleOnFoot (ms)" android:layout_marginStart="16dp" android:layout_marginEnd="8dp"/>
+            <TextView android:text="@string/dev_panel_throttle_on_foot" android:layout_marginStart="16dp" android:layout_marginEnd="8dp"/>
             <EditText android:id="@+id/et_throttle_foot" android:inputType="number"/>
 
         </GridLayout>
@@ -133,24 +133,24 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
-            android:text="Apply Proximity" />
+            android:text="@string/dev_panel_apply_proximity" />
 
         <!-- Follow Config Section -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Follow Config"
+            android:text="@string/dev_panel_follow_config"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
         <GridLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:columnCount="2">
-            <TextView android:text="stdIntervalMs"/>
+            <TextView android:text="@string/dev_panel_std_interval"/>
             <EditText android:id="@+id/et_follow_std_interval" android:inputType="number"/>
-            <TextView android:text="stdDistM"/>
+            <TextView android:text="@string/dev_panel_std_dist"/>
             <EditText android:id="@+id/et_follow_std_dist" android:inputType="numberDecimal"/>
-            <TextView android:text="stdHeadingDeg"/>
+            <TextView android:text="@string/dev_panel_std_heading"/>
             <EditText android:id="@+id/et_follow_std_heading" android:inputType="numberDecimal"/>
         </GridLayout>
         <Button
@@ -158,26 +158,26 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
-            android:text="Apply Follow" />
+            android:text="@string/dev_panel_apply_follow" />
 
         <!-- Zoom Config Section -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Zoom Config"
+            android:text="@string/dev_panel_zoom_config"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
         <GridLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:columnCount="2">
-            <TextView android:text="closeMeters"/>
+            <TextView android:text="@string/dev_panel_close_meters"/>
             <EditText android:id="@+id/et_zoom_close_meters" android:inputType="numberDecimal"/>
-            <TextView android:text="closeZoom"/>
+            <TextView android:text="@string/dev_panel_close_zoom"/>
             <EditText android:id="@+id/et_zoom_close_zoom" android:inputType="numberDecimal"/>
-            <TextView android:text="approachMeters"/>
+            <TextView android:text="@string/dev_panel_approach_meters"/>
             <EditText android:id="@+id/et_zoom_approach_meters" android:inputType="numberDecimal"/>
-            <TextView android:text="approachZoom"/>
+            <TextView android:text="@string/dev_panel_approach_zoom"/>
             <EditText android:id="@+id/et_zoom_approach_zoom" android:inputType="numberDecimal"/>
         </GridLayout>
         <Button
@@ -185,20 +185,20 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
-            android:text="Apply Zoom" />
+            android:text="@string/dev_panel_apply_zoom" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Experiments"
+            android:text="@string/dev_panel_experiments"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
 
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/switch_inside_boost"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Enable inside-zone GPS boost" />
+            android:text="@string/dev_panel_enable_inside_boost" />
 
     </LinearLayout>
 </ScrollView>

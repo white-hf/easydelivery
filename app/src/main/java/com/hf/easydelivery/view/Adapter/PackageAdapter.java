@@ -88,7 +88,7 @@ public class PackageAdapter extends RecyclerView.Adapter<PackageAdapter.PackageV
 
                 //put the failed data to uploading queue again
                 ResourceMgr.getInstance().getPendingPackagesMgr().addQueue(packageEntity , true);
-                Toast.makeText(itemView.getContext(), "Uploading again:" + packageEntity.trackingId, Toast.LENGTH_SHORT).show();
+                Toast.makeText(itemView.getContext(), itemView.getContext().getString(R.string.package_uploading_again_format, packageEntity.trackingId), Toast.LENGTH_SHORT).show();
             }
         }
     }

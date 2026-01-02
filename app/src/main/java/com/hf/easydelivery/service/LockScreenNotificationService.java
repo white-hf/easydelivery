@@ -197,8 +197,8 @@ public class LockScreenNotificationService extends Service {
     private Notification buildMinimalNotification() {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_nav_mode_on)
-                .setContentTitle("配送导航")
-                .setContentText("准备中...")
+                .setContentTitle(getString(R.string.lockscreen_title))
+                .setContentText(getString(R.string.lockscreen_preparing))
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -359,9 +359,9 @@ public class LockScreenNotificationService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
-                    "锁屏包裹",
+                    getString(R.string.lockscreen_channel_name),
                     NotificationManager.IMPORTANCE_DEFAULT);
-            channel.setDescription("锁屏显示当前包裹");
+            channel.setDescription(getString(R.string.lockscreen_channel_description));
             channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             channel.setShowBadge(false);
             channel.enableVibration(false);
@@ -402,8 +402,8 @@ public class LockScreenNotificationService extends Service {
                 .setAutoCancel(false);
 
         // Add action buttons
-        builder.addAction(R.drawable.ic_shutter, "拍照", cameraIntent)
-               .addAction(R.drawable.ic_nav_mode_on, "主页", homeIntent);
+        builder.addAction(R.drawable.ic_shutter, getString(R.string.lockscreen_action_camera), cameraIntent)
+               .addAction(R.drawable.ic_nav_mode_on, getString(R.string.lockscreen_action_home), homeIntent);
 
         return builder.build();
     }
@@ -464,7 +464,7 @@ public class LockScreenNotificationService extends Service {
         RemoteViews views = new RemoteViews(getPackageName(), R.layout.notification_lockscreen);
 
         if (focusSnapshot == null || focusSnapshot.delivery == null) {
-            views.setTextViewText(R.id.notification_route_text, "配送导航");
+            views.setTextViewText(R.id.notification_route_text, getString(R.string.lockscreen_title));
             views.setTextViewText(R.id.notification_address_text, "");
             views.setTextViewText(R.id.notification_recipient_text, "");
             return views;
@@ -472,7 +472,9 @@ public class LockScreenNotificationService extends Service {
 
         DeliveryInfo d = focusSnapshot.delivery;
         String routeNumber = d.getRouteNumber();
-        String title = !TextUtils.isEmpty(routeNumber) ? ("包裹 #" + routeNumber) : "下一单";
+        String title = !TextUtils.isEmpty(routeNumber)
+                ? getString(R.string.lockscreen_package_format, routeNumber)
+                : getString(R.string.lockscreen_next_stop);
         views.setTextViewText(R.id.notification_route_text, title);
         // Clear extra lines to keep UI minimal
         views.setTextViewText(R.id.notification_address_text, "");
@@ -486,10 +488,12 @@ public class LockScreenNotificationService extends Service {
      */
     private String buildSimpleTitle(@Nullable FocusState focusSnapshot) {
         if (focusSnapshot == null || focusSnapshot.delivery == null) {
-            return "配送导航";
+            return getString(R.string.lockscreen_title);
         }
         String routeNumber = focusSnapshot.delivery.getRouteNumber();
-        return !TextUtils.isEmpty(routeNumber) ? "包裹 #" + routeNumber : "配送导航";
+        return !TextUtils.isEmpty(routeNumber)
+                ? getString(R.string.lockscreen_package_format, routeNumber)
+                : getString(R.string.lockscreen_title);
     }
 
     /**
@@ -497,11 +501,13 @@ public class LockScreenNotificationService extends Service {
      */
     private String buildSimpleContent(@Nullable FocusState focusSnapshot) {
         if (focusSnapshot == null || focusSnapshot.delivery == null) {
-            return "准备中...";
+            return getString(R.string.lockscreen_preparing);
         }
 
         String routeNumber = focusSnapshot.delivery.getRouteNumber();
-        return !TextUtils.isEmpty(routeNumber) ? "包裹 #" + routeNumber : "准备中...";
+        return !TextUtils.isEmpty(routeNumber)
+                ? getString(R.string.lockscreen_package_format, routeNumber)
+                : getString(R.string.lockscreen_preparing);
     }
 
 

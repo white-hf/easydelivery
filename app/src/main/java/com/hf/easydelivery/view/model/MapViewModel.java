@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel;
 
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.ResourceMgr;
+import com.hf.easydelivery.R;
 import com.hf.easydelivery.core.DeliveryinfoMgr;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.dao.PackageEntity;
@@ -124,7 +125,7 @@ public class MapViewModel extends ViewModel implements Subscriber {
         try {
             ResourceMgr.getInstance().getDeliveryinfoMgr().getDeliveryInfo(ResourceMgr.getInstance().getLoginInfo().loginId, bDeliveryTask);
         } catch (Throwable t) {
-            toastMessageLive.setValue(new Event<>("请求失败"));
+            toastMessageLive.setValue(new Event<>(getString(R.string.map_request_failed)));
             publishStatus(false);
         }
     }
@@ -142,8 +143,8 @@ public class MapViewModel extends ViewModel implements Subscriber {
         switch (event.getEventType()) {
             case EventConstant.EVENT_UPLOAD_FAILURE:
                 FileLog.e(TAG, "receive: EVENT_UPLOAD_FAILURE");
-                toastMessageLive.setValue(new Event<>("上传包裹数据失败"));
-                dialogMessageLive.setValue(new Event<>("包裹上传失败，请检查网络或稍后重试。"));
+                toastMessageLive.setValue(new Event<>(getString(R.string.map_upload_failed_toast)));
+                dialogMessageLive.setValue(new Event<>(getString(R.string.map_upload_failed_dialog)));
                 updateStatusCounts(0);
                 break;
 
@@ -151,7 +152,7 @@ public class MapViewModel extends ViewModel implements Subscriber {
                 FileLog.i(TAG, "receive: EVENT_SAVE_DELIVERY_SUCCESS");
                 PackageEntity packageEntity = (PackageEntity) event.getMessage();
                 if (packageEntity == null) return;
-                toastMessageLive.setValue(new Event<>("包裹数据保存成功"));
+                toastMessageLive.setValue(new Event<>(getString(R.string.map_save_success)));
                 // 从内存列表移除包裹，并更新 UI
                 DeliveryInfo info = deliveryinfoMgr.get(packageEntity.orderId);
                 if (info != null) {
@@ -167,7 +168,7 @@ public class MapViewModel extends ViewModel implements Subscriber {
                 FileLog.i(TAG, "receive: EVENT_UPLOAD_SUCCESS");
                 PackageEntity pkg = (PackageEntity) event.getMessage();
                 if (pkg == null) return;
-                toastMessageLive.setValue(new Event<>("包裹上传成功"));
+                toastMessageLive.setValue(new Event<>(getString(R.string.map_upload_success)));
                 uploadSuccessHapticLive.setValue(new Event<>(Boolean.TRUE));
                 updateStatusCounts(1);
                 break;
@@ -230,6 +231,15 @@ public class MapViewModel extends ViewModel implements Subscriber {
         statusLive.setValue(status);
     }
     // endregion
+
+    private String getString(int resId, Object... args) {
+        if (ResourceMgr.getInstance().getCtx() == null) {
+            return "";
+        }
+        return args.length == 0
+                ? ResourceMgr.getInstance().getCtx().getString(resId)
+                : ResourceMgr.getInstance().getCtx().getString(resId, args);
+    }
 
     @Override
     protected void onCleared() {

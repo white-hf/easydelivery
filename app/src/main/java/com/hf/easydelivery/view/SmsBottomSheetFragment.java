@@ -104,7 +104,7 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
         currentDelivery = (mOrderId != null && mOrderId > 0) ? ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId) : null;
         String phone = currentDelivery != null ? currentDelivery.getPhone() : fallbackPhone;
         if (TextUtils.isEmpty(phone)) {
-            Toast.makeText(getContext(), "包裹信息缺失，无法发送短信", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), R.string.sms_missing_package_info, Toast.LENGTH_SHORT).show();
             dismissAllowingStateLoss();
             return view;
         }
@@ -123,7 +123,7 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
         sendButton.setOnClickListener(v -> {
             String message = smsEditText.getText().toString().trim();
             if (TextUtils.isEmpty(message)) {
-                Toast.makeText(getContext(), "Message cannot be empty", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), R.string.sms_message_empty, Toast.LENGTH_SHORT).show();
                 return;
             }
             attemptSendSMS(message);
@@ -152,7 +152,7 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
         DeliveryInfo deliveryInfo = currentDelivery;
         String phone = deliveryInfo != null ? deliveryInfo.getPhone() : fallbackPhone;
         if (TextUtils.isEmpty(phone)) {
-            Toast.makeText(getContext(), "收件人信息缺失，无法发送短信", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), R.string.sms_missing_recipient_info, Toast.LENGTH_SHORT).show();
             return;
         }
         try {
@@ -163,7 +163,9 @@ public class SmsBottomSheetFragment extends BottomSheetDialogFragment {
             lastSentMessage = msg;
             dismiss();
         } catch (Exception ex) {
-            Toast.makeText(getContext(), "无法打开短信应用: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(),
+                    getString(R.string.sms_open_failed_format, ex.getMessage()),
+                    Toast.LENGTH_SHORT).show();
         }
     }
 

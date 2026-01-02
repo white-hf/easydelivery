@@ -1,5 +1,7 @@
 package com.hf.easydelivery.view.Adapter;
 
+import android.content.Context;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -55,10 +57,21 @@ public class ClusterParcelAdapter extends RecyclerView.Adapter<ClusterParcelAdap
         boolean isLarge = com.hf.easydelivery.core.LargeParcelStore.isLarge(h.itemView.getContext(), info);
         h.tvLargeBadge.setVisibility(isLarge ? View.VISIBLE : View.GONE);
 
-        String streetNo = String.valueOf(info.getCivilNumber());
-        String unitNo = info.getUnitNumber() != null ? info.getUnitNumber() : "无";
-        String line1 = streetNo + "号 " + unitNo + "单元    " + info.getName();
-        String line2 = "地址: " + info.getAddress();
+        Context context = h.itemView.getContext();
+        String streetNo = info.getCivilNumber() != null && info.getCivilNumber() > 0
+                ? context.getString(R.string.package_list_street_number_format,
+                        String.valueOf(info.getCivilNumber()))
+                : context.getString(R.string.map_street_number_unknown);
+        String unitRaw = info.getUnitNumber();
+        String unitNo = TextUtils.isEmpty(unitRaw)
+                ? context.getString(R.string.parcel_unit_unknown)
+                : context.getString(R.string.package_list_unit_format, unitRaw);
+        String name = info.getName() == null ? "" : info.getName();
+        String line1 = context.getString(R.string.cluster_line1_format, streetNo, unitNo, name);
+        String address = info.getAddress() == null
+                ? context.getString(R.string.map_placeholder)
+                : info.getAddress();
+        String line2 = context.getString(R.string.cluster_line2_format, address);
         h.tvDetail.setText(line1 + "\n" + line2);
 
         h.itemView.setOnClickListener(v -> {

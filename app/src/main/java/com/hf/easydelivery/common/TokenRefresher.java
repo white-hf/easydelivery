@@ -25,7 +25,7 @@ public class TokenRefresher {
      */
     public void start(Runnable userTask) {
         if (isRunning) return;
-        if (userTask == null) throw new IllegalArgumentException("userTask不可为null");
+        if (userTask == null) throw new IllegalArgumentException("userTask must not be null");
         this.userTask = userTask;
         isRunning = true;
         internalRunnable = new Runnable() {

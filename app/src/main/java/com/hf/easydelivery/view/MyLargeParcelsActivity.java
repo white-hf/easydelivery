@@ -74,7 +74,7 @@ public class MyLargeParcelsActivity extends AppCompatActivity {
             String tracking = etTracking.getText().toString().trim();
             String route = etRoute.getText().toString().trim();
             if (TextUtils.isEmpty(tracking)) {
-                etTracking.setError("请输入或扫描包裹号");
+                etTracking.setError(getString(R.string.my_large_tracking_error));
                 return;
             }
             LargeParcelStore.add(this, tracking, route);

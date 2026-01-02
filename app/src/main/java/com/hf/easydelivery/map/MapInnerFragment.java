@@ -519,7 +519,7 @@ public class MapInnerFragment extends Fragment
                 }
                 if (getParentFragment() instanceof MapHostFragment)
                     ((MapHostFragment) getParentFragment()).onRequestInTransitList();
-                Toast.makeText(requireContext(), "刷新派送中...", Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), R.string.map_refresh_toast, Toast.LENGTH_SHORT).show();
                 return true;
             } else if (id == R.id.menu_unscanned) {
                 currentMode = DataMode.UNSCANNED;
@@ -528,7 +528,7 @@ public class MapInnerFragment extends Fragment
                 if (getParentFragment() instanceof MapHostFragment) {
                     ((MapHostFragment) getParentFragment()).onRequestUnscannedList();
                 }
-                Toast.makeText(requireContext(), "查询未扫描...", Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), R.string.map_query_unscanned_toast, Toast.LENGTH_SHORT).show();
                 return true;
             } else if (id == R.id.menu_nav_mode) {
                 toggleNavigationMode();
@@ -555,7 +555,7 @@ public class MapInnerFragment extends Fragment
                     if (isGranted) {
                         getLocation();
                     } else {
-                        Toast.makeText(requireContext(), "需要定位权限", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(requireContext(), R.string.map_location_permission_required, Toast.LENGTH_SHORT).show();
                     }
                 });
 
@@ -685,9 +685,9 @@ public class MapInnerFragment extends Fragment
             String msg = event.getMessage();
             if (msg != null && isAdded()) {
                 new AlertDialog.Builder(requireContext())
-                        .setTitle("上传失败")
+                        .setTitle(R.string.map_upload_failed_title)
                         .setMessage(msg)
-                        .setPositiveButton("确定", null)
+                        .setPositiveButton(R.string.action_ok, null)
                         .show();
             }
         });
@@ -825,9 +825,9 @@ public class MapInnerFragment extends Fragment
 
     private void showStatusLegendDialog() {
         new AlertDialog.Builder(requireActivity())
-                .setTitle("状态说明")
-                .setMessage("顺序为：\n已送达 / 派送中\n\n例如：30/29")
-                .setPositiveButton("知道了", null)
+                .setTitle(R.string.status_help)
+                .setMessage(R.string.map_status_legend_message)
+                .setPositiveButton(R.string.action_got_it, null)
                 .show();
     }
 
@@ -974,21 +974,25 @@ public class MapInnerFragment extends Fragment
             public void onShare(DeliveryInfo info) {
                 StringBuilder sb = new StringBuilder();
                 if (!TextUtils.isEmpty(info.getOrderSn())) {
-                    sb.append("运单: ").append(info.getOrderSn()).append("\n");
+                    sb.append(getString(R.string.map_share_waybill_format, info.getOrderSn()))
+                            .append("\n");
                 }
                 if (!TextUtils.isEmpty(info.getRouteNumber())) {
-                    sb.append("包裹号: ").append(info.getRouteNumber()).append("\n");
+                    sb.append(getString(R.string.map_share_package_format, info.getRouteNumber()))
+                            .append("\n");
                 }
                 if (!TextUtils.isEmpty(info.getAddress())) {
-                    sb.append("地址: ").append(info.getAddress()).append("\n");
+                    sb.append(getString(R.string.map_share_address_format, info.getAddress()))
+                            .append("\n");
                 }
                 if (!TextUtils.isEmpty(info.getName())) {
-                    sb.append("收件人: ").append(info.getName()).append("\n");
+                    sb.append(getString(R.string.map_share_recipient_format, info.getName()))
+                            .append("\n");
                 }
                 Intent shareIntent = new Intent(Intent.ACTION_SEND);
                 shareIntent.setType("text/plain");
                 shareIntent.putExtra(Intent.EXTRA_TEXT, sb.toString());
-                startActivity(Intent.createChooser(shareIntent, "分享包裹信息"));
+                startActivity(Intent.createChooser(shareIntent, getString(R.string.map_share_title)));
             }
 
             @Override
@@ -1013,10 +1017,14 @@ public class MapInnerFragment extends Fragment
         int nearbyCount = infoGroup.nearbyCount;
         int sameAddressCount = sameAddressGroup.size();
 
-        String streetLabel = info.getCivilNumber() > 0 ? info.getCivilNumber() + "号" : "街号未知";
+        String streetLabel = info.getCivilNumber() > 0
+                ? getString(R.string.map_street_number_format, info.getCivilNumber())
+                : getString(R.string.map_street_number_unknown);
         String unitLabel = (info.getUnitNumber() == null || info.getUnitNumber().isEmpty()) ? ""
-                : info.getUnitNumber() + "单元";
-        String parcelLabel = info.getRouteNumber() == null ? "包裹号未知" : info.getRouteNumber() + "包裹";
+                : getString(R.string.map_unit_number_format, info.getUnitNumber());
+        String parcelLabel = info.getRouteNumber() == null
+                ? getString(R.string.map_parcel_unknown)
+                : getString(R.string.map_parcel_label_format, info.getRouteNumber());
 
         List<String> primaryParts = new ArrayList<>();
         if (!TextUtils.isEmpty(streetLabel))
@@ -1026,21 +1034,22 @@ public class MapInnerFragment extends Fragment
         if (!TextUtils.isEmpty(parcelLabel))
             primaryParts.add(parcelLabel);
         if (sameAddressCount > 1) {
-            primaryParts.add(String.format(Locale.getDefault(), "同址共%d票", sameAddressCount));
+            primaryParts.add(getString(R.string.map_same_address_count_format, sameAddressCount));
         }
         if (nearbyCount > 1) {
-            primaryParts.add(String.format(Locale.getDefault(), "附近共%d票", nearbyCount));
+            primaryParts.add(getString(R.string.map_nearby_count_format, nearbyCount));
         }
         pillRouteText.setText(TextUtils.join("  ", primaryParts).trim());
 
         String baseAddress = info.getAddress() == null ? "" : info.getAddress();
         pillAddressText.setText(baseAddress);
 
-        String recipient = info.getName() == null ? "—" : info.getName();
+        String recipient = info.getName() == null ? getString(R.string.map_placeholder) : info.getName();
         String parcelSummary = buildParcelSummary(sameAddressGroup, info);
-        String recipientLine = String.format(Locale.getDefault(), "收件人: %s", recipient);
+        String recipientLine = getString(R.string.map_recipient_format, recipient);
         if (!parcelSummary.isEmpty()) {
-            recipientLine = recipientLine + "\n包裹: " + parcelSummary;
+            recipientLine = recipientLine + "\n"
+                    + getString(R.string.map_parcel_summary_format, parcelSummary);
         }
         pillRecipientText.setText(recipientLine);
         infoPill.setVisibility(View.VISIBLE);
@@ -1073,9 +1082,9 @@ public class MapInnerFragment extends Fragment
         if (labels.isEmpty())
             return "";
 
-        String summary = TextUtils.join("、", labels);
+        String summary = TextUtils.join(getString(R.string.map_parcel_summary_separator), labels);
         if (focusGroup != null && focusGroup.size() > labels.size()) {
-            summary = summary + "…";
+            summary = summary + getString(R.string.map_parcel_summary_more);
         }
         return summary;
     }
@@ -1112,14 +1121,14 @@ public class MapInnerFragment extends Fragment
         if (collapsedInfoPill != null)
             collapsedInfoPill.setVisibility(View.GONE);
         if (collapsedInfoText != null)
-            collapsedInfoText.setText("暂无派送");
+            collapsedInfoText.setText(R.string.map_no_deliveries);
     }
 
     private void updateCollapsedHint() {
         if (collapsedInfoText == null)
             return;
         if (currentPrimaryDelivery == null) {
-            collapsedInfoText.setText("暂无派送");
+            collapsedInfoText.setText(R.string.map_no_deliveries);
             return;
         }
         String label = currentPrimaryDelivery.getRouteNumber();
@@ -1130,13 +1139,13 @@ public class MapInnerFragment extends Fragment
             label = String.valueOf(currentPrimaryDelivery.getOrderId());
         }
         if (TextUtils.isEmpty(label)) {
-            label = "当前包裹";
+            label = getString(R.string.map_current_parcel);
         }
         String address = currentPrimaryDelivery.getAddress();
         if (TextUtils.isEmpty(address)) {
-            address = "位置未知";
+            address = getString(R.string.map_location_unknown);
         }
-        collapsedInfoText.setText(String.format(Locale.getDefault(), "%s · %s", label, address));
+        collapsedInfoText.setText(getString(R.string.map_collapsed_hint_format, label, address));
     }
 
     private String buildPrimaryKey(@Nullable DeliveryInfo info) {
@@ -1235,7 +1244,7 @@ public class MapInnerFragment extends Fragment
             return;
         Location loc = getBestAvailableLocation();
         if (loc == null) {
-            Toast.makeText(requireContext(), "暂无定位", Toast.LENGTH_SHORT).show();
+            Toast.makeText(requireContext(), R.string.map_no_location, Toast.LENGTH_SHORT).show();
             return;
         }
         if (resumeAutoFollow) {
@@ -1303,7 +1312,9 @@ public class MapInnerFragment extends Fragment
             }
         }
         updateNavigationMenuItem();
-        String msg = navigationModeEnabled ? "导航模式已开启" : "导航模式已关闭";
+        String msg = getString(navigationModeEnabled
+                ? R.string.map_nav_mode_enabled
+                : R.string.map_nav_mode_disabled);
         Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show();
     }
 
@@ -1317,7 +1328,9 @@ public class MapInnerFragment extends Fragment
         if (navItem == null)
             return;
         navItem.setIcon(navigationModeEnabled ? R.drawable.ic_nav_mode_on : R.drawable.ic_nav_mode_off);
-        navItem.setTitle(navigationModeEnabled ? "退出导航视图" : "导航视图");
+        navItem.setTitle(navigationModeEnabled
+                ? R.string.map_nav_mode_exit
+                : R.string.map_nav_mode_enter);
     }
 
     /** Hidden developer shortcut: double-tap the toolbar to open the panel. */
@@ -1332,7 +1345,7 @@ public class MapInnerFragment extends Fragment
                     FileLog.getInstance().error(TAG, "Open developer panel failed", t);
                 } catch (Throwable ignore) {
                 }
-                Toast.makeText(requireContext(), "Developer panel unavailable", Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), R.string.dev_panel_unavailable, Toast.LENGTH_SHORT).show();
             }
         } else {
             lastToolbarTapMs = now;
@@ -2284,7 +2297,7 @@ public class MapInnerFragment extends Fragment
                             return;
                         }
                         edgeOutsideConsecutive = 0;
-                        logD("边缘兜底触发：蓝点离开安全区，强制居中");
+                        logD("Edge fallback triggered: blue dot left safe area, forcing centering");
                         centerOnMyLocation(true);
                         if (mSmartLocationManager != null) {
                             mSmartLocationManager.requestBoost(10_000L, "edge_fallback");

@@ -53,7 +53,8 @@ public class LoginActivity extends AppCompatActivity {
             String password = etPassword.getText().toString().trim();
 
             if (driverId.isEmpty() || password.isEmpty()) {
-                showAlert("输入错误", "请填写有效的司机号和密码。");
+                showAlert(getString(R.string.login_input_error_title),
+                        getString(R.string.login_input_error_message));
                 return;
             }
 
@@ -115,7 +116,7 @@ public class LoginActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setMessage(message)
-                .setPositiveButton("好的", null)
+                .setPositiveButton(R.string.action_ok, null)
                 .show();
     }
 }

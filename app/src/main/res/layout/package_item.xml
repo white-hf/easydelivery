@@ -11,14 +11,14 @@
         android:id="@+id/tracking_id"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Tracking ID"
+        android:text="@string/package_item_tracking_id_label"
         android:layout_marginEnd="8dp" />
 
     <TextView
         android:id="@+id/save_time"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Save Time"
+        android:text="@string/package_item_save_time_label"
         android:layout_marginStart="8dp"
     android:layout_marginEnd="16dp" />
 
@@ -26,6 +26,6 @@
         android:id="@+id/driver_id"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Driver ID"
+        android:text="@string/package_item_driver_id_label"
         android:layout_marginStart="8dp" />
 </LinearLayout>

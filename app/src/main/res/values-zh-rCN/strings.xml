@@ -1,0 +1,411 @@
+<resources>
+    <string name="fullscreen_mode">全屏模式</string>
+    <string name="app_name">易派送</string>
+    <string name="action_settings">设置</string>
+    <string name="action_ok">确定</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_back">返回</string>
+    <string name="action_scan">扫描</string>
+    <string name="action_load_orders">加载扫描数据</string>
+    <string name="action_success">操作成功</string>
+    <string name="action_failure">操作失败</string>
+    <string name="action_req_failure">请求失败，请检查网络后重试。</string>
+    <string name="action_svr_failure">服务返回失败</string>
+    <string name="action_need_login">请先登录</string>
+    <string name="default_scanned_location">哈利法克斯仓库</string>
+    <string name="str_login_success">登录成功</string>
+    <string name="str_login_failure">登录失败</string>
+    <string name="str_login_user_failure">用户名或密码错误</string>
+    <string name="str_req_timeout">请求超时</string>
+    <string name="title_activity_settings">设置</string>
+    <string name="str_login">登录</string>
+    <string name="str_confirm">确定</string>
+    <string name="str_cancel">取消</string>
+    <string name="str_login_tips">请输入用户名和密码</string>
+    <string name="login_input_error_title">输入错误</string>
+    <string name="login_input_error_message">请填写有效的司机号和密码。</string>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">基础配置</string>
+    <string name="sync_header">数据同步</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">批次号</string>
+    <string name="another_driver_id">混合堆司机号</string>
+    <string name="driver_id">司机号</string>
+    <string name="transfer_package_id">单号分配</string>
+    <string name="operation_completion">操作完成</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">自动保存</string>
+    <string name="commit_title">自动提交</string>
+    <!-- Strings related to login -->
+    <string name="view_list">列表显示</string>
+    <string name="view_map">地图显示</string>
+
+    <string name="cancel">取消</string>
+    <string name="ok">送件</string>
+    <string name="takephoto">拍照</string>
+    <string name="route_id">包裹号：</string>
+    <string name="unit_id">单元号：</string>
+    <string name="take_picture">请至少拍2张照片。</string>
+    <string name="delivering_d_pending_d">配送中:%1$d,上传中:%2$d</string>
+    <string name="full_image">全尺寸图片</string>
+    <string name="take_picture_full">已拍足够照片。</string>
+    <string name="search">搜索</string>
+    <string name="upload_successfully">上传包裹 %s 数据成功</string>
+    <string name="picture_saved">拍照已保存</string>
+    <string name="phone">电话</string>
+    <string name="sms">短信</string>
+    <string name="save_successfully">保存包裹 %s 数据成功</string>
+    <string name="login_tip">请先登录</string>
+    <string name="refreshing_data">数据获取中</string>
+    <string name="package_id">包裹号</string>
+    <string name="swith_cn">中文</string>
+    <string name="management">管理操作</string>
+    <string name="delivery">配送</string>
+    <string name="str_setting">设置</string>
+    <string name="txt_password">密码</string>
+    <string name="txt_account">司机号</string>
+    <string name="txt_delivered_packages">已派送包裹</string>
+    <string name="txt_company">      由 3324959 NS LTD. 开发。</string>
+    <string name="txt_slogan">易派送，快乐派送在哈利法克斯</string>
+    <string name="login_copyright">3324959 NS LTD. 版权所有。v2.6.9</string>
+    <string name="str_courierservice_failure">CourierService 创建失败</string>
+    <string name="str_package_id">包裹号：—</string>
+    <string name="str_scan_status">已扫描 0 / 0</string>
+    <!-- Strings used for fragments for navigation -->
+    <string name="first_fragment_label">第一个页面</string>
+    <string name="second_fragment_label">第二个页面</string>
+    <string name="next">下一步</string>
+    <string name="previous">上一步</string>
+    <string name="action_exit">退出</string>
+    <string name="exit_confirm_title">确认退出</string>
+    <string name="exit_confirm_message">您确定要退出应用吗？</string>
+    <string name="tab_me">我的</string>
+    <string name="my_large_parcels">我的大件</string>
+    <string name="developer_settings">开发配置</string>
+
+    <string name="scan_title">包裹扫描</string>
+    <string name="scan_progress_default">已扫描 0 / 0</string>
+    <string name="scan_progress_format">已扫描 %1$d / %2$d</string>
+    <string name="scan_result_default">包裹号：—\n运单号：—</string>
+    <string name="scan_unscanned_default">未扫描(0)</string>
+    <string name="scan_scanned_default">已扫描(0)</string>
+    <string name="scan_unscanned_count">未扫描(%1$d)</string>
+    <string name="scan_scanned_count">已扫描(%1$d)</string>
+    <string name="scan_hint">请将条码放入框内并尽量靠近</string>
+    <string name="scan_submitting_default">提交中 0/0</string>
+    <string name="scan_submitting_format">提交中 %1$d / %2$d</string>
+    <string name="scan_menu_begin_scan">开启扫描</string>
+    <string name="scan_menu_unscanned">未扫包裹</string>
+    <string name="scan_menu_submit">提交</string>
+    <string name="scan_menu_report">生成报告</string>
+    <string name="scan_search_hint">输入包裹号或运单号后几位</string>
+    <string name="scan_empty">暂无数据</string>
+    <string name="scan_back_to_map">返回地图</string>
+    <string name="scan_unsynced_marker">未同步标记</string>
+    <string name="scan_recent_package_default">包裹：—</string>
+    <string name="scan_recent_waybill_default">运单：—</string>
+    <string name="scan_test_mode_on">测试模式：允许扫描屏幕上较小条码</string>
+    <string name="scan_test_mode_off">测试模式关闭</string>
+    <string name="scan_query_unscanned_toast">正在查询未扫描包裹...</string>
+    <string name="scan_unscanned_toast">您有 %1$d 个包裹需要扫描</string>
+    <string name="scan_duplicate_toast">该包裹已扫\n包裹号：%1$s</string>
+    <string name="scan_label_package">包裹号</string>
+    <string name="scan_label_waybill">运单号</string>
+    <string name="scan_label_separator">：</string>
+    <string name="scan_placeholder">—</string>
+    <string name="scan_prompt_title">提示</string>
+    <string name="scan_prompt_message">您有未扫描包裹，是否开始扫描？</string>
+    <string name="action_yes">是</string>
+    <string name="action_no">否</string>
+    <string name="scan_report_confirm_title">生成扫描报告</string>
+    <string name="scan_report_confirm_message">已扫描：%1$d\n未扫描：%2$d\n确认生成扫描报告？</string>
+    <string name="scan_report_confirm_positive">生成</string>
+    <string name="scan_camera_permission_required">需要相机权限</string>
+    <string name="scan_report_closed_or_invalid">扫描报告已关闭或批次无效。</string>
+    <string name="scan_data_loading">数据加载中，请稍后重扫</string>
+    <string name="scan_not_your_parcel">不是您的包裹</string>
+    <string name="scan_no_parcels_to_scan">您没有包裹需要扫描</string>
+    <string name="scan_query_unscanned_failed">查询待分拣包裹失败</string>
+    <string name="scan_create_batch_failed">创建扫描批次失败</string>
+    <string name="scan_report_closed_cannot_submit">扫描报告已关闭，无法提交。</string>
+    <string name="scan_no_scanned_to_submit">您没有需要提交的已扫包裹数据</string>
+    <string name="scan_batch_invalid">扫描批次无效</string>
+    <string name="scan_report_generated">扫描报告已生成</string>
+    <string name="scan_report_generate_failed">生成扫描报告失败</string>
+    <string name="scan_submit_complete">提交完成，成功：%1$d，失败：%2$d</string>
+    <string name="scan_login_expired">登录失效，请重新登录</string>
+
+    <string name="map_menu_preview">包裹预览</string>
+    <string name="map_menu_search">包裹搜索</string>
+    <string name="map_menu_refresh">刷新</string>
+    <string name="map_menu_nav_mode">导航模式</string>
+    <string name="map_status_compact_default">0/0</string>
+    <string name="map_pill_route_default">包裹号 0</string>
+    <string name="map_pill_address_placeholder">地址信息</string>
+    <string name="map_pill_recipient_placeholder">收件人</string>
+    <string name="map_pill_show_list">查看列表</string>
+    <string name="map_pill_collapsed">查看当前派送</string>
+    <string name="map_resume_follow">重新跟随</string>
+    <string name="map_refresh_toast">刷新派送中...</string>
+    <string name="map_query_unscanned_toast">查询未扫描...</string>
+    <string name="map_location_permission_required">需要定位权限</string>
+    <string name="map_upload_failed_title">上传失败</string>
+    <string name="action_got_it">知道了</string>
+    <string name="map_status_legend_message">顺序为：\n已送达 / 派送中\n\n例如：30/29</string>
+    <string name="map_share_waybill_format">运单: %1$s</string>
+    <string name="map_share_package_format">包裹号: %1$s</string>
+    <string name="map_share_address_format">地址: %1$s</string>
+    <string name="map_share_recipient_format">收件人: %1$s</string>
+    <string name="map_share_title">分享包裹信息</string>
+    <string name="map_street_number_format">%1$d号</string>
+    <string name="map_street_number_unknown">街号未知</string>
+    <string name="map_unit_number_format">%1$s单元</string>
+    <string name="map_parcel_unknown">包裹号未知</string>
+    <string name="map_parcel_label_format">%1$s包裹</string>
+    <string name="map_same_address_count_format">同址共%1$d票</string>
+    <string name="map_nearby_count_format">附近共%1$d票</string>
+    <string name="map_recipient_format">收件人: %1$s</string>
+    <string name="map_parcel_summary_format">包裹: %1$s</string>
+    <string name="map_no_deliveries">暂无派送</string>
+    <string name="map_current_parcel">当前包裹</string>
+    <string name="map_location_unknown">位置未知</string>
+    <string name="map_no_location">暂无定位</string>
+    <string name="map_nav_mode_enabled">导航模式已开启</string>
+    <string name="map_nav_mode_disabled">导航模式已关闭</string>
+    <string name="map_nav_mode_exit">退出导航视图</string>
+    <string name="map_nav_mode_enter">导航视图</string>
+    <string name="map_parcel_summary_separator">、</string>
+    <string name="map_parcel_summary_more">…</string>
+    <string name="map_placeholder">—</string>
+
+    <string name="my_large_scan_tip">扫描条码/二维码自动加入列表</string>
+    <string name="my_large_input_label">扫描/输入包裹号</string>
+    <string name="my_large_tracking_hint">包裹号/运单号</string>
+    <string name="my_large_route_hint">路线号（可选）</string>
+    <string name="my_large_add_button">加入列表</string>
+    <string name="my_large_clear_button">清空</string>
+    <string name="my_large_list_title">大件列表</string>
+    <string name="my_large_empty">暂无大件</string>
+    <string name="cluster_select_parcel_title">选择包裹</string>
+    <string name="parcel_large_badge">大件</string>
+    <string name="action_expand">展开</string>
+    <string name="action_share">分享</string>
+    <string name="action_locate_on_map">定位到地图</string>
+    <string name="lockscreen_package_placeholder">包裹 #A12345</string>
+    <string name="search_hint_package_customer_address">输入包裹号/客户/地址</string>
+    <string name="menu_realtime">实时</string>
+    <string name="menu_pending">待定</string>
+    <string name="sms_missing_package_info">包裹信息缺失，无法发送短信</string>
+    <string name="sms_missing_recipient_info">收件人信息缺失，无法发送短信</string>
+    <string name="sms_open_failed_format">无法打开短信应用: %1$s</string>
+    <string name="package_list_empty_unscanned">暂无【未扫描】包裹</string>
+    <string name="package_list_empty_delivering">暂无【派送中】包裹</string>
+    <string name="package_list_unscanned_only_toast">该列表为【未扫描】包裹，请先在扫描页完成扫描。</string>
+    <string name="package_list_not_delivering_toast">该包裹不在派送中状态，无法操作。</string>
+    <string name="package_list_missing_details_toast">包裹详情不完整，无法进入拍照</string>
+    <string name="package_list_route_format">包裹号: %1$s</string>
+    <string name="package_list_waybill_format">运单号: %1$s</string>
+    <string name="package_list_customer_format">客户: %1$s</string>
+    <string name="package_list_address_format">地址: %1$s</string>
+    <string name="package_list_street_number_format">%1$s号</string>
+    <string name="package_list_unit_format">%1$s单元</string>
+    <string name="camera_call_permission_required">拨打电话需要电话权限</string>
+    <string name="camera_image_pick_failed">图片选取失败</string>
+    <string name="camera_missing_package_info">包裹信息缺失，无法保存</string>
+    <string name="camera_complete">已完成</string>
+    <string name="camera_distance_mismatch_format">当前位置与包裹相差约%.0f米，请确认后再派送</string>
+    <string name="camera_same_address_next_title">同一地址的下一个包裹</string>
+    <string name="camera_switched_next_format">已切换到下一个包裹: %1$s</string>
+    <string name="my_large_tracking_error">请输入或扫描包裹号</string>
+    <string name="map_request_failed">请求失败</string>
+    <string name="map_upload_failed_toast">上传包裹数据失败</string>
+    <string name="map_upload_failed_dialog">包裹上传失败，请检查网络或稍后重试。</string>
+    <string name="map_save_success">包裹数据保存成功</string>
+    <string name="map_upload_success">包裹上传成功</string>
+    <string name="lockscreen_channel_name">锁屏包裹</string>
+    <string name="lockscreen_channel_description">锁屏显示当前包裹</string>
+    <string name="lockscreen_title">配送导航</string>
+    <string name="lockscreen_preparing">准备中...</string>
+    <string name="lockscreen_action_camera">拍照</string>
+    <string name="lockscreen_action_home">主页</string>
+    <string name="lockscreen_next_stop">下一单</string>
+    <string name="lockscreen_package_format">包裹 #%1$s</string>
+    <string name="parcel_unit_unknown">无</string>
+    <string name="cluster_line1_format">%1$s %2$s    %3$s</string>
+    <string name="cluster_line2_format">地址: %1$s</string>
+    <string name="signature_print_name_label">收件人姓名</string>
+    <string name="signature_print_name_hint">请输入姓名</string>
+    <string name="signature_label">签名</string>
+    <string name="signature_clear">清除</string>
+    <string name="signature_complete">完成</string>
+    <string name="sms_message_hint">请输入短信内容</string>
+    <string name="sms_send_button">发送</string>
+    <string name="dev_panel_title">开发者面板</string>
+    <string name="dev_panel_reset">重置</string>
+    <string name="dev_panel_perf_balance">性能平衡</string>
+    <string name="dev_panel_realtime">实时</string>
+    <string name="dev_panel_powersaver">省电</string>
+    <string name="dev_panel_profile">档位</string>
+    <string name="dev_panel_advanced">高级</string>
+    <string name="dev_panel_apply_profile">应用档位</string>
+    <string name="dev_panel_proximity_config">接近配置</string>
+    <string name="dev_panel_enter_radius">enterRadiusM</string>
+    <string name="dev_panel_exit_radius">exitRadiusM</string>
+    <string name="dev_panel_throttle_drive">throttleDrive (ms)</string>
+    <string name="dev_panel_throttle_on_foot">throttleOnFoot (ms)</string>
+    <string name="dev_panel_apply_proximity">应用接近</string>
+    <string name="dev_panel_follow_config">跟随配置</string>
+    <string name="dev_panel_std_interval">stdIntervalMs</string>
+    <string name="dev_panel_std_dist">stdDistM</string>
+    <string name="dev_panel_std_heading">stdHeadingDeg</string>
+    <string name="dev_panel_apply_follow">应用跟随</string>
+    <string name="dev_panel_zoom_config">缩放配置</string>
+    <string name="dev_panel_close_meters">closeMeters</string>
+    <string name="dev_panel_close_zoom">closeZoom</string>
+    <string name="dev_panel_approach_meters">approachMeters</string>
+    <string name="dev_panel_approach_zoom">approachZoom</string>
+    <string name="dev_panel_apply_zoom">应用缩放</string>
+    <string name="dev_panel_experiments">实验选项</string>
+    <string name="dev_panel_enable_inside_boost">启用内区 GPS 提频</string>
+    <string name="large_parcel_tracking_label">运单号</string>
+    <string name="large_parcel_route_label">路线号</string>
+    <string name="place_code_label">编码</string>
+    <string name="place_street_label">街道或公寓</string>
+    <string name="place_address_label">地址</string>
+    <string name="package_item_tracking_id_label">运单号</string>
+    <string name="package_item_save_time_label">保存时间</string>
+    <string name="package_item_driver_id_label">司机号</string>
+
+    <string name="lorem_ipsum">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris
+        volutpat, dolor id interdum ullamcorper, risus dolor egestas lectus, sit amet mattis purus
+        dui nec risus. Maecenas non sodales nisi, vel dictum dolor. Class aptent taciti sociosqu ad
+        litora torquent per conubia nostra, per inceptos himenaeos. Suspendisse blandit eleifend
+        diam, vel rutrum tellus vulputate quis. Aliquam eget libero aliquet, imperdiet nisl a,
+        ornare ex. Sed rhoncus est ut libero porta lobortis. Fusce in dictum tellus.\n\n
+        Suspendisse interdum ornare ante. Aliquam nec cursus lorem. Morbi id magna felis. Vivamus
+        egestas, est a condimentum egestas, turpis nisl iaculis ipsum, in dictum tellus dolor sed
+        neque. Morbi tellus erat, dapibus ut sem a, iaculis tincidunt dui. Interdum et malesuada
+        fames ac ante ipsum primis in faucibus. Curabitur et eros porttitor, ultricies urna vitae,
+        molestie nibh. Phasellus at commodo eros, non aliquet metus. Sed maximus nisl nec dolor
+        bibendum, vel congue leo egestas.\n\n
+        Sed interdum tortor nibh, in sagittis risus mollis quis. Curabitur mi odio, condimentum sit
+        amet auctor at, mollis non turpis. Nullam pretium libero vestibulum, finibus orci vel,
+        molestie quam. Fusce blandit tincidunt nulla, quis sollicitudin libero facilisis et. Integer
+        interdum nunc ligula, et fermentum metus hendrerit id. Vestibulum lectus felis, dictum at
+        lacinia sit amet, tristique id quam. Cras eu consequat dui. Suspendisse sodales nunc ligula,
+        in lobortis sem porta sed. Integer id ultrices magna, in luctus elit. Sed a pellentesque
+        est.\n\n
+        Aenean nunc velit, lacinia sed dolor sed, ultrices viverra nulla. Etiam a venenatis nibh.
+        Morbi laoreet, tortor sed facilisis varius, nibh orci rhoncus nulla, id elementum leo dui
+        non lorem. Nam mollis ipsum quis auctor varius. Quisque elementum eu libero sed commodo. In
+        eros nisl, imperdiet vel imperdiet et, scelerisque a mauris. Pellentesque varius ex nunc,
+        quis imperdiet eros placerat ac. Duis finibus orci et est auctor tincidunt. Sed non viverra
+        ipsum. Nunc quis augue egestas, cursus lorem at, molestie sem. Morbi a consectetur ipsum, a
+        placerat diam. Etiam vulputate dignissim convallis. Integer faucibus mauris sit amet finibus
+        convallis.\n\n
+        Phasellus in aliquet mi. Pellentesque habitant morbi tristique senectus et netus et
+        malesuada fames ac turpis egestas. In volutpat arcu ut felis sagittis, in finibus massa
+        gravida. Pellentesque id tellus orci. Integer dictum, lorem sed efficitur ullamcorper,
+        libero justo consectetur ipsum, in mollis nisl ex sed nisl. Donec maximus ullamcorper
+        sodales. Praesent bibendum rhoncus tellus nec feugiat. In a ornare nulla. Donec rhoncus
+        libero vel nunc consequat, quis tincidunt nisl eleifend. Cras bibendum enim a justo luctus
+        vestibulum. Fusce dictum libero quis erat maximus, vitae volutpat diam dignissim.
+    </string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">空白片段</string>
+    <string name="close">关闭</string>
+    <string name="gallery">图库</string>
+    <string name="shutter">拍照</string>
+    <string name="retake">重拍</string>
+    <string name="parcel_list">包裹列表</string>
+    <string name="my_location">我的位置</string>
+    <string name="map_type_toggle">切换地图类型</string>
+    <string name="status_help">状态说明</string>
+    <string name="camera_not_ready">相机尚未就绪，请稍后重试</string>
+    <string name="switch_view">切换视图</string>
+    <string name="picture_save_failed">图片保存失败</string>
+    <string name="close_button">关闭</string>
+    <string name="camera_shutter_button">拍照</string>
+    <string name="sms_button">短信</string>
+    <string name="phone_button">拨号</string>
+    <string name="fail_button">失败</string>
+    <string name="ok_button">完成</string>
+    <string name="copy_success">已复制到剪贴板</string>
+    <string name="tap_to_navigate">点击进入导航</string>
+    <string name="nav_location_invalid">目的地坐标无效</string>
+    <string name="no_map_app_found">未找到可用的地图应用</string>
+    <string name="fail_reason_title">请选择失败原因</string>
+    <string name="fail_reason_require_photo">请先拍摄至少两张照片再提交失败原因</string>
+    <string name="fail_submit_success">失败记录已保存并排队上传</string>
+    <string name="my_work_title">我的工作</string>
+    <string name="my_work_month_default">--</string>
+    <string name="my_work_pick_month">选择月份</string>
+    <string name="my_work_table_header_date">日期</string>
+    <string name="my_work_table_header_parcels">包裹数</string>
+    <string name="my_work_table_header_distance">里程 (km)</string>
+    <string name="my_work_summary_template">工作%1$d天，共派送%2$d个包裹，行驶%3$.1f公里</string>
+    <string name="my_work_summary_default">工作0天，共派送0个包裹，行驶0.0公里</string>
+    <string name="my_work_empty">本月暂无工作记录</string>
+    <string name="share_log_button">分享日志文件</string>
+    <string name="share_log_not_found">未找到日志文件，请先运行一次应用</string>
+    <string name="camera_mismatch_title">请确认包裹</string>
+    <string name="camera_mismatch_message">识别的运单号 %1$s 与当前包裹 %2$s 不一致，是否继续拍照？</string>
+    <string name="camera_mismatch_continue">继续拍照</string>
+    <string name="camera_mismatch_cancel">取消</string>
+    <string name="camera_mismatch_toast">请确认拿到正确的包裹后再继续</string>
+    <string name="camera_apartment_checkbox_label">设为该地址的默认公寓图</string>
+    <string name="camera_apartment_checkbox_label_manual">加入我的公寓</string>
+    <string name="camera_apartment_autofill_banner">已自动填充公寓外观图（%1$s）</string>
+    <string name="camera_apartment_autofill_fuzzy">已匹配到疑似公寓图（%1$s），请确认</string>
+    <string name="camera_apartment_autofill_remove">移除</string>
+    <string name="camera_apartment_manual_title">确认公寓地址</string>
+    <string name="camera_apartment_manual_hint">如：500 Main St</string>
+    <string name="camera_apartment_manual_error">地址不能为空</string>
+    <string name="camera_apartment_saved_toast">已保存 %1$s 的公寓图</string>
+    <string name="camera_apartment_missing_file">公寓图片已失效，请重新拍摄</string>
+    <string name="camera_apartment_auto_confirm_msg">检测到该地址为公寓，确认保存为默认外观图？</string>
+    <string name="my_apartment_title">我的公寓</string>
+    <string name="my_apartment_button">我的公寓</string>
+    <string name="my_apartment_empty">尚未保存任何公寓图片</string>
+    <string name="my_apartment_source_manual">自定义</string>
+    <string name="my_apartment_source_auto">自动</string>
+    <string name="my_apartment_edit_title">修改公寓地址</string>
+    <string name="my_apartment_edit_hint">请输入街道号 + 街道名</string>
+    <string name="my_apartment_edit_error">地址不能为空</string>
+    <string name="my_apartment_delete_confirm">删除该公寓图？</string>
+    <string name="delivered_packages_reupload_title">重新上传</string>
+    <string name="delivered_packages_reupload_message">是否重新上传该包裹？</string>
+    <string name="delivered_packages_reupload_queued">包裹已加入上传队列</string>
+    <string name="full_image_load_failed_format">无法加载图片：%1$s</string>
+    <string name="full_image_invalid_path">图片路径无效</string>
+    <string name="pending_save_failed">包裹数据保存失败，请稍后重试。</string>
+    <string name="dev_panel_profile_format">档位：%1$s</string>
+    <string name="dev_panel_inside_boost_format">区域内提频：%1$s</string>
+    <string name="dev_panel_state_on">开</string>
+    <string name="dev_panel_state_off">关</string>
+    <string name="dev_panel_reset_done">已重置为默认值</string>
+    <string name="dev_panel_proximity_applied">接近配置已应用</string>
+    <string name="dev_panel_camera_unavailable">相机控制器不可用</string>
+    <string name="dev_panel_follow_applied">跟随配置已应用</string>
+    <string name="dev_panel_focus_unavailable">焦点管理器不可用</string>
+    <string name="dev_panel_zoom_applied">缩放配置已应用</string>
+    <string name="dev_panel_error_format">错误：%1$s</string>
+    <string name="dev_panel_unavailable">开发者面板不可用</string>
+    <string name="signature_save_failed">签名保存失败</string>
+    <string name="package_uploading_again_format">重新上传：%1$s</string>
+    <string name="sms_message_empty">短信内容不能为空</string>
+    <string name="camera_sensor_unavailable">传感器不可用</string>
+    <string name="camera_permission_required">需要相机权限才能使用该功能</string>
+    <string name="camera_delivery_failed_title">送达失败</string>
+    <string name="camera_retry_delivery">重试送达</string>
+    <string name="camera_mark_delivery_failed">标记送达失败</string>
+    <string name="camera_retrying_delivery">正在重试送达...</string>
+    <string name="camera_retry_success">重试成功</string>
+    <string name="camera_retry_failed_format">重试失败：%1$s</string>
+    <string name="camera_capture_failed_format">拍摄失败：%1$s</string>
+    <string name="map_collapsed_hint_format">%1$s - %2$s</string>
+</resources>

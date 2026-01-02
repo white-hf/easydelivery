@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Receiver's Print Name"
+        android:text="@string/signature_print_name_label"
         android:textSize="16sp"
         android:textStyle="bold"
         android:layout_marginBottom="8dp"/>
@@ -18,14 +18,14 @@
         android:id="@+id/et_recipient_name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Enter Name"
+        android:hint="@string/signature_print_name_hint"
         android:inputType="textPersonName"
         android:layout_marginBottom="16dp"/>
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Signature"
+        android:text="@string/signature_label"
         android:textSize="16sp"
         android:textStyle="bold"
         android:layout_marginBottom="8dp"/>
@@ -49,7 +49,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Clear"
+            android:text="@string/signature_clear"
             android:layout_marginEnd="8dp"/>
 
         <Button
@@ -57,7 +57,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Complete"
+            android:text="@string/signature_complete"
             android:layout_marginStart="8dp"/>
     </LinearLayout>
 

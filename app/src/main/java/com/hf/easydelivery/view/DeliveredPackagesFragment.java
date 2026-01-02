@@ -67,15 +67,18 @@ public class DeliveredPackagesFragment extends Fragment implements DeliveredPack
     public void onItemDoubleClick(PackageEntity item) {
         if (item.status.equals(PendingPackagesMgr.PackageStatus.FAILED.getStatus())) {
             new AlertDialog.Builder(requireContext())
-                    .setTitle("重新上传")
-                    .setMessage("您要重新上传此包裹吗？")
-                    .setPositiveButton("是", (dialog, which) -> {
-                        ResourceMgr.getInstance().getPendingPackagesMgr().update(item.trackingId, PendingPackagesMgr.PackageStatus.Pending.getStatus());
-                        // 重新入队并加入待上传列表，确保回调能正常更新状态
+                    .setTitle(R.string.delivered_packages_reupload_title)
+                    .setMessage(R.string.delivered_packages_reupload_message)
+                    .setPositiveButton(R.string.action_yes, (dialog, which) -> {
+                        ResourceMgr.getInstance().getPendingPackagesMgr().update(
+                                item.trackingId,
+                                PendingPackagesMgr.PackageStatus.Pending.getStatus());
                         ResourceMgr.getInstance().getPendingPackagesMgr().addQueue(item, true);
-                        Toast.makeText(requireContext(), "包裹已加入上传队列", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(requireContext(),
+                                R.string.delivered_packages_reupload_queued,
+                                Toast.LENGTH_SHORT).show();
                     })
-                    .setNegativeButton("否", null)
+                    .setNegativeButton(R.string.action_no, null)
                     .show();
         }
     }

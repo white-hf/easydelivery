@@ -335,7 +335,7 @@ public class CameraActivity extends AppCompatActivity
                 FileLog.getInstance().debug(TAG, "light sensor unavailable; fallback to CameraX auto flash");
             }
         } else {
-            Toast.makeText(this, "Sensor not available", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.camera_sensor_unavailable, Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
@@ -717,13 +717,14 @@ public class CameraActivity extends AppCompatActivity
             if (PermissionUtils.isPermissionGranted(grantResults)) {
                 startCamera();
             } else {
-                Toast.makeText(this, "Camera permission is required to use this feature", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, R.string.camera_permission_required, Toast.LENGTH_SHORT).show();
             }
         } else if (requestCode == CALL_PERMISSION_REQUEST_CODE) {
             if (PermissionUtils.isPermissionGranted(grantResults)) {
                 makeCall();
             } else {
-                Toast.makeText(this, "拨打电话需要电话权限", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, R.string.camera_call_permission_required,
+                        Toast.LENGTH_SHORT).show();
             }
         }
     }
@@ -1061,7 +1062,8 @@ public class CameraActivity extends AppCompatActivity
                     addThumbnail(file, true);
                     updateOkButtonState();
                 } catch (Exception e) {
-                    Toast.makeText(this, "图片选取失败", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, R.string.camera_image_pick_failed,
+                            Toast.LENGTH_SHORT).show();
                 }
             }
         }
@@ -1269,8 +1271,9 @@ public class CameraActivity extends AppCompatActivity
 
     private void showFailOptionsDialog() {
         new AlertDialog.Builder(this)
-                .setTitle("Delivery Failed")
-                .setItems(new String[] { "Retry Delivery", "Delivery Failed" }, (dialog, which) -> {
+                .setTitle(R.string.camera_delivery_failed_title)
+                .setItems(new String[] { getString(R.string.camera_retry_delivery),
+                        getString(R.string.camera_mark_delivery_failed) }, (dialog, which) -> {
                     if (which == 0) {
                         handleRetryDelivery();
                     } else {
@@ -1292,14 +1295,14 @@ public class CameraActivity extends AppCompatActivity
             deliveryInfo = infoSnapshot;
         }
         if (infoSnapshot == null) {
-            Toast.makeText(this, "Package info missing", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.camera_missing_package_info, Toast.LENGTH_SHORT).show();
             return;
         }
 
         final DeliveryInfo infoSnapshotTrue = infoSnapshot;
 
         ProgressDialog pd = new ProgressDialog(this);
-        pd.setMessage("Retrying delivery...");
+        pd.setMessage(getString(R.string.camera_retrying_delivery));
         pd.setCancelable(false);
         pd.show();
 
@@ -1324,7 +1327,7 @@ public class CameraActivity extends AppCompatActivity
                                 "Retry delivery API success for order: " + infoSnapshotTrue.getOrderSn());
                         runOnUiThread(() -> {
                             pd.dismiss();
-                            Toast.makeText(CameraActivity.this, "Retry success!", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(CameraActivity.this, R.string.camera_retry_success, Toast.LENGTH_SHORT).show();
                             // Retry is a direct API call, no need to submitPackage (which queues for async
                             // upload)
                             finish();
@@ -1336,7 +1339,7 @@ public class CameraActivity extends AppCompatActivity
                         FileLog.getInstance().error(TAG, "Retry delivery API failed: " + error);
                         runOnUiThread(() -> {
                             pd.dismiss();
-                            Toast.makeText(CameraActivity.this, "Retry failed: " + error, Toast.LENGTH_SHORT).show();
+                            Toast.makeText(CameraActivity.this, getString(R.string.camera_retry_failed_format, error), Toast.LENGTH_SHORT).show();
                         });
                     }
                 }))).start();
@@ -1399,7 +1402,8 @@ public class CameraActivity extends AppCompatActivity
             deliveryInfo = infoSnapshot;
         }
         if (infoSnapshot == null) {
-            Toast.makeText(this, "包裹信息缺失，无法保存", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.camera_missing_package_info,
+                    Toast.LENGTH_SHORT).show();
             FileLog.getInstance().error(TAG, "submitPackage: deliveryInfo missing for orderId=" + mOrderId);
             return;
         }
@@ -1423,7 +1427,7 @@ public class CameraActivity extends AppCompatActivity
         if (deliveryResult == 1) {
             Toast.makeText(this, getString(R.string.fail_submit_success), Toast.LENGTH_SHORT).show();
         } else {
-            Toast.makeText(this, "已完成", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.camera_complete, Toast.LENGTH_SHORT).show();
         }
 
         findAndShowNextPackages(infoSnapshot);
@@ -1493,7 +1497,7 @@ public class CameraActivity extends AppCompatActivity
             return;
         }
         if (imageCapture == null) {
-            Toast.makeText(this, "Camera not ready", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.camera_not_ready, Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -1612,7 +1616,7 @@ public class CameraActivity extends AppCompatActivity
             @Override
             public void onError(@NonNull ImageCaptureException exception) {
                 runOnUiThread(() -> Toast
-                        .makeText(CameraActivity.this, "Capture failed: " + exception.getMessage(), Toast.LENGTH_SHORT)
+                        .makeText(CameraActivity.this, getString(R.string.camera_capture_failed_format, exception.getMessage()), Toast.LENGTH_SHORT)
                         .show());
             }
         });
@@ -1722,7 +1726,8 @@ public class CameraActivity extends AppCompatActivity
         Location.distanceBetween(currentLat, currentLng, targetLat, targetLng, results);
         float distance = results[0];
         if (distance > 150f) {
-            Toast.makeText(this, String.format(java.util.Locale.getDefault(), "当前位置与包裹相差约%.0f米，请确认后再派送", distance),
+            Toast.makeText(this,
+                    getString(R.string.camera_distance_mismatch_format, distance),
                     Toast.LENGTH_SHORT).show();
             FileLog.getInstance().debug(TAG, "warnIfFarFromTarget: distance=" + distance + " target=(" + targetLat + ","
                     + targetLng + ") current=(" + currentLat + "," + currentLng + ")");
@@ -1819,7 +1824,7 @@ public class CameraActivity extends AppCompatActivity
         View sheet = getLayoutInflater().inflate(R.layout.dialog_cluster_list, null, false);
         TextView title = sheet.findViewById(R.id.tv_cluster_title);
         if (title != null) {
-            title.setText("同一地址的下一个包裹");
+            title.setText(R.string.camera_same_address_next_title);
         }
         dialog.setContentView(sheet);
 
@@ -1868,7 +1873,9 @@ public class CameraActivity extends AppCompatActivity
         clearThumbnails();
         updateInfoBar(newInfo);
         ensureCaptureSequenceSynced();
-        Toast.makeText(this, "已切换到下一个包裹: " + newInfo.getRouteNumber(), Toast.LENGTH_SHORT).show();
+        Toast.makeText(this,
+                getString(R.string.camera_switched_next_format, newInfo.getRouteNumber()),
+                Toast.LENGTH_SHORT).show();
         initApartmentAssist();
     }
 

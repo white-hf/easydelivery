@@ -13,7 +13,7 @@
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="8dp"
-        android:text="选择包裹"
+        android:text="@string/cluster_select_parcel_title"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6" />
 
     <androidx.recyclerview.widget.RecyclerView

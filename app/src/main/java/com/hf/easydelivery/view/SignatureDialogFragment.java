@@ -89,7 +89,7 @@ public class SignatureDialogFragment extends DialogFragment {
                     listener.onSignatureCompleted(path, etRecipientName.getText().toString());
                     dismiss();
                 } else {
-                    Toast.makeText(getContext(), "Failed to save signature", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), R.string.signature_save_failed, Toast.LENGTH_SHORT).show();
                 }
             }
         });
