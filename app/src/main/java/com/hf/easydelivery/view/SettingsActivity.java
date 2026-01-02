@@ -25,7 +25,7 @@ public class SettingsActivity extends AppCompatActivity {
             actionBar.setDisplayHomeAsUpEnabled(true);
         }
 
-        this.setTitle("设置");
+        this.setTitle(R.string.str_setting);
     }
 
     public static class SettingsFragment extends PreferenceFragmentCompat {

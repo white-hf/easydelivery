@@ -56,11 +56,11 @@ public class FullImageFragment extends DialogFragment {
             if (bitmap != null) {
                 imageView.setImageBitmap(bitmap);
             } else {
-                Toast.makeText(getContext(), "无法加载图片：" + imageFilePath, Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), getString(R.string.full_image_load_failed_format, imageFilePath), Toast.LENGTH_SHORT).show();
                 dismiss();
             }
         } else {
-            Toast.makeText(getContext(), "图片路径无效", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), R.string.full_image_invalid_path, Toast.LENGTH_SHORT).show();
             dismiss();
         }
 

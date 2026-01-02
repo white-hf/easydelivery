@@ -519,6 +519,12 @@ public class SmartLocationManager {
             FileLog.getInstance().warning(TAG, "requestLocationUpdates skipped: locationCallback not ready");
             return;
         }
+        // Ensure only one active request to avoid duplicate callbacks.
+        try {
+            fusedLocationClient.removeLocationUpdates(locationCallback);
+        } catch (Exception e) {
+            FileLog.getInstance().warning(TAG, "removeLocationUpdates failed, retrying request", e.getMessage());
+        }
 
         LocationRequest locationRequest = new LocationRequest.Builder(priority)
                 .setIntervalMillis(interval)

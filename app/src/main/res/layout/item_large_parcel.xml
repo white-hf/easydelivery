@@ -20,7 +20,7 @@
         android:textStyle="bold"
         android:text="TRACKING" />
         android:textColor="?android:attr/textColorPrimary"
-        android:text="Tracking" />
+        android:text="@string/large_parcel_tracking_label" />
 
     <TextView
         android:id="@+id/tv_route"
@@ -30,6 +30,6 @@
         android:layout_marginTop="2dp"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
         android:textColor="?android:attr/textColorSecondary"
-        android:text="Route" />
+        android:text="@string/large_parcel_route_label" />
 
 </LinearLayout>

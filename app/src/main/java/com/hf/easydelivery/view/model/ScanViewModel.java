@@ -1,5 +1,6 @@
 package com.hf.easydelivery.view.model;
 
+import android.content.Context;
 import android.os.Handler;
 import android.util.Pair;
 
@@ -16,6 +17,7 @@ import com.hf.courierservice.bean.ScanBatchCreateData;
 import com.hf.courierservice.bean.ScanBatchGenerateReportData;
 import com.hf.courierservice.bean.ToBePickedUpBriefData;
 import com.hf.easydelivery.ResourceMgr;
+import com.hf.easydelivery.R;
 import com.hf.easydelivery.bean.ScanItem;
 import com.hf.easydelivery.core.DeliveryinfoMgr;
 import com.hf.easydelivery.event.Event;
@@ -232,7 +234,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
 
         // 检查扫描批次是否开启 (status == 0)
         if (scanBatchIdLive.getValue() == null || scanBatchIdLive.getValue() < 1 || scanBatchStatusLive.getValue() != 0) {
-            toastMessage.postValue(new Event<>("扫描报告已关闭或批次无效。"));
+            toastMessage.postValue(new Event<>(getString(R.string.scan_report_closed_or_invalid)));
             return;
         }
 
@@ -243,9 +245,9 @@ public class ScanViewModel extends ViewModel implements Subscriber {
         } else {
             // 扫描失败
             if (scanPackagesMgr.size() == 0) {
-                toastMessage.postValue(new Event<>("数据加载中，请稍后重扫"));
+                toastMessage.postValue(new Event<>(getString(R.string.scan_data_loading)));
             } else {
-                toastMessage.postValue(new Event<>("不是您的包裹"));
+                toastMessage.postValue(new Event<>(getString(R.string.scan_not_your_parcel)));
             }
         }
     }
@@ -273,16 +275,16 @@ public class ScanViewModel extends ViewModel implements Subscriber {
                             if (total > 0) {
                                 createScanBatch(driverId);
                             } else {
-                                toastMessage.postValue(new Event<>("您没有包裹需要扫描"));
+                                toastMessage.postValue(new Event<>(getString(R.string.scan_no_parcels_to_scan)));
                             }
                         } else if (result instanceof Result.Error) {
-                            toastMessage.postValue(new Event<>("查询待分拣包裹失败"));
+                            toastMessage.postValue(new Event<>(getString(R.string.scan_query_unscanned_failed)));
                         }
                     }
 
                     @Override
                     public void onFail(Exception e) {
-                        toastMessage.postValue(new Event<>("查询待分拣包裹失败"));
+                        toastMessage.postValue(new Event<>(getString(R.string.scan_query_unscanned_failed)));
                     }
                 });
     }
@@ -299,16 +301,16 @@ public class ScanViewModel extends ViewModel implements Subscriber {
                                 resourceMgr.getDeliveryinfoMgr().updateScanBatchInfo(batchId, 0);
                                 pushBatchFields();
                             } else {
-                                toastMessage.postValue(new Event<>("创建扫描批次失败"));
+                                toastMessage.postValue(new Event<>(getString(R.string.scan_create_batch_failed)));
                             }
                         } else if (result instanceof Result.Error) {
-                            toastMessage.postValue(new Event<>("创建扫描批次失败"));
+                            toastMessage.postValue(new Event<>(getString(R.string.scan_create_batch_failed)));
                         }
                     }
 
                     @Override
                     public void onFail(Exception e) {
-                        toastMessage.postValue(new Event<>("创建扫描批次失败"));
+                        toastMessage.postValue(new Event<>(getString(R.string.scan_create_batch_failed)));
                     }
                 });
     }
@@ -342,7 +344,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
      */
     public void submitOfflineScans() {
         if (scanBatchIdLive.getValue() == null || scanBatchIdLive.getValue() < 1 || scanBatchStatusLive.getValue() != 0) {
-            toastMessage.postValue(new Event<>("扫描报告已关闭，无法提交。"));
+            toastMessage.postValue(new Event<>(getString(R.string.scan_report_closed_cannot_submit)));
             return;
         }
 
@@ -353,7 +355,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
             List<ScanRecord> list = resourceMgr.getmMydb().getScanRecordDao().loadByDate(strToday, false, driverId);
 
             if (list.isEmpty()) {
-                toastMessage.postValue(new Event<>("您没有需要提交的已扫包裹数据"));
+                toastMessage.postValue(new Event<>(getString(R.string.scan_no_scanned_to_submit)));
                 return;
             }
             // 回到主线程（或任何有 Looper 的线程）启动提交
@@ -367,7 +369,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
     public void generateScanBatchReport() {
         Long batchId = scanBatchIdLive.getValue();
         if (batchId == null || batchId < 1) {
-            toastMessage.postValue(new Event<>("扫描批次无效"));
+            toastMessage.postValue(new Event<>(getString(R.string.scan_batch_invalid)));
             return;
         }
 
@@ -378,15 +380,15 @@ public class ScanViewModel extends ViewModel implements Subscriber {
                         if (result instanceof Result.Success) {
                             resourceMgr.getDeliveryinfoMgr().updateScanBatchInfo(batchId, 1);
                             pushBatchFields();
-                            toastMessage.postValue(new Event<>("扫描报告已生成"));
+                            toastMessage.postValue(new Event<>(getString(R.string.scan_report_generated)));
                         } else if (result instanceof Result.Error) {
-                            toastMessage.postValue(new Event<>("生成扫描报告失败"));
+                            toastMessage.postValue(new Event<>(getString(R.string.scan_report_generate_failed)));
                         }
                     }
 
                     @Override
                     public void onFail(Exception e) {
-                        toastMessage.postValue(new Event<>("生成扫描报告失败"));
+                        toastMessage.postValue(new Event<>(getString(R.string.scan_report_generate_failed)));
                     }
                 });
     }
@@ -418,13 +420,14 @@ public class ScanViewModel extends ViewModel implements Subscriber {
 
             @Override
             public void onComplete(int successCount, int failCount) {
-                toastMessage.postValue(new Event<>("提交完成，成功：" + successCount + "，失败：" + failCount));
+                toastMessage.postValue(new Event<>(
+                        getString(R.string.scan_submit_complete, successCount, failCount)));
                 submissionState.postValue(SubmissionState.COMPLETE);
             }
 
             @Override
             public void onFail(Exception e) {
-                toastMessage.postValue(new Event<>("登录失效，请重新登录"));
+                toastMessage.postValue(new Event<>(getString(R.string.scan_login_expired)));
                 submissionState.postValue(SubmissionState.FAILED);
             }
         });
@@ -529,6 +532,14 @@ public class ScanViewModel extends ViewModel implements Subscriber {
     private void pushBatchFields() {
         scanBatchIdLive.postValue(resourceMgr.getDeliveryinfoMgr().getScanBatchId());
         scanBatchStatusLive.postValue(resourceMgr.getDeliveryinfoMgr().getScanBatchStatus());
+    }
+
+    private String getString(int resId, Object... args) {
+        Context ctx = resourceMgr.getCtx();
+        if (ctx == null) {
+            return "";
+        }
+        return args.length == 0 ? ctx.getString(resId) : ctx.getString(resId, args);
     }
 
     /** 是否首次进入 Scan 页（供 Fragment 做一次性 UI 行为） */

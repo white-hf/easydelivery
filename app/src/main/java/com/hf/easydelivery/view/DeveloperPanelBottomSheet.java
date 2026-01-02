@@ -137,7 +137,7 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
                     selected = ProfileManager.AppProfile.ADVANCED;
                 }
                 pm.setCurrent(selected);
-                Toast.makeText(ctx, "Profile: " + selected, Toast.LENGTH_SHORT).show();
+                Toast.makeText(ctx, ctx.getString(R.string.dev_panel_profile_format, selected), Toast.LENGTH_SHORT).show();
             };
 
             if (btnApplyProfile != null) {
@@ -204,7 +204,7 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
                 switchInsideBoost.setChecked(mapFragment.isInsideZoneBoostEnabled());
                 switchInsideBoost.setOnCheckedChangeListener((buttonView, isChecked) -> {
                     mapFragment.setInsideZoneBoostEnabled(isChecked);
-                    Toast.makeText(getContext(), "Inside boost " + (isChecked ? "ON" : "OFF"), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), getString(R.string.dev_panel_inside_boost_format, getString(isChecked ? R.string.dev_panel_state_on : R.string.dev_panel_state_off)), Toast.LENGTH_SHORT).show();
                 });
             } else {
                 switchInsideBoost.setEnabled(false);
@@ -220,7 +220,7 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
         view.findViewById(R.id.btn_reset_default).setOnClickListener(v -> {
            // mapFragment.initStrategyAndConfigForMediumLoad();
             populateUiWithCurrentConfigs(); // Refresh UI with default values
-            Toast.makeText(getContext(), "Reset to default!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), R.string.dev_panel_reset_done, Toast.LENGTH_SHORT).show();
         });
 
         view.findViewById(R.id.btn_apply_proximity).setOnClickListener(v -> applyProximityConfig());
@@ -238,7 +238,7 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
 
             InfoPillProximityController.applyProximityConfig(newConfig);
             FileLog.getInstance().debug(TAG, "Applied new ProximityConfig");
-            Toast.makeText(getContext(), "Proximity Config Applied", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), R.string.dev_panel_proximity_applied, Toast.LENGTH_SHORT).show();
 
         } catch (Exception e) {
             handleApplyError(e);
@@ -254,13 +254,13 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
 
             CameraFollowController controller = (mapFragment == null) ? null : mapFragment.getCameraController();
             if (controller == null) {
-                Toast.makeText(getContext(), "Camera controller unavailable", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), R.string.dev_panel_camera_unavailable, Toast.LENGTH_SHORT).show();
                 return;
             }
             controller.applyFollowConfig(newConfig);
 
             FileLog.getInstance().debug(TAG, "Applied new FollowConfig");
-            Toast.makeText(getContext(), "Follow Config Applied", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), R.string.dev_panel_follow_applied, Toast.LENGTH_SHORT).show();
 
         } catch (Exception e) {
             handleApplyError(e);
@@ -277,13 +277,13 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
 
             DeliveryFocusManager focusMgr = (mapFragment == null) ? null : mapFragment.getFocusManager();
             if (focusMgr == null) {
-                Toast.makeText(getContext(), "Focus manager unavailable", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), R.string.dev_panel_focus_unavailable, Toast.LENGTH_SHORT).show();
                 return;
             }
             focusMgr.applyZoomConfig(newConfig);
 
             FileLog.getInstance().debug(TAG, "Applied new ZoomConfig");
-            Toast.makeText(getContext(), "Zoom Config Applied", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), R.string.dev_panel_zoom_applied, Toast.LENGTH_SHORT).show();
 
         } catch (Exception e) {
             handleApplyError(e);
@@ -292,6 +292,6 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
 
     private void handleApplyError(Exception e) {
         FileLog.getInstance().error(TAG, "Failed to apply config", e);
-        Toast.makeText(getContext(), "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        Toast.makeText(getContext(), getString(R.string.dev_panel_error_format, e.getMessage()), Toast.LENGTH_LONG).show();
     }
 }

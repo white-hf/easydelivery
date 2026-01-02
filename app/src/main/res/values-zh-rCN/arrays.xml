@@ -1,0 +1,54 @@
+<resources>
+    <!-- Reply Preference -->
+    <string-array name="reply_entries">
+        <item>回复</item>
+        <item>回复全部</item>
+    </string-array>
+
+    <string-array name="reply_values">
+        <item>reply</item>
+        <item>reply_all</item>
+    </string-array>
+
+    <string-array name="login_location">
+        <item>哈利法克斯仓库</item>
+        <item>多伦多仓库</item>
+    </string-array>
+
+    <string-array name="status_array">
+        <item>待上传</item>
+        <item>已上传</item>
+        <item>失败</item>
+    </string-array>
+
+    <string-array name="sms_tempalte">
+        <item>您好，我是您的派送司机。我有一个包裹（单号 {tracking}）将送达，您在家吗？</item>
+        <item>您好，我是您的派送司机。我已将包裹（单号 {tracking}）放在：收件处</item>
+        <item>您好，我是您的派送司机。我有一个包裹（单号 {tracking}）。请电话或短信联系我安排派送，谢谢！</item>
+        <item>您好，我是您的派送司机。我有一个包裹（单号 {tracking}），但未能联系到您。</item>
+        <item>您好，我是您的派送司机。我有一个送往 {address} 的包裹（{tracking}）。请确认地址是否正确。</item>
+        <item>您好，我已到达 {address}。请提供门禁码或进入说明。</item>
+    </string-array>
+
+    <string-array name="delviery_data_type">
+        <item>配送中</item>
+        <item>未扫描</item>
+        <item>已扫描</item>
+    </string-array>
+
+    <string-array name="delivery_fail_reason_labels">
+        <item>邮箱</item>
+        <item>地址错误</item>
+        <item>收件人拒收包裹</item>
+        <item>商业场所关闭或大楼锁门</item>
+        <item>缺失建筑单元号</item>
+    </string-array>
+
+    <string-array name="delivery_fail_reason_codes">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>7</item>
+    </string-array>
+</resources>

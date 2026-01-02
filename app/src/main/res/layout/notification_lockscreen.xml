@@ -16,7 +16,7 @@
         android:textStyle="bold"
         android:maxLines="1"
         android:ellipsize="end"
-        android:text="包裹 #A12345" />
+        android:text="@string/lockscreen_package_placeholder" />
 
     <!-- Placeholder line (kept for layout spacing) -->
     <TextView

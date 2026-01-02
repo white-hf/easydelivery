@@ -32,7 +32,7 @@
             android:paddingEnd="8dp"
             android:paddingTop="4dp"
             android:paddingBottom="4dp"
-            android:text="大件"
+            android:text="@string/parcel_large_badge"
             android:textSize="12sp"
             android:textColor="@android:color/white"
             android:background="@android:color/holo_orange_dark"
@@ -44,7 +44,7 @@
             android:layout_height="32dp"
             android:padding="6dp"
             android:src="@android:drawable/arrow_down_float"
-            android:contentDescription="展开"/>
+            android:contentDescription="@string/action_expand"/>
     </LinearLayout>
 
     <!-- 详情 多行 14sp，次要颜色 -->
@@ -73,7 +73,7 @@
             android:layout_height="40dp"
             android:background="?selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_call"
-            android:contentDescription="电话" />
+            android:contentDescription="@string/phone_button" />
 
         <ImageButton
             android:id="@+id/btn_sms"
@@ -82,7 +82,7 @@
             android:layout_marginStart="12dp"
             android:background="?selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_dialog_email"
-            android:contentDescription="短信" />
+            android:contentDescription="@string/sms_button" />
 
         <ImageButton
             android:id="@+id/btn_share"
@@ -91,7 +91,7 @@
             android:layout_marginStart="12dp"
             android:background="?selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_share"
-            android:contentDescription="分享" />
+            android:contentDescription="@string/action_share" />
 
         <ImageButton
             android:id="@+id/btn_locate"
@@ -100,6 +100,6 @@
             android:layout_marginStart="12dp"
             android:background="?selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_mylocation"
-            android:contentDescription="定位到地图" />
+            android:contentDescription="@string/action_locate_on_map" />
     </LinearLayout>
 </LinearLayout>

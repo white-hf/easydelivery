@@ -10,6 +10,7 @@ import com.hf.easydelivery.event.EventConstant;
 import com.hf.easydelivery.event.Subscriber;
 import com.hf.courierservice.bean.DeliveredUploadParams;
 import com.hf.easydelivery.ResourceMgr;
+import com.hf.easydelivery.R;
 import com.hf.easydelivery.api.UploadedDeliveryDataRspCb;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.dao.DeliveredPackagesDao;
@@ -161,7 +162,7 @@ public class PendingPackagesMgr implements Subscriber {
                 Context ctx = ResourceMgr.getInstance().getCtx();
                 if (ctx != null) {
                     ResourceMgr.getInstance().getMainHandler()
-                            .post(() -> Toast.makeText(ctx, "包裹数据保存失败，请稍后重试", Toast.LENGTH_LONG).show());
+                            .post(() -> Toast.makeText(ctx, R.string.pending_save_failed, Toast.LENGTH_LONG).show());
                 }
             }
         });

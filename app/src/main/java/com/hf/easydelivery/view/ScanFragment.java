@@ -201,7 +201,8 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         if (tvHint != null) {
             tvHint.setOnLongClickListener(v -> {
                 testMode = !testMode;
-                Toast.makeText(requireContext(), testMode ? "测试模式：允许扫描屏幕上较小条码" : "测试模式关闭", Toast.LENGTH_SHORT).show();
+                int msgRes = testMode ? R.string.scan_test_mode_on : R.string.scan_test_mode_off;
+                Toast.makeText(requireContext(), msgRes, Toast.LENGTH_SHORT).show();
                 return true;
             });
         }
@@ -242,7 +243,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                     FileLog.i(TAG, "toolbar menu clicked: " + getResources().getResourceEntryName(id));
                     if (id == R.id.action_query_unscanned) {
                         scanViewModel.queryUnscanned();
-                        Toast.makeText(getContext(), "正在查询未扫描包裹...", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), R.string.scan_query_unscanned_toast, Toast.LENGTH_SHORT).show();
                         return true;
                     } else if (id == R.id.action_submit_offline) {
                         scanViewModel.submitOfflineScans();
@@ -276,7 +277,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                 FileLog.i(TAG, "activity menu clicked: " + getResources().getResourceEntryName(id));
                 if (id == R.id.action_query_unscanned) {
                     scanViewModel.queryUnscanned();
-                    Toast.makeText(getContext(), "正在查询未扫描包裹...", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), R.string.scan_query_unscanned_toast, Toast.LENGTH_SHORT).show();
                     return true;
                 } else if (id == R.id.action_submit_offline) {
                     scanViewModel.submitOfflineScans();
@@ -296,7 +297,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
     private void observeViewModel() {
         // 观察【已扫描列表】的变化
         scanViewModel.getScannedListLive().observe(getViewLifecycleOwner(), scannedList -> {
-            btnScanned.setText("已扫描(" + scannedList.size() + ")");
+            btnScanned.setText(getString(R.string.scan_scanned_count, scannedList.size()));
             applySegment(); // 刷新列表显示
             // 更新顶部扫描结果
             if (scannedList != null && !scannedList.isEmpty()) {
@@ -309,12 +310,14 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
 
         // 观察【未扫描列表】的变化
         scanViewModel.getUnscannedFilteredLive().observe(getViewLifecycleOwner(), unscannedList -> {
-            btnUnscanned.setText("未扫描(" + unscannedList.size() + ")");
+            btnUnscanned.setText(getString(R.string.scan_unscanned_count, unscannedList.size()));
             applySegment(); // 刷新列表显示
             // 仅在“第一次且确有未扫包裹”时提示是否开启相机（避免资源竞争）
             if (firstPrompt && !unscannedList.isEmpty()) {
                 firstPrompt = false;
-                Toast.makeText(getContext(), "您有 " + unscannedList.size() + " 个包裹需要扫描", Toast.LENGTH_LONG).show();
+                Toast.makeText(getContext(),
+                        getString(R.string.scan_unscanned_toast, unscannedList.size()),
+                        Toast.LENGTH_LONG).show();
                 startCameraIfNeeded();
             }
         });
@@ -342,7 +345,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                 @SuppressWarnings("unchecked")
                 Pair<String, String> data = (Pair<String, String>) payload;
                 String pkgValue = data.second == null ? "" : data.second;
-                String msg = "该包裹已扫\n包裹号：" + pkgValue;
+                String msg = getString(R.string.scan_duplicate_toast, pkgValue);
                 Toast.makeText(getContext(), msg, Toast.LENGTH_SHORT).show();
                 renderScanResult(new ScanItem(pkgValue, data.first, false, true));
             }
@@ -375,7 +378,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
             int total = progress.second;
             pbSubmitting.setMax(total);
             pbSubmitting.setProgress(done);
-            tvSubmitting.setText(String.format("提交中 %d / %d", done, total));
+            tvSubmitting.setText(getString(R.string.scan_submitting_format, done, total));
         });
     }
 
@@ -386,7 +389,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         Integer scanned = scanViewModel.getScannedCountLive().getValue();
         Integer total = scanViewModel.getTotalCountLive().getValue();
         if (scanned != null && total != null) {
-            tvProgress.setText("已扫描 " + scanned + " / " + total);
+            tvProgress.setText(getString(R.string.scan_progress_format, scanned, total));
         }
     }
 
@@ -422,19 +425,20 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         if (tvPackageNumber == null) return;
         Context context = getContext();
         if (context == null) return;
-        String packageValue = item != null && item.getPackageNo() != null ? item.getPackageNo() : "—";
-        String waybillValue = item != null ? item.getWaybillNo() : "—";
+        String placeholder = getString(R.string.scan_placeholder);
+        String packageValue = item != null && item.getPackageNo() != null ? item.getPackageNo() : placeholder;
+        String waybillValue = item != null && item.getWaybillNo() != null ? item.getWaybillNo() : placeholder;
         SpannableStringBuilder builder = new SpannableStringBuilder();
-        appendResultSegment(builder, context, "包裹号", packageValue, true);
+        appendResultSegment(builder, context, getString(R.string.scan_label_package), packageValue, true);
         builder.append("\n");
-        appendResultSegment(builder, context, "运单号", waybillValue, false);
+        appendResultSegment(builder, context, getString(R.string.scan_label_waybill), waybillValue, false);
         tvPackageNumber.setText(builder);
     }
 
     private void appendResultSegment(SpannableStringBuilder builder, Context context,
                                      String label, String value, boolean accent) {
         int labelStart = builder.length();
-        builder.append(label).append("：");
+        builder.append(label).append(getString(R.string.scan_label_separator));
         builder.setSpan(new ForegroundColorSpan(
                         ContextCompat.getColor(context, R.color.scan_result_label)),
                 labelStart, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -442,7 +446,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                 labelStart, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 
         int valueStart = builder.length();
-        builder.append(value != null ? value : "—");
+        builder.append(value != null ? value : getString(R.string.scan_placeholder));
         int colorRes = accent ? R.color.scan_result_accent : R.color.scan_result_value;
         builder.setSpan(new ForegroundColorSpan(ContextCompat.getColor(context, colorRes)),
                 valueStart, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -497,10 +501,10 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         }
 
         new AlertDialog.Builder(requireContext())
-                .setTitle("提示")
-                .setMessage("您有未扫描包裹，是否开始扫描？")
-                .setPositiveButton("是", (dialog, which) -> bindCameraNow())
-                .setNegativeButton("否", null)
+                .setTitle(R.string.scan_prompt_title)
+                .setMessage(R.string.scan_prompt_message)
+                .setPositiveButton(R.string.action_yes, (dialog, which) -> bindCameraNow())
+                .setNegativeButton(R.string.action_no, null)
                 .show();
     }
 
@@ -512,13 +516,14 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         if (scanned != null) scannedCount = scanned.size();
         if (unscanned != null) unscannedCount = unscanned.size();
 
-        String message = "已扫描：" + scannedCount + "\n未扫描：" + unscannedCount + "\n确认生成扫描报告？";
+        String message = getString(R.string.scan_report_confirm_message, scannedCount, unscannedCount);
 
         new AlertDialog.Builder(requireContext())
-                .setTitle("生成扫描报告")
+                .setTitle(R.string.scan_report_confirm_title)
                 .setMessage(message)
-                .setPositiveButton("生成", (dialog, which) -> scanViewModel.generateScanBatchReport())
-                .setNegativeButton("取消", null)
+                .setPositiveButton(R.string.scan_report_confirm_positive,
+                        (dialog, which) -> scanViewModel.generateScanBatchReport())
+                .setNegativeButton(R.string.action_cancel, null)
                 .show();
     }
 
@@ -572,7 +577,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                 if (isGranted) {
                     startCameraIfNeeded();
                 } else {
-                    Toast.makeText(getContext(), "需要相机权限", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), R.string.scan_camera_permission_required, Toast.LENGTH_SHORT).show();
                 }
             });
 

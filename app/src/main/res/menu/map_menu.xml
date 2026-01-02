@@ -4,20 +4,20 @@
     <!-- 顶部统计项，不可点击 -->
 
     <item android:id="@+id/menu_unscanned"
-        android:title="包裹预览"
+        android:title="@string/map_menu_preview"
         android:icon="@drawable/ic_filter_unscanned"
         app:showAsAction="never"/>
     <item android:id="@+id/menu_search"
-        android:title="包裹搜索"
+        android:title="@string/map_menu_search"
         android:icon="@drawable/ic_search"
         app:showAsAction="never"/>
     <item android:id="@+id/menu_refresh"
-        android:title="刷新"
+        android:title="@string/map_menu_refresh"
         android:icon="@drawable/ic_refresh"
         app:showAsAction="never"/>
     <item
         android:id="@+id/menu_nav_mode"
-        android:title="导航模式"
+        android:title="@string/map_menu_nav_mode"
         android:icon="@drawable/ic_nav_mode_off"
         app:showAsAction="always"/>
 </menu>

@@ -306,8 +306,20 @@ public class DeliveryinfoMgr implements Subscriber {
                         Result.Success<List<ScanBatchReportData>> su = (Result.Success<List<ScanBatchReportData>>) result;
                         List<ScanBatchReportData> lst = su.data;
                         if (!lst.isEmpty()) {
-                            scanBatchId = lst.get(0).getScan_batch_id();
-                            scanBatchStatus = lst.get(0).getScan_batch_status();
+                            ScanBatchReportData open = null;
+                            for (ScanBatchReportData item : lst) {
+                                if (item != null && item.getScan_batch_status() == 0) {
+                                    open = item;
+                                    break;
+                                }
+                            }
+                            if (open != null) {
+                                scanBatchId = open.getScan_batch_id();
+                                scanBatchStatus = open.getScan_batch_status();
+                            } else if (scanBatchId <= 0 || scanBatchStatus != 0) {
+                                scanBatchId = lst.get(0).getScan_batch_id();
+                                scanBatchStatus = lst.get(0).getScan_batch_status();
+                            }
                         } else {
                             FileLog.getInstance().writeLog("Can't fetch the scanbatchid for " + loginInfo.loginId);
                             if (scanBatchId <= 0) {

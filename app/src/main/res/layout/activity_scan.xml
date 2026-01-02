@@ -23,7 +23,7 @@
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:background="@color/primaryDark"
-            app:title="包裹扫描"
+            app:title="@string/scan_title"
             app:titleTextAppearance="@style/ScanToolbar.Title"
             app:popupTheme="@style/ThemeOverlay.AppCompat.Dark"
             app:menu="@menu/scan_actions"/>
@@ -35,7 +35,7 @@
         android:layout_height="wrap_content"
         android:padding="8dp"
         android:background="#80000000"
-        android:text="已扫描 0 / 0"
+        android:text="@string/scan_progress_default"
         android:textColor="@android:color/white"
         android:textSize="16sp"
         android:elevation="6dp"
@@ -85,7 +85,7 @@
         android:layout_height="wrap_content"
         android:padding="16dp"
         android:background="@drawable/bg_scan_result"
-        android:text="包裹号：—\n运单号：—"
+        android:text="@string/scan_result_default"
         android:textColor="@color/scan_result_label"
         android:textSize="18sp"
         android:lineSpacingExtra="4dp"
@@ -120,7 +120,7 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnUnscanned"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:text="未扫描(0)"
+            android:text="@string/scan_unscanned_default"
             app:cornerRadius="16dp"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -129,7 +129,7 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnScanned"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:text="已扫描(0)"
+            android:text="@string/scan_scanned_default"
             app:cornerRadius="16dp"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -163,7 +163,7 @@
         android:id="@+id/tvHint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="请将条码放入框内并尽量靠近"
+        android:text="@string/scan_hint"
         android:textColor="@android:color/white"
         android:textSize="12sp"
         android:background="#66000000"
@@ -205,7 +205,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="提交中 0/0"
+                android:text="@string/scan_submitting_default"
                 android:textColor="@android:color/black"
                 android:textSize="16sp"/>
         </LinearLayout>

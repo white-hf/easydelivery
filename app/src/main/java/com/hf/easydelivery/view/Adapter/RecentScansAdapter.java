@@ -44,9 +44,12 @@ public class RecentScansAdapter
             @NonNull ViewHolder holder, int pos) {
         ScanItem it = items.get(pos);
         Context context = holder.itemView.getContext();
-        String packageValue = it.getPackageNo() != null ? it.getPackageNo() : "—";
-        holder.tvPackageNo.setText(buildLine(context, "包裹号", packageValue, true));
-        holder.tvWaybillNo.setText(buildLine(context, "运单号", it.getWaybillNo(), false));
+        String placeholder = context.getString(R.string.scan_placeholder);
+        String packageValue = it.getPackageNo() != null ? it.getPackageNo() : placeholder;
+        holder.tvPackageNo.setText(buildLine(context,
+                context.getString(R.string.scan_label_package), packageValue, true));
+        holder.tvWaybillNo.setText(buildLine(context,
+                context.getString(R.string.scan_label_waybill), it.getWaybillNo(), false));
 
         if (it.isScanned() && !it.isUploaded()) {
             holder.cardContainer.setBackgroundResource(R.drawable.bg_scan_item_warning);
@@ -66,14 +69,14 @@ public class RecentScansAdapter
                 : ContextCompat.getColor(context, R.color.scan_list_value);
 
         int labelStart = builder.length();
-        builder.append(label).append("：");
+        builder.append(label).append(context.getString(R.string.scan_label_separator));
         builder.setSpan(new ForegroundColorSpan(labelColor), labelStart, builder.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         builder.setSpan(new AbsoluteSizeSpan(13, true), labelStart, builder.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 
         int valueStart = builder.length();
-        builder.append(value != null ? value : "—");
+        builder.append(value != null ? value : context.getString(R.string.scan_placeholder));
         builder.setSpan(new ForegroundColorSpan(valueColor), valueStart, builder.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         builder.setSpan(new StyleSpan(Typeface.BOLD), valueStart, builder.length(),

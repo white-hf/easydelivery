@@ -2,13 +2,13 @@
     <item
         android:id="@+id/nav_deliver"
         android:icon="@drawable/ic_direction"
-        android:title="送件"/>
+        android:title="@string/delivery"/>
     <item
         android:id="@+id/nav_scan"
         android:icon="@drawable/ic_qr_scan"
-        android:title="扫件"/>
+        android:title="@string/action_scan"/>
     <item
         android:id="@+id/nav_me"
         android:icon="@drawable/ic_person"
-        android:title="我的"/>
+        android:title="@string/tab_me"/>
 </menu>

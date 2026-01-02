@@ -277,9 +277,9 @@ public class PackageListFragment extends Fragment {
 
         if (empty) {
             if (currentMode == ListMode.UNSCANNED_FROM_SCAN) {
-                emptyView.setText("暂无【未扫描】包裹");
+                emptyView.setText(R.string.package_list_empty_unscanned);
             } else {
-                emptyView.setText("暂无【派送中】包裹");
+                emptyView.setText(R.string.package_list_empty_delivering);
             }
         }
     }
@@ -316,18 +316,21 @@ public class PackageListFragment extends Fragment {
 
     private void onItemClicked(@NonNull DeliveryInfo item) {
         if (currentMode == ListMode.UNSCANNED_FROM_SCAN) {
-            Toast.makeText(requireContext(), "该列表为【未扫描】包裹，请先在扫描页完成扫描。", Toast.LENGTH_SHORT).show();
+            Toast.makeText(requireContext(), R.string.package_list_unscanned_only_toast,
+                    Toast.LENGTH_SHORT).show();
             return;
         }
 
         Status status = Status.fromState(item.getState());
         if (!status.isDeliverable()) {
-            Toast.makeText(requireContext(), "该包裹不在派送中状态，无法操作。", Toast.LENGTH_SHORT).show();
+            Toast.makeText(requireContext(), R.string.package_list_not_delivering_toast,
+                    Toast.LENGTH_SHORT).show();
             return;
         }
 
         if (item.getOrderId() == null) {
-            Toast.makeText(requireContext(), "包裹详情不完整，无法进入拍照", Toast.LENGTH_SHORT).show();
+            Toast.makeText(requireContext(), R.string.package_list_missing_details_toast,
+                    Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -387,27 +390,37 @@ public class PackageListFragment extends Fragment {
         public void onBindViewHolder(@NonNull VH h, int pos) {
             DeliveryInfo it = items.get(pos);
             h.itemView.setMinimumHeight(minRowHeightPx);
-            String routeText = "包裹号: " + valueOrDash(it.getRouteNumber());
-            String orderText = "运单号: " + valueOrDash(it.getOrderSn());
-            String customerText = "客户: " + valueOrDash(it.getName());
+            String routeText = ctx.getString(R.string.package_list_route_format,
+                    valueOrDash(it.getRouteNumber()));
+            String orderText = ctx.getString(R.string.package_list_waybill_format,
+                    valueOrDash(it.getOrderSn()));
+            String customerText = ctx.getString(R.string.package_list_customer_format,
+                    valueOrDash(it.getName()));
             h.routeNumber.setText(routeText);
             h.orderSn.setText(orderText);
             h.customer.setText(customerText);
 
-            String unit = valueOrDash(it.getUnitNumber());
+            String placeholder = ctx.getString(R.string.map_placeholder);
+            String unitRaw = it.getUnitNumber();
+            String unit = (unitRaw == null || unitRaw.trim().isEmpty())
+                    ? placeholder
+                    : unitRaw.trim();
             String streetNo = it.getCivilNumber() != null && it.getCivilNumber() > 0
                     ? String.valueOf(it.getCivilNumber())
-                    : "—";
+                    : placeholder;
             String addressLine = valueOrDash(it.getAddress());
-            StringBuilder addressBuilder = new StringBuilder("地址: ");
-            if (!"—".equals(streetNo)) {
-                addressBuilder.append(streetNo).append("号 ");
+            StringBuilder addressBuilder = new StringBuilder();
+            if (!placeholder.equals(streetNo)) {
+                addressBuilder.append(ctx.getString(R.string.package_list_street_number_format,
+                        streetNo)).append(" ");
             }
-            if (!"—".equals(unit)) {
-                addressBuilder.append(unit).append("单元 ");
+            if (!placeholder.equals(unit)) {
+                addressBuilder.append(ctx.getString(R.string.package_list_unit_format, unit))
+                        .append(" ");
             }
             addressBuilder.append(addressLine);
-            String addressText = addressBuilder.toString();
+            String addressText = ctx.getString(R.string.package_list_address_format,
+                    addressBuilder.toString().trim());
             h.address.setText(addressText);
             View.OnClickListener clickListener = v -> {
                 int adapterPos = h.getBindingAdapterPosition();
@@ -454,8 +467,11 @@ public class PackageListFragment extends Fragment {
             }
         }
 
+
         private String valueOrDash(String value) {
-            return value == null || value.trim().isEmpty() ? "—" : value;
+            return value == null || value.trim().isEmpty()
+                    ? ctx.getString(R.string.map_placeholder)
+                    : value;
         }
 
         private void attachCopySupport(@NonNull TextView view, @NonNull String text) {

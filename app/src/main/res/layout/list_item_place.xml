@@ -11,18 +11,18 @@
         android:id="@+id/codeTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Code" />
+        android:text="@string/place_code_label" />
 
     <TextView
         android:id="@+id/streetOrApartmentTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Street or Apartment" />
+        android:text="@string/place_street_label" />
 
     <TextView
         android:id="@+id/addressTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Address" />
+        android:text="@string/place_address_label" />
 
 </LinearLayout>

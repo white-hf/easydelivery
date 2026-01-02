@@ -34,13 +34,13 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void handleOnBackPressed() {
                 new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this)
-                        .setTitle("确认退出")
-                        .setMessage("您确定要退出应用吗？")
-                        .setPositiveButton("退出", (dialog, which) -> {
+                        .setTitle(R.string.exit_confirm_title)
+                        .setMessage(R.string.exit_confirm_message)
+                        .setPositiveButton(R.string.action_exit, (dialog, which) -> {
                             setEnabled(false); // 避免重复触发
                             MainActivity.super.onBackPressed();
                         })
-                        .setNegativeButton("取消", (dialog, which) -> {
+                        .setNegativeButton(R.string.action_cancel, (dialog, which) -> {
                             dialog.dismiss();
                         })
                         .show();
