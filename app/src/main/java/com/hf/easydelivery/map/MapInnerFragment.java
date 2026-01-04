@@ -297,7 +297,7 @@ public class MapInnerFragment extends Fragment
 
     // --- Developer panel shortcut (double-tap toolbar) ---
     private static final long DEV_DOUBLE_TAP_WINDOW_MS = 450L;
-    private static final long AUTO_FOLLOW_PAUSE_MS = 3000L; // 用户手势后，约 3 秒保护窗口
+    private static final long AUTO_FOLLOW_PAUSE_MS = 8000L; // 用户手势后，约 3 秒保护窗口
     private long lastToolbarTapMs = 0L;
 
     // ===== Top-3 主案：Fragment 侧轻量采样/抑制配置 =====
@@ -2250,7 +2250,8 @@ public class MapInnerFragment extends Fragment
     private final Runnable edgeCheckRunnable = new Runnable() {
         @Override
         public void run() {
-            if (googleMap == null || mLastEffectiveUiLocation == null || navigationModeEnabled) {
+            if (googleMap == null || mLastEffectiveUiLocation == null || navigationModeEnabled
+                    || currentMode == DataMode.UNSCANNED) {
                 edgeOutsideConsecutive = 0;
                 edgeCheckHandler.postDelayed(this, 1000);
                 return;
