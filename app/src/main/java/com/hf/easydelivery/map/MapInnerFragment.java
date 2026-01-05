@@ -97,6 +97,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 地图派送界面（内层 Fragment）
@@ -297,7 +299,7 @@ public class MapInnerFragment extends Fragment
 
     // --- Developer panel shortcut (double-tap toolbar) ---
     private static final long DEV_DOUBLE_TAP_WINDOW_MS = 450L;
-    private static final long AUTO_FOLLOW_PAUSE_MS = 3000L; // 用户手势后，约 3 秒保护窗口
+    private static final long AUTO_FOLLOW_PAUSE_MS = 8000L; // 用户手势后，约 3 秒保护窗口
     private long lastToolbarTapMs = 0L;
 
     // ===== Top-3 主案：Fragment 侧轻量采样/抑制配置 =====
@@ -750,6 +752,9 @@ public class MapInnerFragment extends Fragment
         }
         currentMapDeliveries = sanitized;
         logD("updateMapItems sanitized=" + sanitized.size());
+        if (myClusterRenderer != null) {
+            myClusterRenderer.setSpiderfyPositions(buildSpiderfyPositions(sanitized));
+        }
         clusterManager.cluster();
 
         if (!isCurrentPrimaryStillPending() && currentPrimaryDelivery != null) {
@@ -797,6 +802,45 @@ public class MapInnerFragment extends Fragment
         if (sanitized.isEmpty()) {
             hideInfoPillCompletely();
         }
+    }
+
+    private Map<String, LatLng> buildSpiderfyPositions(List<DeliveryInfo> items) {
+        Map<String, List<DeliveryInfo>> groups = new HashMap<>();
+        for (DeliveryInfo info : items) {
+            if (info == null)
+                continue;
+            String key = String.format(Locale.US, "%.6f,%.6f", info.getLatitude(), info.getLongitude());
+            List<DeliveryInfo> list = groups.get(key);
+            if (list == null) {
+                list = new ArrayList<>();
+                groups.put(key, list);
+            }
+            list.add(info);
+        }
+
+        Map<String, LatLng> overrides = new HashMap<>();
+        for (List<DeliveryInfo> group : groups.values()) {
+            if (group.size() <= 1)
+                continue;
+            double baseLat = group.get(0).getLatitude();
+            double baseLng = group.get(0).getLongitude();
+            int count = group.size();
+            double radiusMeters = Math.min(12.0, 4.0 + count * 1.5);
+            double metersToLat = 1.0 / 111320.0;
+            double cosLat = Math.cos(Math.toRadians(baseLat));
+            if (Math.abs(cosLat) < 1e-6) {
+                cosLat = 1e-6;
+            }
+            double metersToLng = 1.0 / (111320.0 * cosLat);
+            for (int i = 0; i < count; i++) {
+                double angle = 2 * Math.PI * i / count;
+                double dLat = Math.cos(angle) * radiusMeters * metersToLat;
+                double dLng = Math.sin(angle) * radiusMeters * metersToLng;
+                DeliveryInfo info = group.get(i);
+                overrides.put(info.getStableKey(), new LatLng(baseLat + dLat, baseLng + dLng));
+            }
+        }
+        return overrides;
     }
 
     private void updateStatusBarUI(MapViewModel.MapStatus status) {
@@ -2250,7 +2294,8 @@ public class MapInnerFragment extends Fragment
     private final Runnable edgeCheckRunnable = new Runnable() {
         @Override
         public void run() {
-            if (googleMap == null || mLastEffectiveUiLocation == null || navigationModeEnabled) {
+            if (googleMap == null || mLastEffectiveUiLocation == null || navigationModeEnabled
+                    || currentMode == DataMode.UNSCANNED) {
                 edgeOutsideConsecutive = 0;
                 edgeCheckHandler.postDelayed(this, 1000);
                 return;

@@ -11,6 +11,7 @@ import com.google.android.gms.maps.model.LatLng;
 import com.hf.easydelivery.common.Utils;
 import com.hf.courierservice.bean.Dispatch_type;
 
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -245,5 +246,16 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
 
     public String getStreetName() {
         return streetName;
+    }
+
+    public String getStableKey() {
+        if (orderSn != null && !orderSn.isEmpty()) {
+            return "sn:" + orderSn;
+        }
+        if (orderId != null) {
+            return "id:" + orderId;
+        }
+        return String.format(Locale.US, "pos:%.6f,%.6f:%s", latitude, longitude,
+                routeNumber == null ? "" : routeNumber);
     }
 }

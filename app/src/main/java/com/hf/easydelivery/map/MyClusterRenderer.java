@@ -19,6 +19,10 @@ import com.google.maps.android.clustering.ClusterManager;
 import com.google.maps.android.clustering.view.DefaultClusterRenderer;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.hf.easydelivery.R;
+import com.hf.easydelivery.dao.DeliveryInfo;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRenderer<T> {
 
@@ -26,6 +30,7 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
 
 
     private float mZoomLevel = 15;
+    private final Map<String, com.google.android.gms.maps.model.LatLng> spiderfyPositions = new HashMap<>();
 
     public void setZoomLevel(float mZoomLevel) {
         this.mZoomLevel = mZoomLevel;
@@ -36,8 +41,22 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
         mContext = context;
     }
 
+    public void setSpiderfyPositions(Map<String, com.google.android.gms.maps.model.LatLng> positions) {
+        spiderfyPositions.clear();
+        if (positions != null) {
+            spiderfyPositions.putAll(positions);
+        }
+    }
+
     @Override
     protected void onBeforeClusterItemRendered(T item, MarkerOptions markerOptions) {
+        if (item instanceof DeliveryInfo) {
+            String key = ((DeliveryInfo) item).getStableKey();
+            com.google.android.gms.maps.model.LatLng override = spiderfyPositions.get(key);
+            if (override != null) {
+                markerOptions.position(override);
+            }
+        }
         markerOptions.icon(createCustomMarker(item.getTitle()));
     }
 

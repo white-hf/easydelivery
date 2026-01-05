@@ -36,7 +36,7 @@
 
         <LinearLayout
             android:orientation="horizontal"
-            android:padding="12dp"
+            android:padding="8dp"
             android:gravity="center_vertical"
             android:baselineAligned="false"
             android:layout_width="match_parent"
@@ -64,6 +64,9 @@
                     android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:ellipsize="end"
+                    android:textSize="15sp"
+                    android:includeFontPadding="false"
+                    android:lineSpacingMultiplier="0.9"
                     android:textColor="@android:color/white" />
                 <TextView
                     android:id="@+id/tv_customer_name"
@@ -71,6 +74,9 @@
                     android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:ellipsize="end"
+                    android:textSize="15sp"
+                    android:includeFontPadding="false"
+                    android:lineSpacingMultiplier="0.9"
                     android:textColor="@android:color/white" />
                 <TextView
                     android:id="@+id/tv_unit_number"
@@ -78,6 +84,9 @@
                     android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:ellipsize="end"
+                    android:textSize="15sp"
+                    android:includeFontPadding="false"
+                    android:lineSpacingMultiplier="0.9"
                     android:textColor="@android:color/white" />
                 <TextView
                     android:id="@+id/tv_address"
@@ -85,6 +94,9 @@
                     android:layout_height="wrap_content"
                     android:maxLines="2"
                     android:ellipsize="end"
+                    android:textSize="15sp"
+                    android:includeFontPadding="false"
+                    android:lineSpacingMultiplier="0.9"
                     android:textColor="@android:color/white" />
             </LinearLayout>
         </LinearLayout>
