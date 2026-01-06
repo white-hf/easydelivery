@@ -1912,6 +1912,9 @@ public class CameraActivity extends AppCompatActivity
         if (apartmentPhotoService == null || deliveryInfo == null) {
             return;
         }
+        if (apartmentKeyData == null || !apartmentKeyData.isApartment) {
+            return;
+        }
         MatchResult match = apartmentPhotoService.findMatch(deliveryInfo);
         if (match == null) {
             return;
