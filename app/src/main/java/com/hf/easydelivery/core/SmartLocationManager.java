@@ -40,7 +40,6 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Build;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
@@ -109,8 +108,6 @@ public class SmartLocationManager {
     private MovementState currentState = MovementState.STATIONARY;
     private final java.util.Set<LocationUpdateListener> listeners = new java.util.concurrent.CopyOnWriteArraySet<>();
     private Handler handler;
-    private HandlerThread locationThread;
-    private Looper locationLooper;
     private Runnable pendingReconfigure;
     private long lastRequestUptimeMs = 0L;
     private static final long REQUEST_RECONFIG_DEBOUNCE_MS = 1200L;
@@ -423,9 +420,6 @@ public class SmartLocationManager {
         this.context = context;
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(context);
         handler = new Handler(Looper.getMainLooper());
-        locationThread = new HandlerThread("SmartLocationCallback");
-        locationThread.start();
-        locationLooper = locationThread.getLooper();
         activityRecognitionClient = ActivityRecognition.getClient(context);
 
         Intent intent = new Intent(context, ActivityTransitionReceiver.class);
@@ -587,7 +581,7 @@ public class SmartLocationManager {
 
         fusedLocationClient.requestLocationUpdates(locationRequest,
                 locationCallback,
-                locationLooper != null ? locationLooper : Looper.getMainLooper())
+                Looper.getMainLooper())
                 .addOnSuccessListener(aVoid -> {
                     lastRequestedIntervalMs = interval;
                     lastRequestedMinIntervalMs = minInterval;
@@ -633,7 +627,7 @@ public class SmartLocationManager {
 
         fusedLocationClient.requestLocationUpdates(locationRequest,
                 locationCallback,
-                locationLooper != null ? locationLooper : Looper.getMainLooper());
+                Looper.getMainLooper());
     }
 
     private void updateLocation(Location newLocation) {
