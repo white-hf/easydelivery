@@ -15,6 +15,7 @@ import com.hf.courierservice.Result;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.courierservice.bean.ScanBatchCreateData;
 import com.hf.courierservice.bean.ScanBatchGenerateReportData;
+import com.hf.courierservice.bean.ScanBatchReviewData;
 import com.hf.courierservice.bean.ToBePickedUpBriefData;
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.R;
@@ -57,6 +58,7 @@ import com.hf.easydelivery.event.EventConstant;
 public class ScanViewModel extends ViewModel implements Subscriber {
 
     private static final String TAG = "ScanViewModel";
+    private static final String REVIEW_STATUS = "REVIEW";
 
     // --- 新增：用于提交状态的枚举 ---
     public enum SubmissionState { IDLE, SUBMITTING, COMPLETE, FAILED }
@@ -381,6 +383,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
                             resourceMgr.getDeliveryinfoMgr().updateScanBatchInfo(batchId, 1);
                             pushBatchFields();
                             toastMessage.postValue(new Event<>(getString(R.string.scan_report_generated)));
+                            submitScanBatchReview(batchId);
                         } else if (result instanceof Result.Error) {
                             toastMessage.postValue(new Event<>(getString(R.string.scan_report_generate_failed)));
                         }
@@ -389,6 +392,26 @@ public class ScanViewModel extends ViewModel implements Subscriber {
                     @Override
                     public void onFail(Exception e) {
                         toastMessage.postValue(new Event<>(getString(R.string.scan_report_generate_failed)));
+                    }
+                });
+    }
+
+    private void submitScanBatchReview(long batchId) {
+        resourceMgr.getCourierService().submitScanBatchReview(batchId, REVIEW_STATUS,
+                new IResponseCallBack<ScanBatchReviewData>() {
+                    @Override
+                    public void onComplete(Result<ScanBatchReviewData> result) {
+                        if (result instanceof Result.Success) {
+                            FileLog.i(TAG, "submitScanBatchReview success, batchId=" + batchId);
+                        } else if (result instanceof Result.Error) {
+                            FileLog.e(TAG, "submitScanBatchReview error, batchId=" + batchId,
+                                    ((Result.Error<ScanBatchReviewData>) result).exception);
+                        }
+                    }
+
+                    @Override
+                    public void onFail(Exception e) {
+                        FileLog.e(TAG, "submitScanBatchReview failed, batchId=" + batchId, e);
                     }
                 });
     }

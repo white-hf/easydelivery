@@ -8,6 +8,7 @@ import com.hf.courierservice.bean.ParcelScanData;
 import com.hf.courierservice.bean.ScanBatchCreateData;
 import com.hf.courierservice.bean.ScanBatchGenerateReportData;
 import com.hf.courierservice.bean.ScanBatchReportData;
+import com.hf.courierservice.bean.ScanBatchReviewData;
 import com.hf.courierservice.bean.ToBePickedUpBriefData;
 
 import java.util.List;
@@ -101,5 +102,7 @@ public interface ICourierService {
             IResponseCallBack<ScanBatchCreateData> callback);
 
     void generateScanBatchReport(long scanBatchId, IResponseCallBack<ScanBatchGenerateReportData> callback);
+
+    void submitScanBatchReview(long scanBatchId, String status, IResponseCallBack<ScanBatchReviewData> callback);
 
 }
