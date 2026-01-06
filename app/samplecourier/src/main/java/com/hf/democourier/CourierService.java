@@ -13,6 +13,7 @@ import com.hf.courierservice.bean.ParcelScanData;
 import com.hf.courierservice.bean.ScanBatchCreateData;
 import com.hf.courierservice.bean.ScanBatchGenerateReportData;
 import com.hf.courierservice.bean.ScanBatchReportData;
+import com.hf.courierservice.bean.ScanBatchReviewData;
 import com.hf.courierservice.bean.ToBePickedUpBriefData;
 import com.hf.democourier.request.AppLoginReq;
 import com.hf.democourier.request.NullReq;
@@ -126,6 +127,12 @@ public class CourierService implements ICourierService {
 
     @Override
     public void generateScanBatchReport(long scanBatchId, IResponseCallBack<ScanBatchGenerateReportData> callback) {
+
+    }
+
+    @Override
+    public void submitScanBatchReview(long scanBatchId, String status,
+            IResponseCallBack<ScanBatchReviewData> callback) {
 
     }
 
