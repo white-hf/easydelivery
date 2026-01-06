@@ -2025,6 +2025,8 @@ public class MapInnerFragment extends Fragment
         float clamped = balance;
         if (clamped < 0f) clamped = 0f;
         if (clamped > 1f) clamped = 1f;
+        String perfMode = clamped >= 0.5f ? "ECO" : "REALTIME";
+        logD("perf balance -> value=" + clamped + " mode=" + perfMode);
 
         if (mSmartLocationManager != null) {
             mSmartLocationManager.setLocationPolicy(new BlendedLocationPolicy(clamped));

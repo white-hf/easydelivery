@@ -13,6 +13,7 @@ public class DrivingDistanceTracker {
     private static final float MAX_DISTANCE_METERS = 2000f;
     private static final float MAX_ACCURACY_METERS = 50f;
     private static final long LOG_INTERVAL_MS = 60_000L;
+    private static final float FLUSH_DISTANCE_METERS = 500f;
 
 
     private static DrivingDistanceTracker instance;
@@ -20,7 +21,7 @@ public class DrivingDistanceTracker {
     private Location lastLocation;
     private SmartLocationManager.MovementState lastState = SmartLocationManager.MovementState.STATIONARY;
     private float pendingLogDistance = 0f;
-    private long lastLogWallTimeMs = 0L;
+    private long lastLogLocationTimeMs = 0L;
 
     private DrivingDistanceTracker(Context context) {
         repository = new WorkStatsRepository(context.getApplicationContext());
@@ -40,7 +41,11 @@ public class DrivingDistanceTracker {
         }
         if (state == SmartLocationManager.MovementState.STATIONARY) {
             flushPending(location.getTime(), true);
-            lastLocation = location;
+            if (lastLocation == null) {
+                lastLocation = new Location(location);
+            } else {
+                lastLocation.set(location);
+            }
             lastState = state;
             return;
         }
@@ -51,13 +56,21 @@ public class DrivingDistanceTracker {
         }
         float distance = location.distanceTo(lastLocation);
         if (distance < MIN_DISTANCE_METERS || distance > MAX_DISTANCE_METERS) {
-            lastLocation = new Location(location);
+            if (lastLocation == null) {
+                lastLocation = new Location(location);
+            } else {
+                lastLocation.set(location);
+            }
             lastState = state;
             return;
         }
         accumulateDistance(distance, location.getTime());
 
-        lastLocation = new Location(location);
+        if (lastLocation == null) {
+            lastLocation = new Location(location);
+        } else {
+            lastLocation.set(location);
+        }
         lastState = state;
     }
 
@@ -66,8 +79,8 @@ public class DrivingDistanceTracker {
             return;
         }
         pendingLogDistance += distanceMeters;
-        if (lastLogWallTimeMs == 0L) {
-            lastLogWallTimeMs = System.currentTimeMillis();
+        if (lastLogLocationTimeMs == 0L && locationTimeMs > 0L) {
+            lastLogLocationTimeMs = locationTimeMs;
         }
         flushPending(locationTimeMs, false);
     }
@@ -76,14 +89,14 @@ public class DrivingDistanceTracker {
         if (pendingLogDistance <= 0f) {
             return;
         }
-        long now = System.currentTimeMillis();
-        long elapsed = now - lastLogWallTimeMs;
-        if (!force && elapsed < LOG_INTERVAL_MS) {
+        long now = locationTimeMs > 0L ? locationTimeMs : System.currentTimeMillis();
+        long elapsed = lastLogLocationTimeMs > 0L ? (now - lastLogLocationTimeMs) : 0L;
+        if (!force && pendingLogDistance < FLUSH_DISTANCE_METERS && elapsed < LOG_INTERVAL_MS) {
             return;
         }
         repository.addDistanceMeters(pendingLogDistance, locationTimeMs);
         pendingLogDistance = 0f;
-        lastLogWallTimeMs = now;
+        lastLogLocationTimeMs = now;
     }
 
 

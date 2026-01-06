@@ -199,7 +199,7 @@ public class ApartmentPhotoService {
             entity.id = id;
         }
         FileLog.getInstance().debug(TAG, "savePhoto: saved id=" + entity.id + " path=" + entity.filePath);
-        if (existing != null && !TextUtils.isEmpty(existing.filePath)
+        if (id > 0 && existing != null && !TextUtils.isEmpty(existing.filePath)
                 && !existing.filePath.equals(dest.getAbsolutePath())) {
             File old = new File(existing.filePath);
             if (old.exists()) {
@@ -207,6 +207,8 @@ public class ApartmentPhotoService {
                 FileLog.getInstance().debug(TAG,
                         "savePhoto: delete old path=" + existing.filePath + " success=" + deleted);
             }
+        } else if (id <= 0) {
+            FileLog.getInstance().warning(TAG, "savePhoto: upsert failed, keep old file");
         }
         return true;
     }

@@ -38,6 +38,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -107,6 +108,15 @@ public class SmartLocationManager {
     private MovementState currentState = MovementState.STATIONARY;
     private final java.util.Set<LocationUpdateListener> listeners = new java.util.concurrent.CopyOnWriteArraySet<>();
     private Handler handler;
+    private Runnable pendingReconfigure;
+    private long lastRequestUptimeMs = 0L;
+    private static final long REQUEST_RECONFIG_DEBOUNCE_MS = 1200L;
+    private long pendingRequestedIntervalMs = -1L;
+    private long pendingRequestedMinIntervalMs = -1L;
+    private int pendingRequestedPriority = -1;
+    private float pendingRequestedMinDistanceM = -1f;
+    private long pendingRequestedMaxDelayMs = -1L;
+    private boolean hasPendingRequest = false;
     private boolean inBurstMode = false;
     private Runnable burstModeRunnable;
     private ActivityRecognitionClient activityRecognitionClient;
@@ -446,6 +456,7 @@ public class SmartLocationManager {
     public void setLocationPolicy(@Nullable LocationPolicy policy) {
         if (policy != null) {
             this.locationPolicy = policy;
+            FileLog.getInstance().debug(TAG, "setLocationPolicy -> " + policy.getClass().getSimpleName());
             updateLocationParametersForState();
         }
     }
@@ -490,15 +501,23 @@ public class SmartLocationManager {
 
                 // 完整处理最后一个
                 Location last = locations.get(locations.size() - 1);
-                FileLog.getInstance().debug(TAG,
-                        String.format(
-                                "onLocationResult: provider=%s acc=%.1fm speed=%.2f hasSpeed=%s mock=%s elapsedMs=%d",
-                                last.getProvider(),
-                                last.getAccuracy(),
-                                last.hasSpeed() ? last.getSpeed() : 0f,
-                                last.hasSpeed(),
-                                last.isFromMockProvider(),
-                                getElapsedRealtimeMsSafe(last)));
+                  long locElapsedMs = getElapsedRealtimeMsSafe(last);
+                  long ageMs = locElapsedMs > 0 ? (SystemClock.elapsedRealtime() - locElapsedMs) : -1L;
+                  Location prev = lastLocation;
+                  float dLast = prev != null ? prev.distanceTo(last) : -1f;
+                  FileLog.getInstance().debug(TAG,
+                          String.format(
+                                  "onLocationResult: provider=%s acc=%.1fm speed=%.2f hasSpeed=%s mock=%s elapsedMs=%d lat=%.6f lng=%.6f ageMs=%d dLast=%.1f",
+                                  last.getProvider(),
+                                  last.getAccuracy(),
+                                  last.hasSpeed() ? last.getSpeed() : 0f,
+                                  last.hasSpeed(),
+                                  last.isFromMockProvider(),
+                                  locElapsedMs,
+                                  last.getLatitude(),
+                                  last.getLongitude(),
+                                  ageMs,
+                                  dLast));
                 Telemetry.counter("onLocationResult");
                 updateLocation(last);
             }
@@ -519,6 +538,32 @@ public class SmartLocationManager {
             FileLog.getInstance().warning(TAG, "requestLocationUpdates skipped: locationCallback not ready");
             return;
         }
+        if (!inBurstMode
+                && interval == lastRequestedIntervalMs
+                && minInterval == lastRequestedMinIntervalMs
+                && priority == lastRequestedPriority
+                && minDistanceMeters == lastRequestedMinDistanceM
+                && maxUpdateDelayMs == lastRequestedMaxDelayMs) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        if (!inBurstMode && lastRequestUptimeMs > 0
+                && (now - lastRequestUptimeMs) < REQUEST_RECONFIG_DEBOUNCE_MS) {
+            if (pendingReconfigure != null) {
+                handler.removeCallbacks(pendingReconfigure);
+            }
+            final long pInterval = interval;
+            final long pMinInterval = minInterval;
+            final int pPriority = priority;
+            final float pMinDistance = minDistanceMeters;
+            final long pMaxDelay = maxUpdateDelayMs;
+            pendingReconfigure = () -> {
+                pendingReconfigure = null;
+                requestLocationUpdates(pInterval, pMinInterval, pPriority, pMinDistance, pMaxDelay);
+            };
+            handler.postDelayed(pendingReconfigure, REQUEST_RECONFIG_DEBOUNCE_MS);
+            return;
+        }
         // Ensure only one active request to avoid duplicate callbacks.
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback);
@@ -537,6 +582,22 @@ public class SmartLocationManager {
         fusedLocationClient.requestLocationUpdates(locationRequest,
                 locationCallback,
                 Looper.getMainLooper())
+                .addOnSuccessListener(aVoid -> {
+                    lastRequestedIntervalMs = interval;
+                    lastRequestedMinIntervalMs = minInterval;
+                    lastRequestedPriority = priority;
+                    lastRequestedMinDistanceM = minDistanceMeters;
+                    lastRequestedMaxDelayMs = maxUpdateDelayMs;
+                    if (hasPendingRequest
+                            && pendingRequestedIntervalMs == interval
+                            && pendingRequestedMinIntervalMs == minInterval
+                            && pendingRequestedPriority == priority
+                            && pendingRequestedMinDistanceM == minDistanceMeters
+                            && pendingRequestedMaxDelayMs == maxUpdateDelayMs) {
+                        hasPendingRequest = false;
+                    }
+                    FileLog.getInstance().debug(TAG, "requestLocationUpdates success");
+                })
                 .addOnFailureListener(e -> {
                     // ✅ 架构师建议：注册失败时重置缓存，强制下次重试
                     FileLog.getInstance().error(TAG,
@@ -547,7 +608,10 @@ public class SmartLocationManager {
                     lastRequestedMinIntervalMs = -1L;
                     lastRequestedPriority = -1;
                     lastRequestedMinDistanceM = -1f;
+                    lastRequestedMaxDelayMs = -1L;
+                    hasPendingRequest = false;
                 });
+        lastRequestUptimeMs = now;
     }
 
 
@@ -1010,12 +1074,21 @@ public class SmartLocationManager {
                 && maxDelay == lastRequestedMaxDelayMs) {
             return;
         }
+        if (hasPendingRequest
+                && interval == pendingRequestedIntervalMs
+                && minInterval == pendingRequestedMinIntervalMs
+                && priority == pendingRequestedPriority
+                && minDistance == pendingRequestedMinDistanceM
+                && maxDelay == pendingRequestedMaxDelayMs) {
+            return;
+        }
 
-        lastRequestedIntervalMs = interval;
-        lastRequestedMinIntervalMs = minInterval;
-        lastRequestedPriority = priority;
-        lastRequestedMinDistanceM = minDistance;
-        lastRequestedMaxDelayMs = maxDelay;
+        pendingRequestedIntervalMs = interval;
+        pendingRequestedMinIntervalMs = minInterval;
+        pendingRequestedPriority = priority;
+        pendingRequestedMinDistanceM = minDistance;
+        pendingRequestedMaxDelayMs = maxDelay;
+        hasPendingRequest = true;
 
         requestLocationUpdates(interval, minInterval, priority, minDistance, maxDelay);
     }
@@ -1125,6 +1198,11 @@ public class SmartLocationManager {
         if (fusedLocationClient != null && locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
         }
+        if (pendingReconfigure != null) {
+            handler.removeCallbacks(pendingReconfigure);
+            pendingReconfigure = null;
+        }
+        hasPendingRequest = false;
         stopHeadingUpdates();
         stopMotionWakeMonitoring();
         if (burstModeRunnableRef != null) {
@@ -1181,8 +1259,20 @@ public class SmartLocationManager {
     }
 
     private void registerActivityTransitionUpdates() {
-        ActivityTransitionRequest request = new ActivityTransitionRequest(getTransitions());
-        activityRecognitionClient.requestActivityTransitionUpdates(request, activityRecognitionPendingIntent);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (ActivityCompat.checkSelfPermission(context,
+                        Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
+                    FileLog.getInstance().warning(TAG,
+                            "registerActivityTransitionUpdates skipped: ACTIVITY_RECOGNITION not granted");
+                    return;
+                }
+            }
+            ActivityTransitionRequest request = new ActivityTransitionRequest(getTransitions());
+            activityRecognitionClient.requestActivityTransitionUpdates(request, activityRecognitionPendingIntent);
+        } catch (SecurityException se) {
+            FileLog.getInstance().warning(TAG, "registerActivityTransitionUpdates failed", se.getMessage());
+        }
     }
 
     private List<ActivityTransition> getTransitions() {
