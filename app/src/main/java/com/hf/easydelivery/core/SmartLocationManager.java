@@ -110,7 +110,7 @@ public class SmartLocationManager {
     private Handler handler;
     private Runnable pendingReconfigure;
     private long lastRequestUptimeMs = 0L;
-    private static final long REQUEST_RECONFIG_DEBOUNCE_MS = 1200L;
+    private static final long REQUEST_RECONFIG_DEBOUNCE_MS = 3000L;
     private long pendingRequestedIntervalMs = -1L;
     private long pendingRequestedMinIntervalMs = -1L;
     private int pendingRequestedPriority = -1;
@@ -167,6 +167,7 @@ public class SmartLocationManager {
     private long continuousStationaryStartMs = 0L; // ✅ Bug#3: 跟踪连续静止开始时间
     private MovementState previousState = MovementState.STATIONARY;
     private long lastGoodFixTime = 0L;
+    private boolean lastDeliveringIdle = false;
     private long lastDrivingUptimeMs = 0L;
     private long lastInVehicleUptimeMs = 0L;
     private float lastDisplacementMeters = 0f;
@@ -538,8 +539,7 @@ public class SmartLocationManager {
             FileLog.getInstance().warning(TAG, "requestLocationUpdates skipped: locationCallback not ready");
             return;
         }
-        if (!inBurstMode
-                && interval == lastRequestedIntervalMs
+        if (interval == lastRequestedIntervalMs
                 && minInterval == lastRequestedMinIntervalMs
                 && priority == lastRequestedPriority
                 && minDistanceMeters == lastRequestedMinDistanceM
@@ -596,7 +596,16 @@ public class SmartLocationManager {
                             && pendingRequestedMaxDelayMs == maxUpdateDelayMs) {
                         hasPendingRequest = false;
                     }
-                    FileLog.getInstance().debug(TAG, "requestLocationUpdates success");
+                    FileLog.getInstance().debug(TAG,
+                            String.format(
+                                    "requestLocationUpdates success: interval=%dms minInterval=%dms maxDelay=%dms minDistance=%.1fm priority=%d inBurst=%s state=%s",
+                                    interval,
+                                    minInterval,
+                                    maxUpdateDelayMs,
+                                    minDistanceMeters,
+                                    priority,
+                                    String.valueOf(inBurstMode),
+                                    String.valueOf(currentState)));
                 })
                 .addOnFailureListener(e -> {
                     // ✅ 架构师建议：注册失败时重置缓存，强制下次重试
@@ -826,6 +835,9 @@ public class SmartLocationManager {
         long prevUpdateTime = lastUpdateTime;
 
         boolean stateChanged = updateMovementState();
+        boolean deliveringIdle = isDeliveringAndIdle();
+        boolean deliveringIdleChanged = deliveringIdle != lastDeliveringIdle;
+        lastDeliveringIdle = deliveringIdle;
 
         // ✅ 全状态防抖：同一个 fix 或极短间隔/微小位移不分发，避免动画/CPU 被刷屏
         boolean shouldDispatch = true;
@@ -910,7 +922,7 @@ public class SmartLocationManager {
             weakSignalStartTime = 0L;
         }
 
-        if (stateChanged || inBurstMode) {
+        if (stateChanged || deliveringIdleChanged) {
             updateLocationParametersForState();
         }
 
