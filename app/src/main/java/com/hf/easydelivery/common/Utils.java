@@ -64,6 +64,7 @@ public class Utils {
     private static final Pattern DOUBLE_NUMBER_PREFIX = Pattern.compile("^\\s*(\\d{1,4})\\s+(\\d{1,5})\\b");
     private static final Pattern HASH_ONLY_PREFIX = Pattern.compile("^\\s*#\\s*(\\w{1,8})\\b");
     private static final Pattern GENERIC_NUMBER_PATTERN = Pattern.compile("\\b(\\d{1,5}[A-Za-z]?)\\b");
+    private static final Pattern POSTAL_CODE_CA = Pattern.compile("(?i)\\b[A-Z]\\d[A-Z]\\d[A-Z]\\d\\b");
     private static final Pattern UNIT_KEYWORD_GLOBAL = Pattern.compile(
             "(?i)(?:\\b(?:apt|apartment|unit|suite|ste|rm|room|ph|buzzer|fl|floor|lvl|level|entrance|door|code|bldg|building|locker|buzz)\\s*[:#-]?\\s*(\\w{1,8}))"
     );
@@ -186,11 +187,13 @@ public class Utils {
             }
         }
 
-        Matcher hashTail = Pattern.compile("(?i)(\\d+[A-Za-z]?)\\s*$").matcher(text);
-        if (hashTail.find()) {
-            String candidate = hashTail.group(1);
-            if (!candidate.equalsIgnoreCase(streetNumber)) {
-                return candidate;
+        if (!POSTAL_CODE_CA.matcher(text).find()) {
+            Matcher hashTail = Pattern.compile("(?i)(\\d+[A-Za-z]?)\\s*$").matcher(text);
+            if (hashTail.find()) {
+                String candidate = hashTail.group(1);
+                if (!candidate.equalsIgnoreCase(streetNumber)) {
+                    return candidate;
+                }
             }
         }
         return "";

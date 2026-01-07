@@ -511,6 +511,10 @@ public class PendingPackagesMgr implements Subscriber {
                     file = new File(path);
                 }
                 if (file.exists() && file.isFile()) {
+                    // Preserve saved apartment photos used for auto-fill.
+                    if (file.getAbsolutePath().contains(File.separator + "apartment_photos" + File.separator)) {
+                        continue;
+                    }
                     boolean deleted = file.delete();
 
                 }
