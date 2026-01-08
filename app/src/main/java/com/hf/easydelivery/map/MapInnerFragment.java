@@ -87,6 +87,7 @@ import com.hf.easydelivery.service.FocusState;
 import com.hf.easydelivery.service.FocusStateRepository;
 import com.hf.easydelivery.map.CameraUpdateContext;
 import com.hf.easydelivery.core.policy.BlendedLocationPolicy;
+import com.hf.easydelivery.core.strategy.StrategyConfig;
 import com.hf.easydelivery.telemetry.Telemetry;
 import com.hf.easydelivery.map.policy.BlendedFollowPolicy;
 
@@ -2028,6 +2029,7 @@ public class MapInnerFragment extends Fragment
         String perfMode = clamped >= 0.5f ? "ECO" : "REALTIME";
         logD("perf balance -> value=" + clamped + " mode=" + perfMode);
 
+        StrategyConfig.applyPerfBalance(clamped);
         if (mSmartLocationManager != null) {
             mSmartLocationManager.setLocationPolicy(new BlendedLocationPolicy(clamped));
         }

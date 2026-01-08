@@ -73,6 +73,8 @@ import com.hf.easydelivery.core.policy.LocationPolicy;
 import com.hf.easydelivery.core.policy.LocationPolicyContext;
 import com.hf.easydelivery.core.policy.LocationRequestParams;
 import com.hf.easydelivery.core.policy.RealtimeLocationPolicy;
+import com.hf.easydelivery.core.strategy.BoostReason;
+import com.hf.easydelivery.core.strategy.StrategyManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -141,6 +143,27 @@ public class SmartLocationManager {
     private static final String BOOST_REASON_PROXIMITY = "proximity";
     private static final String BOOST_REASON_MANUAL = "manual";
     // ✅ PREDICTION_HORIZON_SEC removed - now dynamic based on speed
+
+    private static BoostReason mapBoostReason(@Nullable String reason) {
+        if (reason == null) {
+            return BoostReason.UNKNOWN;
+        }
+        switch (reason) {
+            case BOOST_REASON_EDGE_RISK:
+                return BoostReason.EDGE_FALLBACK;
+            case BOOST_REASON_PROXIMITY:
+            case BOOST_REASON_INSIDE:
+                return BoostReason.PROXIMITY;
+            case BOOST_REASON_DISPLACEMENT:
+                return BoostReason.DISPLACEMENT;
+            case BOOST_REASON_EMERGENCY:
+                return BoostReason.EMERGENCY;
+            case BOOST_REASON_MOTION:
+                return BoostReason.MOTION;
+            default:
+                return BoostReason.UNKNOWN;
+        }
+    }
 
     // === Adaptive boost (temporary high-frequency updates) ===
     private static final long BOOST_MIN_INTERVAL_MS = 20_000L; // 冷却收敛
@@ -213,6 +236,7 @@ public class SmartLocationManager {
     private long currentMinDispatchIntervalMs = MIN_DISPATCH_INTERVAL_MOVING_MS;
 
     private LocationPolicy locationPolicy = new RealtimeLocationPolicy();
+    private StrategyManager strategyManager;
 
     // Low-pass for heading smoothing (0..1). Larger = quicker but noisier
     private static final float HEADING_ALPHA = 0.2f;
@@ -293,6 +317,17 @@ public class SmartLocationManager {
     }
 
     private void requestBoostInternal(long durationMs, boolean force, @NonNull String reason) {
+        if (strategyManager != null) {
+            String reasonKey = reason == null ? BOOST_REASON_UNKNOWN : reason;
+            Telemetry.counter("boost.request");
+            Telemetry.counter("boost." + reasonKey);
+            if (force) {
+                Telemetry.counter("boost.force");
+            }
+            FileLog.getInstance().debug(TAG, "requestBoost reason=" + reason + " force=" + force);
+            strategyManager.suggestBoost(mapBoostReason(reasonKey), durationMs, force);
+            return;
+        }
         long now = System.currentTimeMillis();
 
         // ✅ 架构师建议#9: 2秒内防止Boost叠加
@@ -422,6 +457,7 @@ public class SmartLocationManager {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(context);
         handler = new Handler(Looper.getMainLooper());
         activityRecognitionClient = ActivityRecognition.getClient(context);
+        strategyManager = new StrategyManager(context, this);
 
         Intent intent = new Intent(context, ActivityTransitionReceiver.class);
         activityRecognitionPendingIntent = PendingIntent.getBroadcast(context, 0, intent,
@@ -524,8 +560,10 @@ public class SmartLocationManager {
             }
         };
 
-        // Set initial update request
-        updateLocationParametersForState();
+        // Set initial update request (strategy decides actual params)
+        if (strategyManager != null) {
+            strategyManager.onLocationEngineReady();
+        }
         updateSensorState();
     }
 
@@ -1014,7 +1052,11 @@ public class SmartLocationManager {
         boostHoldUntilMs = Math.max(boostHoldUntilMs, now + Math.max(1_000L, durationMs));
         FileLog.getInstance().debug(TAG,
                 String.format("enterBurstMode durationMs=%d holdUntil=%d", durationMs, boostHoldUntilMs));
-        updateLocationParametersForState();
+        if (strategyManager != null) {
+            strategyManager.onLocationEngineReady();
+        } else {
+            updateLocationParametersForState();
+        }
         updateSensorState();
         scheduleBurstEnd();
     }
@@ -1060,9 +1102,17 @@ public class SmartLocationManager {
         }
         lastRequestedIntervalMs = -1L; // force reconfigure
         lastRequestedMinIntervalMs = -1L;
-        updateLocationParametersForState();
+        if (strategyManager != null) {
+            strategyManager.onLocationEngineReady();
+        } else {
+            updateLocationParametersForState();
+        }
     }
     private void updateLocationParametersForState() {
+        if (strategyManager != null) {
+            strategyManager.suggestRefresh("state");
+            return;
+        }
         if (locationCallback == null) {
             return;
         }
@@ -1122,6 +1172,12 @@ public class SmartLocationManager {
     private int getRecommendedPriority() {
         if (inBurstMode) {
             return Priority.PRIORITY_HIGH_ACCURACY; // Boost 模式优先
+        }
+
+        if (currentState == MovementState.WALKING
+                || currentState == MovementState.SLOW_DRIVING
+                || currentState == MovementState.NORMAL_DRIVING) {
+            return Priority.PRIORITY_HIGH_ACCURACY; // Realtime: walking/driving prefer high accuracy
         }
 
         if (isDeliveringAndIdle()) {
@@ -1225,6 +1281,49 @@ public class SmartLocationManager {
 
     public Location getLastLocation() {
         return lastLocation;
+    }
+
+    public boolean isInBurstMode() {
+        return inBurstMode;
+    }
+
+    public void applyLocationRequest(@Nullable LocationRequestParams params, @NonNull String reason) {
+        if (params == null) {
+            return;
+        }
+        currentMinDispatchIntervalMs = params.minDispatchIntervalMs;
+        FileLog.getInstance().debug(TAG,
+                String.format("applyLocationRequest reason=%s interval=%dms minInterval=%dms minDistance=%.1fm",
+                        reason,
+                        params.intervalMs,
+                        params.minIntervalMs,
+                        params.minDistanceMeters));
+        requestLocationUpdates(params.intervalMs,
+                params.minIntervalMs,
+                params.priority,
+                params.minDistanceMeters,
+                params.maxUpdateDelayMs);
+    }
+
+    public void startBurstWindowForStrategy(long durationMs, boolean force, @NonNull BoostReason reason) {
+        long duration = durationMs > 0 ? durationMs : 5_000L;
+        FileLog.getInstance().debug(TAG,
+                "startBurstWindowForStrategy reason=" + String.valueOf(reason)
+                        + " force=" + force + " durationMs=" + duration);
+        if (inBurstMode) {
+            boostHoldUntilMs = Math.max(boostHoldUntilMs, System.currentTimeMillis() + duration);
+            scheduleBurstEnd();
+            return;
+        }
+        enterBurstMode(duration);
+    }
+
+    public void forceExitBurstForStrategy(@NonNull String reason) {
+        if (!inBurstMode) {
+            return;
+        }
+        FileLog.getInstance().debug(TAG, "forceExitBurstForStrategy reason=" + reason);
+        exitBurstMode(true);
     }
 
     public MovementState getCurrentState() {
@@ -1755,12 +1854,6 @@ public class SmartLocationManager {
             return;
         long nowUptime = SystemClock.uptimeMillis();
         long minInterval = currentMinDispatchIntervalMs;
-        if (locationPolicy != null) {
-            LocationRequestParams params = locationPolicy.getRequestParams(buildLocationPolicyContext());
-            if (params != null) {
-                minInterval = params.minDispatchIntervalMs;
-            }
-        }
         if (nowUptime - lastDispatchUptimeMs < minInterval) {
             return;
         }
@@ -1780,6 +1873,9 @@ public class SmartLocationManager {
                 getElapsedRealtimeMsSafe(loc),
                 currentState));
         Telemetry.counter("dispatch");
+        if (strategyManager != null) {
+            strategyManager.onLocationDispatched(loc);
+        }
         for (LocationUpdateListener l : listeners) {
             try {
                 l.onLocationUpdate(loc, currentState);
