@@ -137,7 +137,8 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
                     selected = ProfileManager.AppProfile.ADVANCED;
                 }
                 pm.setCurrent(selected);
-                Toast.makeText(ctx, ctx.getString(R.string.dev_panel_profile_format, selected), Toast.LENGTH_SHORT).show();
+                String label = getProfileLabel(ctx, selected);
+                Toast.makeText(ctx, ctx.getString(R.string.dev_panel_profile_format, label), Toast.LENGTH_SHORT).show();
             };
 
             if (btnApplyProfile != null) {
@@ -170,6 +171,13 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
         } catch (Throwable t) {
             FileLog.getInstance().error(TAG, "setupProfileSection failed", t);
         }
+    }
+
+    private String getProfileLabel(@NonNull Context ctx, @NonNull ProfileManager.AppProfile profile) {
+        if (profile == ProfileManager.AppProfile.POWERSAVER) {
+            return ctx.getString(R.string.dev_panel_powersaver);
+        }
+        return ctx.getString(R.string.dev_panel_realtime);
     }
 
     private void populateUiWithCurrentConfigs() {
