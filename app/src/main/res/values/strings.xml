@@ -255,7 +255,7 @@
     <string name="dev_panel_realtime">Realtime</string>
     <string name="dev_panel_powersaver">PowerSaver</string>
     <string name="dev_panel_profile">Profile</string>
-    <string name="dev_panel_advanced">Advanced</string>
+    <string name="dev_panel_advanced">Realtime</string>
     <string name="dev_panel_apply_profile">Apply profile</string>
     <string name="dev_panel_proximity_config">Proximity config</string>
     <string name="dev_panel_enter_radius">enterRadiusM</string>
