@@ -9,9 +9,9 @@ public final class RealTimeStrategy implements LocationStrategy {
         return new LocationRequestParams(
                 StrategyConfig.getRealtimeIntervalMs(),
                 StrategyConfig.getRealtimeMinIntervalMs(),
-                200,
-                StrategyConfig.getRealtimeMinDistanceM(),
                 Priority.PRIORITY_HIGH_ACCURACY,
+                StrategyConfig.getRealtimeMinDistanceM(),
+                0L,
                 200L
         );
     }

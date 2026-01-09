@@ -206,11 +206,15 @@ public class SmartLocationManager {
     private static final float ACCURACY_THRESHOLD_STATE_MAX = 120f;
     private static final long POOR_SIGNAL_GRACE_PERIOD = 15_000L;
     private static final long EMERGENCY_BOOST_THRESHOLD_MS = 15_000L;
+    private static final long EMERGENCY_BOOST_COOLDOWN_MS = 15_000L;
     private static final long DRIVING_DOWNGRADE_GRACE_MS = 5_000L;
     private static final long IN_VEHICLE_GRACE_MS = 15_000L;
     private static final float DISPLACEMENT_DRIVING_OVERRIDE_M = 12f;
     private static final long MOVING_HOLD_MS = 15_000L;
     private static final long UI_FORCE_DISPATCH_MS = 1_200L;
+    private static final long SINGLE_FIX_BACKOFF_BASE_MS = 8_000L;
+    private static final long SINGLE_FIX_BACKOFF_MAX_MS = 60_000L;
+    private static final float MAX_PLAUSIBLE_SPEED_MPS = 45f;
 
     // === Heading (bearing) support via sensors ===
     private SensorManager sensorManager;
@@ -255,6 +259,9 @@ public class SmartLocationManager {
     private boolean accelBufferFilled = false;
     private int accelConsecutiveHits = 0;
     private boolean singleUpdateInFlight = false;
+    private long lastSingleFixUptimeMs = 0L;
+    private long lastEmergencyBoostUptimeMs = 0L;
+    private long singleFixBackoffMs = SINGLE_FIX_BACKOFF_BASE_MS;
 
     // 常量定义
     private static final long DELIVERING_IDLE_THRESHOLD_MS = 180_000L; // 3min: avoid red-light/traffic mis-downgrade
@@ -519,9 +526,18 @@ public class SmartLocationManager {
             // Handle the case where permission is not granted
             return;
         }
+        if (locationCallback != null) {
+            return;
+        }
 
         // 启动时重置静止计时，避免继承上次会话的“长时间静止”状态
         lastMovingTimeMs = System.currentTimeMillis();
+        lastGoodFixTime = 0L;
+        lastEmergencyBoostUptimeMs = 0L;
+        lastSingleFixUptimeMs = 0L;
+        singleFixBackoffMs = SINGLE_FIX_BACKOFF_BASE_MS;
+        lastLocation = null;
+        lastDispatchedLocation = null;
 
         locationCallback = new LocationCallback() {
             @Override
@@ -569,6 +585,9 @@ public class SmartLocationManager {
 
     private void requestLocationUpdates(long interval, long minInterval, int priority, float minDistanceMeters,
             long maxUpdateDelayMs) {
+        FileLog.getInstance().debug(TAG,
+                String.format("requestLocationUpdates call: interval=%dms minInterval=%dms maxDelay=%dms minDistance=%.1fm priority=%d",
+                        interval, minInterval, maxUpdateDelayMs, minDistanceMeters, priority));
         if (ActivityCompat.checkSelfPermission(context,
                 Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
@@ -701,21 +720,20 @@ public class SmartLocationManager {
         boolean staleFix = ageMs > 5_000L;
 
         // ✅ Bug#4修复：动态精度检查（但不立即return）
-        long timeSinceGoodFix = nowMillis - lastGoodFixTime;
-        boolean drivingState = currentState == MovementState.SLOW_DRIVING
-                || currentState == MovementState.NORMAL_DRIVING;
-        float goodThreshold = drivingState ? ACCURACY_THRESHOLD_GOOD_DRIVING : ACCURACY_THRESHOLD_GOOD;
-        float accuracyThreshold = timeSinceGoodFix > POOR_SIGNAL_GRACE_PERIOD
-                ? ACCURACY_THRESHOLD_POOR
-                : goodThreshold;
-
-        boolean lowAccuracy = newLocation.getAccuracy() > accuracyThreshold;
-        boolean poorFix = staleFix || lowAccuracy;
+        float goodThreshold = getGoodAccuracyThreshold(speed, currentState);
+        float okThreshold = getOkAccuracyThreshold(speed, currentState);
+        boolean plausible = isPlausibleFix(newLocation, lastLocation);
+        boolean okFix = !staleFix
+                && newLocation.getAccuracy() > goodThreshold
+                && newLocation.getAccuracy() <= okThreshold
+                && plausible;
+        boolean goodFix = !staleFix && newLocation.getAccuracy() <= goodThreshold;
+        boolean poorFix = !goodFix && !okFix;
 
         if (poorFix) {
             FileLog.getInstance().debug(TAG,
-                    String.format("Poor fix: acc=%.1fm(thr=%.1fm) stale=%s age=%dms",
-                            newLocation.getAccuracy(), accuracyThreshold, String.valueOf(staleFix), ageMs));
+                    String.format("Poor fix: acc=%.1fm(good<=%.1f ok<=%.1f) stale=%s age=%dms",
+                            newLocation.getAccuracy(), goodThreshold, okThreshold, String.valueOf(staleFix), ageMs));
 
             // ✅ Bugfix: 即使点很旧，如果位移很大且精度尚可，也预研判为“运动开始”触发提频
             if (staleFix && lastLocation != null && newLocation.getAccuracy() <= ACCURACY_THRESHOLD_POOR) {
@@ -725,15 +743,19 @@ public class SmartLocationManager {
             FileLog.getInstance().debug(TAG, "dispatch fallback (limited motion update)");
         }
 
-        // Record last good fix time using strict GOOD threshold
-        if (!staleFix && newLocation.getAccuracy() <= goodThreshold) {
+        // Record last good fix time using GOOD or OK threshold
+        if (goodFix || okFix) {
             lastGoodFixTime = nowMillis;
+            singleFixBackoffMs = SINGLE_FIX_BACKOFF_BASE_MS;
         }
 
         // ✅ Bug#4修复：Emergency Boost基于 last GOOD fix 的时间，避免UI断流
-        if (prevGood != null) {
-            long timeSinceLastGood = nowMillis - prevGood.getTime();
-            if (timeSinceLastGood > EMERGENCY_BOOST_THRESHOLD_MS && !inBurstMode) {
+        if (lastGoodFixTime > 0L) {
+            long timeSinceLastGood = nowMillis - lastGoodFixTime;
+            if (timeSinceLastGood > EMERGENCY_BOOST_THRESHOLD_MS
+                    && !inBurstMode
+                    && nowUptime - lastEmergencyBoostUptimeMs > EMERGENCY_BOOST_COOLDOWN_MS) {
+                lastEmergencyBoostUptimeMs = nowUptime;
                 FileLog.getInstance().debug(TAG,
                         String.format("Emergency boost: no good fix for %ds", timeSinceLastGood / 1000));
                 requestBoost(8_000L, BOOST_REASON_EMERGENCY);
@@ -748,12 +770,12 @@ public class SmartLocationManager {
         if (poorFix) {
             // If we still don't have any good fix, try single high accuracy fix to
             // bootstrap
-            if (lastGoodFixTime == 0L && !singleUpdateInFlight) {
+            if (lastGoodFixTime == 0L && shouldRequestSingleFix()) {
                 requestSingleHighAccuracyFix();
             }
             // Stale fix even after having good ones: try to pull a fresh high-accuracy fix
             // once
-            if (staleFix && !singleUpdateInFlight) {
+            if (staleFix && shouldRequestSingleFix()) {
                 requestSingleHighAccuracyFix();
             }
 
@@ -1266,6 +1288,7 @@ public class SmartLocationManager {
         if (fusedLocationClient != null && locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
         }
+        locationCallback = null;
         if (pendingReconfigure != null) {
             handler.removeCallbacks(pendingReconfigure);
             pendingReconfigure = null;
@@ -1675,6 +1698,12 @@ public class SmartLocationManager {
                 Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
+        long nowUptime = SystemClock.elapsedRealtime();
+        if (nowUptime - lastSingleFixUptimeMs < singleFixBackoffMs) {
+            return;
+        }
+        lastSingleFixUptimeMs = nowUptime;
+        singleFixBackoffMs = Math.min(singleFixBackoffMs * 2L, SINGLE_FIX_BACKOFF_MAX_MS);
         singleUpdateInFlight = true;
         CancellationTokenSource tokenSource = new CancellationTokenSource();
         try {
@@ -1770,6 +1799,54 @@ public class SmartLocationManager {
         predicted.setBearing(heading);
         predicted.setSpeed(speedMps);
         return predicted;
+    }
+
+    private boolean shouldRequestSingleFix() {
+        long nowUptime = SystemClock.elapsedRealtime();
+        return !singleUpdateInFlight
+                && nowUptime - lastSingleFixUptimeMs >= singleFixBackoffMs;
+    }
+
+    private float getGoodAccuracyThreshold(float speedMps, @NonNull MovementState state) {
+        boolean driving = state == MovementState.SLOW_DRIVING
+                || state == MovementState.NORMAL_DRIVING
+                || speedMps > 5f;
+        if (driving) {
+            return 60f;
+        }
+        if (state == MovementState.WALKING) {
+            return 45f;
+        }
+        return 35f;
+    }
+
+    private float getOkAccuracyThreshold(float speedMps, @NonNull MovementState state) {
+        boolean driving = state == MovementState.SLOW_DRIVING
+                || state == MovementState.NORMAL_DRIVING
+                || speedMps > 5f;
+        if (driving) {
+            return 90f;
+        }
+        if (state == MovementState.WALKING) {
+            return 70f;
+        }
+        return 60f;
+    }
+
+    private boolean isPlausibleFix(@NonNull Location current, @Nullable Location reference) {
+        if (reference == null) {
+            return true;
+        }
+        long curElapsed = getElapsedRealtimeMsSafe(current);
+        long refElapsed = getElapsedRealtimeMsSafe(reference);
+        long dtMs = (curElapsed > 0 && refElapsed > 0) ? (curElapsed - refElapsed)
+                : (current.getTime() - reference.getTime());
+        if (dtMs <= 0) {
+            return false;
+        }
+        float distance = reference.distanceTo(current);
+        float speedMps = distance / (dtMs / 1000f);
+        return speedMps <= MAX_PLAUSIBLE_SPEED_MPS;
     }
 
     /**
