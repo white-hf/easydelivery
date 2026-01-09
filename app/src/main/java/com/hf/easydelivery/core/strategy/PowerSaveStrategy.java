@@ -21,9 +21,9 @@ public final class PowerSaveStrategy implements LocationStrategy {
         return new LocationRequestParams(
                 interval,
                 StrategyConfig.getPowerSaveMinIntervalMs(),
-                2_000,
-                minDistance,
                 Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                minDistance,
+                2_000L,
                 800L
         );
     }
