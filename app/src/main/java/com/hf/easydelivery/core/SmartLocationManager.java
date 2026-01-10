@@ -532,10 +532,6 @@ public class SmartLocationManager {
         if (foregroundTrackingActive) {
             return;
         }
-        if (locationCallback != null) {
-            return;
-        }
-
         // 启动时重置静止计时，避免继承上次会话的“长时间静止”状态
         lastMovingTimeMs = System.currentTimeMillis();
         lastGoodFixTime = 0L;
@@ -545,7 +541,8 @@ public class SmartLocationManager {
         lastLocation = null;
         lastDispatchedLocation = null;
 
-        locationCallback = new LocationCallback() {
+        if (locationCallback == null) {
+            locationCallback = new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult locationResult) {
                 if (locationResult == null) {
@@ -581,6 +578,7 @@ public class SmartLocationManager {
                 updateLocation(last);
             }
         };
+        }
 
         // Set initial update request (strategy decides actual params)
         if (strategyManager != null) {
@@ -1382,6 +1380,7 @@ public class SmartLocationManager {
             }
         } catch (Throwable t) {
             foregroundTrackingActive = false;
+            startLocationUpdates();
             FileLog.getInstance().error(TAG, "startForegroundTracking failed", t);
         }
     }
