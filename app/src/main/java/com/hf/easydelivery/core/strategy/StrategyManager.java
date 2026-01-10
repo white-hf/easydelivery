@@ -70,10 +70,12 @@ public final class StrategyManager implements ProfileManager.Listener {
     }
 
     public void suggestBoost(@NonNull BoostReason reason, long durationMs, boolean force) {
-        if (currentMode != StrategyMode.POWERSAVE) {
+        if (!appForeground) {
             return;
         }
-        if (!appForeground) {
+        if (currentMode == StrategyMode.REALTIME) {
+            long dur = durationMs > 0 ? durationMs : StrategyConfig.getBurstDurationMs();
+            smartLocationManager.startBurstWindowForStrategy(dur, force, reason);
             return;
         }
         if (!isDisplacementLargeEnough() && !force) {

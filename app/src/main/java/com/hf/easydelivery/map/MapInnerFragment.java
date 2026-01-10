@@ -1423,6 +1423,7 @@ public class MapInnerFragment extends Fragment
         mapViewModel.updateMyLocation(location);
         mLastLocation = location;
         lastMovementState = state;
+        updateForegroundTracking();
         if (googleMap == null || cameraController == null)
             return;
         // --- Map-layer UI effective location (quality gating + smoothing) ---
@@ -1647,6 +1648,7 @@ public class MapInnerFragment extends Fragment
         if (mSmartLocationManager != null) {
             mSmartLocationManager.setUiFollowActive(false);
         }
+        updateForegroundTracking();
     }
 
     private void clearAutoFollowPause() {
@@ -1659,6 +1661,7 @@ public class MapInnerFragment extends Fragment
         if (mSmartLocationManager != null) {
             mSmartLocationManager.setUiFollowActive(true);
         }
+        updateForegroundTracking();
     }
 
     private void clearCommuteSuppression() {
@@ -2190,6 +2193,7 @@ public class MapInnerFragment extends Fragment
             mSmartLocationManager.addLocationUpdateListener(this);
             mSmartLocationManager.startLocationUpdates();
         }
+        updateForegroundTracking();
         updateUiTickInterval();
         scheduleUiTick();
     }
@@ -2208,8 +2212,25 @@ public class MapInnerFragment extends Fragment
             mSmartLocationManager.setUiFollowActive(false);
             mSmartLocationManager.stopLocationUpdates();
         }
+        updateForegroundTracking();
         cameraUpdateHandler.removeCallbacks(uiTickRunnable);
         requireActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    private void updateForegroundTracking() {
+        if (mSmartLocationManager == null || profileManager == null) {
+            return;
+        }
+        boolean realtime = profileManager.getCurrent() != ProfileManager.AppProfile.POWERSAVER;
+        boolean followActive = !autoFollowPausedByGesture;
+        boolean driving = lastMovementState == SmartLocationManager.MovementState.SLOW_DRIVING
+                || lastMovementState == SmartLocationManager.MovementState.NORMAL_DRIVING;
+        boolean shouldEnable = isResumed() && realtime && followActive && driving;
+        if (shouldEnable && !mSmartLocationManager.isForegroundTrackingActive()) {
+            mSmartLocationManager.startForegroundTracking();
+        } else if (!shouldEnable && mSmartLocationManager.isForegroundTrackingActive()) {
+            mSmartLocationManager.stopForegroundTracking(isResumed());
+        }
     }
 
     @Override

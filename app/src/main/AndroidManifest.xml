@@ -120,6 +120,10 @@
             android:name=".service.LockScreenNotificationService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".service.LocationForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <!-- 已迁移为Fragment的Activity可全部移除，如需保留调试可注释
         <activity

@@ -28,6 +28,10 @@ public final class StrategyConfig {
     private static volatile long realtimeIntervalMs = 1500L;
     private static volatile long realtimeMinIntervalMs = 800L;
     private static volatile float realtimeMinDistanceM = 0.5f;
+    private static volatile long burstIntervalMs = 1000L;
+    private static volatile long burstMinIntervalMs = 1000L;
+    private static volatile float burstMinDistanceM = 0.5f;
+    private static volatile long burstMaxDelayMs = 800L;
 
     private static volatile long powerSaveCooldownMs = 30_000L;
     private static volatile long powerSaveIntervalMovingMs = 10_000L;
@@ -145,5 +149,37 @@ public final class StrategyConfig {
 
     public static void setBurstDurationMs(long value) {
         burstDurationMs = Math.max(5_000L, value);
+    }
+
+    public static long getBurstIntervalMs() {
+        return burstIntervalMs;
+    }
+
+    public static void setBurstIntervalMs(long value) {
+        burstIntervalMs = Math.max(500L, value);
+    }
+
+    public static long getBurstMinIntervalMs() {
+        return burstMinIntervalMs;
+    }
+
+    public static void setBurstMinIntervalMs(long value) {
+        burstMinIntervalMs = Math.max(250L, value);
+    }
+
+    public static float getBurstMinDistanceM() {
+        return burstMinDistanceM;
+    }
+
+    public static void setBurstMinDistanceM(float value) {
+        burstMinDistanceM = Math.max(0f, value);
+    }
+
+    public static long getBurstMaxDelayMs() {
+        return burstMaxDelayMs;
+    }
+
+    public static void setBurstMaxDelayMs(long value) {
+        burstMaxDelayMs = Math.max(0L, value);
     }
 }

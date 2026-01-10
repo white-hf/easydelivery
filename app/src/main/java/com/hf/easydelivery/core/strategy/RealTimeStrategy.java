@@ -6,6 +6,16 @@ import com.google.android.gms.location.Priority;
 public final class RealTimeStrategy implements LocationStrategy {
     @Override
     public LocationRequestParams getParams(LocationContext context) {
+        if (context.inBurst) {
+            return new LocationRequestParams(
+                    StrategyConfig.getBurstIntervalMs(),
+                    StrategyConfig.getBurstMinIntervalMs(),
+                    Priority.PRIORITY_HIGH_ACCURACY,
+                    StrategyConfig.getBurstMinDistanceM(),
+                    StrategyConfig.getBurstMaxDelayMs(),
+                    200L
+            );
+        }
         return new LocationRequestParams(
                 StrategyConfig.getRealtimeIntervalMs(),
                 StrategyConfig.getRealtimeMinIntervalMs(),
