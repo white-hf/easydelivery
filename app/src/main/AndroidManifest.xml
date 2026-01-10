@@ -113,7 +113,7 @@
             android:value="${MAPS_API_KEY}" />
 
         <!-- 位置信息广播 -->
-        <receiver android:name=".SmartLocationManager$ActivityTransitionReceiver" />
+        <receiver android:name=".core.activity.ActivityTransitionMonitor$ActivityTransitionReceiver" />
 
         <!-- 锁屏配送通知服务 -->
         <service

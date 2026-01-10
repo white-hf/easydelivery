@@ -28,7 +28,7 @@ public final class RealTimeStrategy implements LocationStrategy {
 
     @Override
     public boolean supportsBurst() {
-        return false;
+        return true;
     }
 
     @Override
