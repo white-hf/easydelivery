@@ -74,6 +74,7 @@ import com.hf.easydelivery.core.policy.LocationPolicyContext;
 import com.hf.easydelivery.core.policy.LocationRequestParams;
 import com.hf.easydelivery.core.policy.RealtimeLocationPolicy;
 import com.hf.easydelivery.core.strategy.BoostReason;
+import com.hf.easydelivery.core.strategy.StrategyConfig;
 import com.hf.easydelivery.core.strategy.StrategyManager;
 
 import java.util.ArrayList;
@@ -215,6 +216,7 @@ public class SmartLocationManager {
     private static final long SINGLE_FIX_BACKOFF_BASE_MS = 8_000L;
     private static final long SINGLE_FIX_BACKOFF_MAX_MS = 60_000L;
     private static final float MAX_PLAUSIBLE_SPEED_MPS = 45f;
+    private static final float MAX_PLAUSIBLE_SPEED_MPS_GOOD = 60f;
 
     // === Heading (bearing) support via sensors ===
     private SensorManager sensorManager;
@@ -262,6 +264,7 @@ public class SmartLocationManager {
     private long lastSingleFixUptimeMs = 0L;
     private long lastEmergencyBoostUptimeMs = 0L;
     private long singleFixBackoffMs = SINGLE_FIX_BACKOFF_BASE_MS;
+    private volatile boolean foregroundTrackingActive = false;
 
     // 常量定义
     private static final long DELIVERING_IDLE_THRESHOLD_MS = 180_000L; // 3min: avoid red-light/traffic mis-downgrade
@@ -292,7 +295,7 @@ public class SmartLocationManager {
         else {
             if (context == null)
                 return null;
-            instance = new SmartLocationManager(context);
+            instance = new SmartLocationManager(context.getApplicationContext());
         }
         return instance;
     }
@@ -460,19 +463,19 @@ public class SmartLocationManager {
     }
 
     private SmartLocationManager(Context context) {
-        this.context = context;
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(context);
+        this.context = context.getApplicationContext();
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this.context);
         handler = new Handler(Looper.getMainLooper());
-        activityRecognitionClient = ActivityRecognition.getClient(context);
-        strategyManager = new StrategyManager(context, this);
+        activityRecognitionClient = ActivityRecognition.getClient(this.context);
+        strategyManager = new StrategyManager(this.context, this);
 
-        Intent intent = new Intent(context, ActivityTransitionReceiver.class);
-        activityRecognitionPendingIntent = PendingIntent.getBroadcast(context, 0, intent,
+        Intent intent = new Intent(this.context, ActivityTransitionReceiver.class);
+        activityRecognitionPendingIntent = PendingIntent.getBroadcast(this.context, 0, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         registerActivityTransitionUpdates();
 
-        sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
+        sensorManager = (SensorManager) this.context.getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
             rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
             linearAccelerationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
@@ -524,6 +527,9 @@ public class SmartLocationManager {
         if (ActivityCompat.checkSelfPermission(context,
                 Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // Handle the case where permission is not granted
+            return;
+        }
+        if (foregroundTrackingActive) {
             return;
         }
         if (locationCallback != null) {
@@ -717,17 +723,18 @@ public class SmartLocationManager {
         } else {
             ageMs = nowMillis - newLocation.getTime();
         }
-        boolean staleFix = ageMs > 5_000L;
+        boolean staleFix = ageMs > getStaleThresholdMs();
 
         // ✅ Bug#4修复：动态精度检查（但不立即return）
         float goodThreshold = getGoodAccuracyThreshold(speed, currentState);
         float okThreshold = getOkAccuracyThreshold(speed, currentState);
-        boolean plausible = isPlausibleFix(newLocation, lastLocation);
+        boolean plausible = isPlausibleFix(newLocation, lastLocation, MAX_PLAUSIBLE_SPEED_MPS);
+        boolean plausibleGood = isPlausibleFix(newLocation, lastLocation, MAX_PLAUSIBLE_SPEED_MPS_GOOD);
         boolean okFix = !staleFix
                 && newLocation.getAccuracy() > goodThreshold
                 && newLocation.getAccuracy() <= okThreshold
                 && plausible;
-        boolean goodFix = !staleFix && newLocation.getAccuracy() <= goodThreshold;
+        boolean goodFix = !staleFix && newLocation.getAccuracy() <= goodThreshold && plausibleGood;
         boolean poorFix = !goodFix && !okFix;
 
         if (poorFix) {
@@ -1142,12 +1149,13 @@ public class SmartLocationManager {
                 ? locationPolicy.getRequestParams(buildLocationPolicyContext())
                 : null;
         long interval = params != null ? params.intervalMs
-                : (inBurstMode ? getBurstModeInterval() : getRecommendedUpdateInterval());
+                : (inBurstMode ? StrategyConfig.getBurstIntervalMs() : getRecommendedUpdateInterval());
         long minInterval = params != null ? params.minIntervalMs
-                : (inBurstMode ? getBurstModeInterval() : getMinUpdateInterval());
+                : (inBurstMode ? StrategyConfig.getBurstMinIntervalMs() : getMinUpdateInterval());
         int priority = params != null ? params.priority : getRecommendedPriority();
         float minDistance = params != null ? params.minDistanceMeters : getMinUpdateDistanceMeters();
-        long maxDelay = params != null ? params.maxUpdateDelayMs : 800L;
+        long maxDelay = params != null ? params.maxUpdateDelayMs
+                : (inBurstMode ? StrategyConfig.getBurstMaxDelayMs() : 800L);
         currentMinDispatchIntervalMs = params != null ? params.minDispatchIntervalMs
                 : (currentState == MovementState.STATIONARY && !movingFlag
                         ? MIN_DISPATCH_INTERVAL_STATIONARY_MS
@@ -1215,7 +1223,7 @@ public class SmartLocationManager {
      */
     private long getRecommendedUpdateInterval() {
         if (inBurstMode) {
-            return INTERVAL_DRIVING_NORMAL_MS; // Boost 模式优先
+            return StrategyConfig.getBurstIntervalMs();
         }
 
         if (isDeliveringAndIdle()) {
@@ -1241,7 +1249,7 @@ public class SmartLocationManager {
      */
     private long getMinUpdateInterval() {
         if (inBurstMode) {
-            return MIN_INTERVAL_DRIVING_NORMAL_MS; // Boost 模式优先
+            return StrategyConfig.getBurstMinIntervalMs();
         }
 
         if (isDeliveringAndIdle()) {
@@ -1263,7 +1271,7 @@ public class SmartLocationManager {
 
     private float getMinUpdateDistanceMeters() {
         if (inBurstMode) {
-            return 0.5f;
+            return StrategyConfig.getBurstMinDistanceM();
         }
         if (isDeliveringAndIdle()) {
             return 8.0f;
@@ -1281,7 +1289,7 @@ public class SmartLocationManager {
     }
 
     private long getBurstModeInterval() {
-        return 1000; // 1 second during burst mode
+        return StrategyConfig.getBurstIntervalMs();
     }
 
     public void stopLocationUpdates() {
@@ -1289,6 +1297,11 @@ public class SmartLocationManager {
             fusedLocationClient.removeLocationUpdates(locationCallback);
         }
         locationCallback = null;
+        lastRequestedIntervalMs = -1L;
+        lastRequestedMinIntervalMs = -1L;
+        lastRequestedPriority = -1;
+        lastRequestedMinDistanceM = -1f;
+        lastRequestedMaxDelayMs = -1L;
         if (pendingReconfigure != null) {
             handler.removeCallbacks(pendingReconfigure);
             pendingReconfigure = null;
@@ -1296,6 +1309,7 @@ public class SmartLocationManager {
         hasPendingRequest = false;
         stopHeadingUpdates();
         stopMotionWakeMonitoring();
+        unregisterActivityTransitionUpdates();
         if (burstModeRunnableRef != null) {
             handler.removeCallbacks(burstModeRunnableRef);
             burstModeRunnableRef = null;
@@ -1315,6 +1329,9 @@ public class SmartLocationManager {
             return;
         }
         currentMinDispatchIntervalMs = params.minDispatchIntervalMs;
+        if (foregroundTrackingActive) {
+            return;
+        }
         FileLog.getInstance().debug(TAG,
                 String.format("applyLocationRequest reason=%s interval=%dms minInterval=%dms minDistance=%.1fm",
                         reason,
@@ -1347,6 +1364,55 @@ public class SmartLocationManager {
         }
         FileLog.getInstance().debug(TAG, "forceExitBurstForStrategy reason=" + reason);
         exitBurstMode(true);
+    }
+
+    public void startForegroundTracking() {
+        if (foregroundTrackingActive) {
+            return;
+        }
+        foregroundTrackingActive = true;
+        stopLocationUpdates();
+        try {
+            Intent intent = new Intent(context, com.hf.easydelivery.service.LocationForegroundService.class);
+            intent.setAction(com.hf.easydelivery.service.LocationForegroundService.ACTION_START);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent);
+            } else {
+                context.startService(intent);
+            }
+        } catch (Throwable t) {
+            foregroundTrackingActive = false;
+            FileLog.getInstance().error(TAG, "startForegroundTracking failed", t);
+        }
+    }
+
+    public void stopForegroundTracking() {
+        stopForegroundTracking(true);
+    }
+
+    public void stopForegroundTracking(boolean resumeNormal) {
+        if (!foregroundTrackingActive) {
+            return;
+        }
+        foregroundTrackingActive = false;
+        try {
+            Intent intent = new Intent(context, com.hf.easydelivery.service.LocationForegroundService.class);
+            intent.setAction(com.hf.easydelivery.service.LocationForegroundService.ACTION_STOP);
+            context.startService(intent);
+        } catch (Throwable t) {
+            FileLog.getInstance().error(TAG, "stopForegroundTracking failed", t);
+        }
+        if (resumeNormal) {
+            startLocationUpdates();
+        }
+    }
+
+    public boolean isForegroundTrackingActive() {
+        return foregroundTrackingActive;
+    }
+
+    public void onForegroundLocation(@NonNull Location location) {
+        updateLocation(location);
     }
 
     public MovementState getCurrentState() {
@@ -1406,6 +1472,23 @@ public class SmartLocationManager {
             activityRecognitionClient.requestActivityTransitionUpdates(request, activityRecognitionPendingIntent);
         } catch (SecurityException se) {
             FileLog.getInstance().warning(TAG, "registerActivityTransitionUpdates failed", se.getMessage());
+        }
+    }
+
+    private void unregisterActivityTransitionUpdates() {
+        if (activityRecognitionClient == null || activityRecognitionPendingIntent == null) {
+            return;
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (ActivityCompat.checkSelfPermission(context,
+                        Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
+            }
+            activityRecognitionClient.removeActivityTransitionUpdates(activityRecognitionPendingIntent);
+        } catch (SecurityException se) {
+            FileLog.getInstance().warning(TAG, "unregisterActivityTransitionUpdates failed", se.getMessage());
         }
     }
 
@@ -1833,7 +1916,17 @@ public class SmartLocationManager {
         return 60f;
     }
 
-    private boolean isPlausibleFix(@NonNull Location current, @Nullable Location reference) {
+    private long getStaleThresholdMs() {
+        if (foregroundTrackingActive || inBurstMode) {
+            return 5_000L;
+        }
+        if (lastRequestedMaxDelayMs > 0L) {
+            return Math.max(5_000L, lastRequestedMaxDelayMs + 5_000L);
+        }
+        return 5_000L;
+    }
+
+    private boolean isPlausibleFix(@NonNull Location current, @Nullable Location reference, float maxSpeedMps) {
         if (reference == null) {
             return true;
         }
@@ -1846,7 +1939,7 @@ public class SmartLocationManager {
         }
         float distance = reference.distanceTo(current);
         float speedMps = distance / (dtMs / 1000f);
-        return speedMps <= MAX_PLAUSIBLE_SPEED_MPS;
+        return speedMps <= maxSpeedMps;
     }
 
     /**
