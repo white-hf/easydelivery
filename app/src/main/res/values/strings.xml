@@ -354,6 +354,10 @@
     <string name="full_image_invalid_path">Image path is invalid</string>
     <string name="pending_save_failed">Failed to save package data. Please try again later.</string>
     <string name="dev_panel_profile_format">Profile: %1$s</string>
+    <string name="fg_location_channel_name">Realtime Location</string>
+    <string name="fg_location_channel_desc">Keeps location updates active in realtime mode.</string>
+    <string name="fg_location_title">Realtime location active</string>
+    <string name="fg_location_text">Updating location for map follow.</string>
     <string name="dev_panel_inside_boost_format">Inside boost %1$s</string>
     <string name="dev_panel_state_on">ON</string>
     <string name="dev_panel_state_off">OFF</string>
