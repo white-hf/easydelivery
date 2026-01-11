@@ -73,12 +73,13 @@ import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.common.Utils;
-import com.hf.easydelivery.core.SmartLocationManager;
 import com.hf.easydelivery.core.facade.LocationControls;
 import com.hf.easydelivery.core.facade.LocationFacade;
 import com.hf.easydelivery.core.facade.LocationSnapshot;
 import com.hf.easydelivery.core.facade.MovementState;
 import com.hf.easydelivery.core.facade.LocationUpdateListener;
+import com.hf.easydelivery.core.facade.LocationFacadeProvider;
+import com.hf.easydelivery.core.facade.DefaultLocationFacadeProvider;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.view.Adapter.ClusterParcelAdapter;
 import com.hf.easydelivery.view.CameraActivity;
@@ -224,6 +225,8 @@ public class MapInnerFragment extends Fragment
 
     private LocationFacade locationFacade;
     private LocationControls locationControls;
+    private final LocationFacadeProvider locationFacadeProvider =
+            DefaultLocationFacadeProvider.getInstance();
     private Location mLastLocation = null;
     private CameraUpdateContext pendingCameraContext;
     private final Handler cameraUpdateHandler = new Handler(Looper.getMainLooper());
@@ -1228,9 +1231,8 @@ public class MapInnerFragment extends Fragment
     }
 
     private void getLocation() {
-        SmartLocationManager manager = SmartLocationManager.getInstance(requireContext());
-        locationFacade = manager;
-        locationControls = manager;
+        locationFacade = locationFacadeProvider.getLocationFacade(requireContext());
+        locationControls = locationFacadeProvider.getLocationControls(requireContext());
         if (locationFacade != null) {
             applyPerfBalance(profileManager != null ? profileManager.getPerfBalance() : 0f);
             locationFacade.addLocationUpdateListener(this);

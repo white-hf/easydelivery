@@ -16,6 +16,7 @@ public final class BurstConfig {
     private static final long UI_FORCE_DISPATCH_MS = 1_200L;
     private static final long SINGLE_FIX_BACKOFF_BASE_MS = 8_000L;
     private static final long SINGLE_FIX_BACKOFF_MAX_MS = 60_000L;
+    private static final long BURST_MODE_DURATION_MS = 60_000L;
 
     public static long getBoostMinIntervalMs() {
         return BOOST_MIN_INTERVAL_MS;
@@ -67,5 +68,9 @@ public final class BurstConfig {
 
     public static long getSingleFixBackoffMaxMs() {
         return SINGLE_FIX_BACKOFF_MAX_MS;
+    }
+
+    public static long getBurstModeDurationMs() {
+        return BURST_MODE_DURATION_MS;
     }
 }
