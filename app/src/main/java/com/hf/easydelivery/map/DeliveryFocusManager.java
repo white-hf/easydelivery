@@ -10,7 +10,7 @@ import androidx.annotation.Nullable;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.courierservice.apihelper.FileLog;
 
-import com.hf.easydelivery.core.SmartLocationManager;
+import com.hf.easydelivery.core.facade.MovementState;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -966,7 +966,7 @@ public class DeliveryFocusManager {
 
     @NonNull
     public FocusDecision onLocationUpdate(@NonNull Location location,
-            @NonNull SmartLocationManager.MovementState state) {
+            @NonNull MovementState state) {
         FocusDecision d = new FocusDecision();
         if (currentDeliveries == null || currentDeliveries.isEmpty()) {
             d.hide = true;
@@ -1095,7 +1095,7 @@ public class DeliveryFocusManager {
         return distanceMeters(a.getLatitude(), a.getLongitude(), b.getLatitude(), b.getLongitude());
     }
 
-    private long minIntervalFor(@NonNull SmartLocationManager.MovementState mv, float nearestMeters) {
+    private long minIntervalFor(@NonNull MovementState mv, float nearestMeters) {
         final boolean far = nearestMeters > PROXIMITY_CONFIG.farDistMeters;
         switch (mv) {
             case NORMAL_DRIVING:
@@ -1114,7 +1114,7 @@ public class DeliveryFocusManager {
      * nearestHintMeters 可为空（NaN）则按远距处理。
      */
     private boolean shouldEvaluate(@NonNull Location loc,
-            @NonNull SmartLocationManager.MovementState mv,
+            @NonNull MovementState mv,
             float nearestHintMeters) {
         final long now = SystemClock.uptimeMillis();
 

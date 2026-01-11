@@ -64,6 +64,10 @@ import com.hf.easydelivery.core.DeliveryinfoMgr;
 import com.hf.easydelivery.core.PendingPackagesMgr;
 import com.hf.easydelivery.core.PowerSaverSelector;
 import com.hf.easydelivery.core.SmartLocationManager;
+import com.hf.easydelivery.core.facade.LocationFacade;
+import com.hf.easydelivery.core.facade.MovementState;
+import com.hf.easydelivery.core.facade.LocationSnapshot;
+import com.hf.easydelivery.core.facade.LocationUpdateListener;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.dao.PackageEntity;
 
@@ -115,7 +119,7 @@ import com.hf.easydelivery.apartment.ApartmentPhotoService.MatchResult;
  * - UI/业务逻辑保持不变（缩略图/短信/拨号/完成校验等）
  */
 public class CameraActivity extends AppCompatActivity
-        implements SensorEventListener, SmartLocationManager.LocationUpdateListener {
+        implements SensorEventListener, LocationUpdateListener {
 
     private static final String TAG = "CameraActivity";
     private static final int CAMERA_PERMISSION_REQUEST_CODE = 1001;
@@ -163,7 +167,7 @@ public class CameraActivity extends AppCompatActivity
     private ApartmentAddressKeyBuilder.KeyData apartmentKeyData;
     private MatchResult activeAutoApartmentMatch;
     private final Set<String> apartmentAutoFilePaths = new HashSet<>();
-    private SmartLocationManager smartLocationManager;
+    private LocationFacade smartLocationManager;
     private Location lastKnownLocation;
     private DeliveryInfo deliveryInfo;
 
@@ -442,12 +446,14 @@ public class CameraActivity extends AppCompatActivity
             return;
         }
         try {
-            Location snapshot = smartLocationManager.getLastSmoothedLocation();
-            if (snapshot == null) {
-                snapshot = smartLocationManager.getPredictedLocation();
-            }
+            LocationSnapshot snapshot = smartLocationManager.getSnapshot();
             if (snapshot != null) {
-                updateCurrentLocation(snapshot);
+                Location loc = snapshot.lastSmoothedLocation != null
+                        ? snapshot.lastSmoothedLocation
+                        : snapshot.lastPredictedLocation;
+                if (loc != null) {
+                    updateCurrentLocation(loc);
+                }
             }
         } catch (Exception e) {
             FileLog.getInstance().error(TAG, "refreshCurrentLocationSnapshot failed: " + e.getMessage(), e);
@@ -513,7 +519,7 @@ public class CameraActivity extends AppCompatActivity
     }
 
     @Override
-    public void onLocationUpdate(Location location, SmartLocationManager.MovementState state) {
+    public void onLocationUpdate(Location location, MovementState state) {
         if (location == null)
             return;
         updateCurrentLocation(location);
@@ -1784,21 +1790,6 @@ public class CameraActivity extends AppCompatActivity
         showNextPackageChooser(next);
     }
 
-    private List<DeliveryInfo> findNextPackages(DeliveryInfo currentInfo) {
-        if (currentInfo == null)
-            return Collections.emptyList();
-        DeliveryinfoMgr mgr = ResourceMgr.getInstance().getDeliveryinfoMgr();
-        if (mgr == null)
-            return Collections.emptyList();
-        PowerSaverSelector.Params params = new PowerSaverSelector.Params();
-        params.extraNearCount = 3;
-        params.nearRadiusMeters = 150f;
-        Location ref = buildLocationFromPackage(currentInfo);
-        if (ref == null) {
-            ref = lastKnownLocation;
-        }
-        return new PowerSaverSelector().selectNext(currentInfo, ref, mgr, params);
-    }
 
     @Nullable
     private Location buildLocationFromPackage(@Nullable DeliveryInfo info) {

@@ -14,15 +14,15 @@ import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 
-import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
-import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.core.SmartLocationManager;
+import com.hf.easydelivery.core.source.ForegroundServiceLocationSource;
+import com.hf.easydelivery.core.source.LocationSource;
 import com.hf.easydelivery.core.strategy.StrategyConfig;
 
 public class LocationForegroundService extends Service {
@@ -32,13 +32,13 @@ public class LocationForegroundService extends Service {
     private static final int NOTIFICATION_ID = 4102;
     private static final String TAG = "LocationFgService";
 
-    private FusedLocationProviderClient fusedLocationClient;
+    private LocationSource locationSource;
     private LocationCallback locationCallback;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        locationSource = new ForegroundServiceLocationSource(this);
         createNotificationChannel();
     }
 
@@ -47,10 +47,12 @@ public class LocationForegroundService extends Service {
         String action = intent != null ? intent.getAction() : null;
         if (ACTION_STOP.equals(action)) {
             stopForegroundTracking();
+            FileLog.getInstance().debug(TAG, "stopForegroundTracking completed");
             stopSelf();
             return START_NOT_STICKY;
         }
         startForeground(NOTIFICATION_ID, buildNotification());
+        FileLog.getInstance().debug(TAG, "startForeground completed");
         startForegroundTracking();
         return START_STICKY;
     }
@@ -100,7 +102,7 @@ public class LocationForegroundService extends Service {
                 .setWaitForAccurateLocation(false)
                 .build();
 
-        fusedLocationClient.requestLocationUpdates(locationRequest,
+        locationSource.requestLocationUpdates(locationRequest,
                 locationCallback,
                 Looper.getMainLooper())
                 .addOnSuccessListener(unused -> FileLog.getInstance().debug(TAG, "requestLocationUpdates success"))
@@ -108,8 +110,8 @@ public class LocationForegroundService extends Service {
     }
 
     private void stopForegroundTracking() {
-        if (fusedLocationClient != null && locationCallback != null) {
-            fusedLocationClient.removeLocationUpdates(locationCallback);
+        if (locationSource != null && locationCallback != null) {
+            locationSource.removeLocationUpdates(locationCallback);
         }
         locationCallback = null;
     }

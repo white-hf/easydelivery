@@ -6,7 +6,7 @@ import android.location.Location;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.hf.easydelivery.core.SmartLocationManager;
+import com.hf.easydelivery.core.facade.MovementState;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.courierservice.apihelper.FileLog;
 
@@ -184,7 +184,7 @@ public class InfoPillProximityController {
     // ==== Strategy interface ====
     public interface ProximityStrategy {
         @NonNull ProximityDecision evaluate(@NonNull Location loc,
-                                            @NonNull SmartLocationManager.MovementState state,
+                                            @NonNull MovementState state,
                                             @NonNull List<DeliveryInfo> pending,
                                             @NonNull InternalState s,
                                             @NonNull DeliveryFocusManager focusMgr);
@@ -249,7 +249,7 @@ public class InfoPillProximityController {
     /** Main entry. Stateless in inputs, but holds InternalState for gating/ hysteresis. */
     @NonNull
     public ProximityDecision evaluate(@NonNull Location loc,
-                                      @NonNull SmartLocationManager.MovementState movement,
+                                      @NonNull MovementState movement,
                                       @NonNull List<DeliveryInfo> pending) {
         logD("evaluate enter profile=" + profile + ", mv=" + movement
                 + ", pending=" + (pending==null?0:pending.size())
@@ -325,7 +325,7 @@ public class InfoPillProximityController {
     private static final class BasicProximityStrategy implements ProximityStrategy {
         @NonNull @Override
         public ProximityDecision evaluate(@NonNull Location loc,
-                                          @NonNull SmartLocationManager.MovementState state,
+                                          @NonNull MovementState state,
                                           @NonNull List<DeliveryInfo> pending,
                                           @NonNull InternalState s,
                                           @NonNull DeliveryFocusManager focusMgr) {
@@ -379,7 +379,7 @@ public class InfoPillProximityController {
     private static final class StandardProximityStrategy implements ProximityStrategy {
         @NonNull @Override
         public ProximityDecision evaluate(@NonNull Location loc,
-                                          @NonNull SmartLocationManager.MovementState state,
+                                          @NonNull MovementState state,
                                           @NonNull List<DeliveryInfo> pending,
                                           @NonNull InternalState s,
                                           @NonNull DeliveryFocusManager focusMgr) {
@@ -490,7 +490,7 @@ public class InfoPillProximityController {
     private final class AdvancedProximityStrategy implements ProximityStrategy {
         @NonNull @Override
         public ProximityDecision evaluate(@NonNull Location loc,
-                                          @NonNull SmartLocationManager.MovementState mv,
+                                          @NonNull MovementState mv,
                                           @NonNull List<DeliveryInfo> pending,
                                           @NonNull InternalState s,
                                           @NonNull DeliveryFocusManager focusMgr) {
@@ -608,7 +608,7 @@ public class InfoPillProximityController {
         }
     }
 
-    private boolean isSlowMovement(@NonNull SmartLocationManager.MovementState mv) {
+    private boolean isSlowMovement(@NonNull MovementState mv) {
         switch (mv) {
             case STATIONARY:
             case WALKING:
@@ -621,7 +621,7 @@ public class InfoPillProximityController {
 
     private boolean etaGatePass(@NonNull Location loc,
                                 @NonNull DeliveryInfo target,
-                                @NonNull SmartLocationManager.MovementState mv,
+                                @NonNull MovementState mv,
                                 @NonNull DeliveryFocusManager.RegionConfig cfg) {
         long etaSec = -1L;
         if (etaProvider != null) {

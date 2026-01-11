@@ -25,6 +25,23 @@ public final class StrategyConfig {
     private static final long BURST_DURATION_MIN_MS = 8_000L;
     private static final long BURST_DURATION_MAX_MS = 15_000L;
 
+    private static final long MIN_DISPATCH_INTERVAL_MOVING_MS = 250L;
+    private static final long MIN_DISPATCH_INTERVAL_STATIONARY_MS = 800L;
+    private static final long DELIVERING_IDLE_THRESHOLD_MS = 180_000L;
+    private static final long INTERVAL_DRIVING_NORMAL_MS = 1_500L;
+    private static final long INTERVAL_DRIVING_SLOW_MS = 2_500L;
+    private static final long INTERVAL_WALKING_MS = 2_000L;
+    private static final long INTERVAL_DELIVERING_MS = 45_000L;
+    private static final long MIN_INTERVAL_DRIVING_NORMAL_MS = 800L;
+    private static final long MIN_INTERVAL_DRIVING_SLOW_MS = 1_500L;
+    private static final long MIN_INTERVAL_WALKING_MS = 1_000L;
+    private static final long MIN_INTERVAL_DELIVERING_MS = 30_000L;
+    private static final long DRIVING_DOWNGRADE_GRACE_MS = 5_000L;
+    private static final long IN_VEHICLE_GRACE_MS = 15_000L;
+    private static final float DISPLACEMENT_DRIVING_OVERRIDE_M = 12f;
+    private static final float MIN_PREDICTION_SPEED_MPS = 0.8f;
+    private static final double EARTH_RADIUS_METERS = 6378137.0;
+
     private static volatile long realtimeIntervalMs = 1500L;
     private static volatile long realtimeMinIntervalMs = 800L;
     private static volatile float realtimeMinDistanceM = 0.5f;
@@ -181,5 +198,69 @@ public final class StrategyConfig {
 
     public static void setBurstMaxDelayMs(long value) {
         burstMaxDelayMs = Math.max(0L, value);
+    }
+
+    public static long getMinDispatchIntervalMovingMs() {
+        return MIN_DISPATCH_INTERVAL_MOVING_MS;
+    }
+
+    public static long getMinDispatchIntervalStationaryMs() {
+        return MIN_DISPATCH_INTERVAL_STATIONARY_MS;
+    }
+
+    public static long getDeliveringIdleThresholdMs() {
+        return DELIVERING_IDLE_THRESHOLD_MS;
+    }
+
+    public static long getIntervalDrivingNormalMs() {
+        return INTERVAL_DRIVING_NORMAL_MS;
+    }
+
+    public static long getIntervalDrivingSlowMs() {
+        return INTERVAL_DRIVING_SLOW_MS;
+    }
+
+    public static long getIntervalWalkingMs() {
+        return INTERVAL_WALKING_MS;
+    }
+
+    public static long getIntervalDeliveringMs() {
+        return INTERVAL_DELIVERING_MS;
+    }
+
+    public static long getMinIntervalDrivingNormalMs() {
+        return MIN_INTERVAL_DRIVING_NORMAL_MS;
+    }
+
+    public static long getMinIntervalDrivingSlowMs() {
+        return MIN_INTERVAL_DRIVING_SLOW_MS;
+    }
+
+    public static long getMinIntervalWalkingMs() {
+        return MIN_INTERVAL_WALKING_MS;
+    }
+
+    public static long getMinIntervalDeliveringMs() {
+        return MIN_INTERVAL_DELIVERING_MS;
+    }
+
+    public static long getDrivingDowngradeGraceMs() {
+        return DRIVING_DOWNGRADE_GRACE_MS;
+    }
+
+    public static long getInVehicleGraceMs() {
+        return IN_VEHICLE_GRACE_MS;
+    }
+
+    public static float getDisplacementDrivingOverrideM() {
+        return DISPLACEMENT_DRIVING_OVERRIDE_M;
+    }
+
+    public static float getMinPredictionSpeedMps() {
+        return MIN_PREDICTION_SPEED_MPS;
+    }
+
+    public static double getEarthRadiusMeters() {
+        return EARTH_RADIUS_METERS;
     }
 }

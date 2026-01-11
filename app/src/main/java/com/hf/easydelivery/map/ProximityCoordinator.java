@@ -5,7 +5,8 @@ import android.location.Location;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.hf.easydelivery.core.SmartLocationManager;
+import com.hf.easydelivery.core.facade.MovementState;
+import com.hf.easydelivery.core.facade.LocationControls;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.courierservice.apihelper.FileLog;
 
@@ -15,13 +16,7 @@ import java.util.List;
 /**
  * ProximityCoordinator
  * --------------------
- * 协调“定位事件 → 最近包裹计算 → InfoPill 决策 → UI 回调/提频Boost”。
  *
- * 设计要点：
- * 1) 纯粹协调层：不直接操作 UI/地图；不直接依赖定位实现类；输入/输出均为纯数据。
- * 2) 可插拔：委托给 DeliveryFocusManager 做距离/集合计算；委托给 InfoPillProximityController
- * 做显隐决策。
- * 3) 可测性：核心入口 onLocation(...) 为纯函数风格（无副作用除回调），便于单测。
  * Phase 3: exposes profile & ETA hooks; centralizes nearby collection with
  * DeliveryFocusManager when available.
  */
@@ -42,24 +37,19 @@ public final class ProximityCoordinator {
 
     // ==== Listener for UI layer ====
     public interface Listener {
-        /** 进入显示态 */
         void onShow(@NonNull DeliveryInfo target,
                 float distanceMeters,
                 @NonNull List<DeliveryInfo> nearby);
 
-        /** 维持显示态的轻量更新（距离/目标变更） */
         void onUpdate(@NonNull DeliveryInfo target,
                 float distanceMeters,
                 @NonNull List<DeliveryInfo> nearby);
 
-        /** 退出显示态 */
         void onHide();
     }
 
     /**
-     * 轻量 Boost 接口，避免直接依赖具体定位实现。
-     * Map 层可用 SmartLocationManager 的适配器实现：
-     * () -> smartLocationManager.requestBoost(ms)
+     * () -> locationControls.requestBoost(ms)
      */
     public interface Boostable {
         void requestBoost(long durationMs);
@@ -76,8 +66,8 @@ public final class ProximityCoordinator {
     private Boostable boostable;
 
     // ==== Tunables ====
-    private float nearbyRadiusMeters = MapConfig.NEARBY_RADIUS_METERS; // 近邻聚合半径
-    private int nearbyLimit = MapConfig.NEARBY_LIMIT; // 近邻候选上限（用于 UI 聚合）
+    private float nearbyRadiusMeters = MapConfig.NEARBY_RADIUS_METERS;
+    private int nearbyLimit = MapConfig.NEARBY_LIMIT;
 
     // ==== Cached UI state (Phase 3: transition de-dup & observability) ====
     @Nullable
@@ -87,7 +77,6 @@ public final class ProximityCoordinator {
     private int lastNearbySize = 0; // last nearby count
     private static final float UPDATE_EPSILON_M = MapConfig.DISTANCE_EPSILON_M; // ignore sub-meter oscillation
 
-    // ✅ P2: 排序缓存（减少CPU使用）
     private static final float CACHE_INVALIDATION_DISTANCE_M = 10.0f;
     @Nullable
     private Location lastSortLocation = null;
@@ -124,11 +113,11 @@ public final class ProximityCoordinator {
         }
     }
 
-    /** Convenience: adapt SmartLocationManager to Boostable. */
-    public static Boostable asBoostable(@NonNull SmartLocationManager mgr) {
+    /** Convenience: adapt LocationControls to Boostable. */
+    public static Boostable asBoostable(@NonNull LocationControls controls) {
         return durationMs -> {
             try {
-                mgr.requestBoost(durationMs, "proximity");
+                controls.requestBoost(durationMs, "proximity");
             } catch (Throwable ignore) {
             }
         };
@@ -187,21 +176,16 @@ public final class ProximityCoordinator {
         lastVisible = false;
         lastDistanceMeters = Float.NaN;
         lastNearbySize = 0;
-        // ✅ P2: 清除排序缓存
         lastSortLocation = null;
         cachedSortedList = null;
         lastPendingListHashCode = 0;
     }
 
     /**
-     * 统一入口：由 Map 层在收到定位后调用（推荐在主线程）。
      * 
-     * @param location 当前定位（司机位置）
-     * @param state    运动状态（DRIVING/ON_FOOT/...）
-     * @param pending  待派送列表快照
      */
     public void onLocation(@NonNull Location location,
-            @NonNull SmartLocationManager.MovementState state,
+            @NonNull MovementState state,
             @NonNull List<DeliveryInfo> pending) {
         logD("onLocation enter loc=" + location.getLatitude() + "," + location.getLongitude()
                 + ", mv=" + state
@@ -213,12 +197,10 @@ public final class ProximityCoordinator {
             return;
         }
 
-        // 1) 交由策略引擎做显隐决策（内部含节流/迟滞/冷却）
         InfoPillProximityController.ProximityDecision d = proximityController.evaluate(location, state, pending);
 
         // noisy removed
 
-        // 2) 需要提频时，转发到定位层（解耦于具体实现）
         if (d.requestBoost && boostable != null) {
             try {
                 boostable.requestBoost(d.boostDurationMs);
@@ -226,12 +208,10 @@ public final class ProximityCoordinator {
             }
         }
 
-        // 3) 准备近邻集合（只有在 show/update 时才做，避免无谓计算）
         if (d.show || d.update) {
-            if (d.target == null) { // 防御：无目标则当作无事件
+            if (d.target == null) {
                 return;
             }
-            // ✅ P2: 使用缓存或重新排序
             List<DeliveryInfo> sorted = getCachedOrSort(location, pending);
             List<DeliveryInfo> nearby;
             try {
@@ -265,30 +245,22 @@ public final class ProximityCoordinator {
             return;
         }
 
-        // 4) 决策为 hide
         if (d.hide) {
             dispatchHide();
         }
     }
 
     /**
-     * ✅ P2: 获取缓存的排序列表或重新排序
      * 
-     * @param location 当前位置
-     * @param pending  待配送列表
-     * @return 排序后的top-K列表
      */
     private List<DeliveryInfo> getCachedOrSort(@NonNull Location location,
             @NonNull List<DeliveryInfo> pending) {
         int currentHashCode = System.identityHashCode(pending);
 
-        // 检查缓存是否有效
         boolean canUseCache = false;
         if (cachedSortedList != null && lastSortLocation != null) {
-            // 检查列表是否相同
             boolean sameList = (currentHashCode == lastPendingListHashCode);
 
-            // 检查距离变化
             float[] distResult = new float[1];
             android.location.Location.distanceBetween(
                     lastSortLocation.getLatitude(), lastSortLocation.getLongitude(),
@@ -307,10 +279,8 @@ public final class ProximityCoordinator {
             return cachedSortedList;
         }
 
-        // 缓存无效，重新排序
         List<DeliveryInfo> sorted = focusMgr.sortByDistance(location, pending, nearbyLimit);
 
-        // 更新缓存
         cachedSortedList = sorted;
         lastSortLocation = new Location(location); // deep copy
         lastPendingListHashCode = currentHashCode;
@@ -396,3 +366,4 @@ public final class ProximityCoordinator {
         resetState();
     }
 }
+

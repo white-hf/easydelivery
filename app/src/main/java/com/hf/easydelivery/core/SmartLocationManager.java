@@ -1,34 +1,3 @@
-/**
- * SmartLocationManager 主要逻辑（兼容原有设计，新增自适应提频能力）：
- * 1. 连续/高精度定位：根据司机运动状态（静止、步行、慢车、快车）动态调整定位间隔与精度；
- * 2. Burst 模式：由上层（如 ProximityCoordinator）在靠近包裹或需要更高精度时调用 requestBoost(...) 进入高频定位窗口，持续一定时长后恢复常规定位；
- * 3. 位置平滑：使用指数平滑算法减少 GPS 抖动，提升定位稳定性；
- * 4. 弱信号检测：当连续多次定位精度差（超出阈值）时，触发 onWeakSignal 回调提醒；
- * 5. 省电策略：静止时切换到 Significant Location Change 更新模式，避免持续高耗电。
- *
- * 【新增 / 扩展】
- * 6. 自适应临时提频（Boost）：当检测到“跳跃风险”或地图侧报告“边缘风险”时，
- *    通过 requestBoost(...) 进入临时高频定位窗口（例如 20s），窗口期内保持高频；
- *    使用统一的 inBurstMode 标志与调度，作为所有临时提频（含外部触发）的一致实现；
- * 7. 跳跃风险检测：两次定位点跨度较大且处于快速移动（如 >30m 且 >10m/s）会自动触发 Boost，
- *    以避免地图相机“到边再回中”的突兀；
- * 8. 边缘风险接口：地图侧可在蓝点离目标中心过远且速度较大时调用
- *    requestBoostIfEdgeRisk(offsetMeters, speedMps) 或直接 requestBoost(...)，
- *    以便在高速行驶场景下保持相机平滑跟随；
- * 9. 航向支持：通过旋转矢量传感器获取 heading，并进行低通滤波，提升行驶方向稳定性。
- *
- * 兼容性说明：
- * - 保持原有方法签名、状态机与回调不变；新增的 requestBoost(...) / requestBoostIfEdgeRisk(...) 为可选增强，
- *   不调用时行为与旧版一致；
- * - inBurstMode 仍作为统一高频开关，新增 Boost 与原有靠近包裹的 Burst 共用同一套进入/退出与计时调度；
- * - updateLocationParametersForState() 会在进入/退出 Boost/Burst 或运动状态变更时自动重新申请定位参数。
- * - 业务解耦：移除包裹查询触发与里程统计的直接调用，上层可通过协调器订阅定位事件并决定是否 Boost/统计。
- *
- * 建议用法：
- * - 地图渲染层可结合 200–300ms 小步动画与短期速度预测实现视觉平滑，新定位点到来用于“微校正”；
- * - 当检测到蓝点朝屏幕边缘偏离且速度较大时调用 requestBoost(20000)；靠近包裹范围内由上层协调器触发 requestBoost(...)，本类统一执行高频窗口。
- */
-
 package com.hf.easydelivery.core;
 
 import android.Manifest;
@@ -55,10 +24,11 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.CancellationTokenSource;
 import com.hf.courierservice.apihelper.FileLog;
-import com.hf.easydelivery.telemetry.Telemetry;
 import com.hf.easydelivery.core.policy.LocationPolicy;
 import com.hf.easydelivery.core.policy.LocationPolicyContext;
+import com.hf.easydelivery.core.policy.LocationPolicyContextProvider;
 import com.hf.easydelivery.core.policy.LocationRequestParams;
+import com.hf.easydelivery.core.policy.PolicyContextStateProvider;
 import com.hf.easydelivery.core.policy.RealtimeLocationPolicy;
 import com.hf.easydelivery.core.engine.RequestScheduler;
 import com.hf.easydelivery.core.strategy.BoostReason;
@@ -66,28 +36,46 @@ import com.hf.easydelivery.core.strategy.StrategyConfig;
 import com.hf.easydelivery.core.strategy.StrategyManager;
 import com.hf.easydelivery.core.quality.QualityConfig;
 import com.hf.easydelivery.core.quality.FixQualityClassifier;
+import com.hf.easydelivery.core.quality.WeakSignalMonitor;
 import com.hf.easydelivery.core.source.FusedLocationSource;
 import com.hf.easydelivery.core.state.MovementStateMachine;
 import com.hf.easydelivery.core.pipeline.LocationPipeline;
+import com.hf.easydelivery.core.pipeline.HeadingProvider;
 import com.hf.easydelivery.core.pipeline.ProcessingContext;
 import com.hf.easydelivery.core.pipeline.SmoothingProcessor;
 import com.hf.easydelivery.core.pipeline.PredictionProcessor;
+import com.hf.easydelivery.core.pipeline.StaleFilterProcessor;
+import com.hf.easydelivery.core.pipeline.QualityGateProcessor;
+import com.hf.easydelivery.core.pipeline.FallbackBuilderProcessor;
+import com.hf.easydelivery.core.pipeline.ElapsedTimeStampProcessor;
 import com.hf.easydelivery.core.pipeline.FallbackProcessor;
+import com.hf.easydelivery.core.pipeline.DefaultPredictionProvider;
+import com.hf.easydelivery.core.pipeline.PredictionProvider;
+import com.hf.easydelivery.core.pipeline.DefaultFallbackProvider;
+import com.hf.easydelivery.core.pipeline.FallbackStateProvider;
+import com.hf.easydelivery.core.pipeline.DefaultSmoothingFactorProvider;
+import com.hf.easydelivery.core.pipeline.SmoothingFactorProvider;
 import com.hf.easydelivery.core.dispatch.LocationDispatcher;
+import com.hf.easydelivery.core.dispatch.DispatchGate;
+import com.hf.easydelivery.core.facade.LocationControls;
+import com.hf.easydelivery.core.facade.LocationFacade;
+import com.hf.easydelivery.core.facade.LocationSnapshot;
+import com.hf.easydelivery.core.burst.BurstConfig;
 import com.hf.easydelivery.core.burst.BurstController;
 import com.hf.easydelivery.core.activity.ActivityTransitionMonitor;
 import com.hf.easydelivery.core.sensors.HeadingSensorController;
+import com.hf.easydelivery.core.observer.LocationEventBus;
+import com.hf.easydelivery.core.observer.FileLogLocationObserver;
+import com.hf.easydelivery.core.observer.TelemetryLocationObserver;
 
 import java.util.List;
 
 /**
- * The SmartLocationManager class provides location-related functionality and
- * try to reduce consumption of battery.
- *
- * @author jvtang
- * @since 2024-08-21
+ * Central manager for location collection, quality evaluation, and delivery-friendly
+ * dispatching. It coordinates policy, burst/boost behavior, smoothing/prediction,
+ * and listener notifications while balancing responsiveness and power usage.
  */
-public class SmartLocationManager {
+public class SmartLocationManager implements LocationFacade, LocationControls {
     private static final long BURST_MODE_DURATION_MS = 60 * 1000; // 1 minute
     private static SmartLocationManager instance;
     private static final String TAG = "SmartLocationManager";
@@ -109,23 +97,20 @@ public class SmartLocationManager {
     private long lastUpdateTime;
     private final MovementStateMachine movementStateMachine = new MovementStateMachine();
     private final FixQualityClassifier fixQualityClassifier = new FixQualityClassifier();
-    private final LocationPipeline locationPipeline = new LocationPipeline()
-            .addProcessor(new SmoothingProcessor())
-            .addProcessor(new PredictionProcessor(this::predictFutureLocation));
-    private final FallbackProcessor fallbackProcessor = new FallbackProcessor(this::buildFallbackForDispatch);
+    private final PredictionProvider predictionProvider;
+    private final SmoothingFactorProvider smoothingFactorProvider;
+    private final LocationPipeline locationPipeline;
+    private final FallbackProcessor fallbackProcessor;
     private final BurstController burstController;
-    private final java.util.Set<LocationUpdateListener> listeners = new java.util.concurrent.CopyOnWriteArraySet<>();
+    private final DispatchGate dispatchGate = new DispatchGate();
+    private final java.util.Set<com.hf.easydelivery.core.facade.LocationUpdateListener> listeners = new java.util.concurrent.CopyOnWriteArraySet<>();
     private Handler handler;
     private boolean inBurstMode = false;
     private ActivityTransitionMonitor activityTransitionMonitor;
-    private int weakSignalCount = 0;
-    private long weakSignalStartTime = 0L; // ✅ Bug fix: 弱信号时间窗口检测
-    private static final double SMOOTHING_FACTOR = 0.2; // legacy fallback; now dynamic via computeSmoothingFactor
-    private static final float WEAK_SIGNAL_THRESHOLD = 100f;
-    private static final double EARTH_RADIUS_METERS = 6378137.0;
-    private static final float MIN_PREDICTION_SPEED_MPS = 0.8f;
-    private static final long MIN_DISPATCH_INTERVAL_MOVING_MS = 250L;
-    private static final long MIN_DISPATCH_INTERVAL_STATIONARY_MS = 800L;
+    private final WeakSignalMonitor weakSignalMonitor = new WeakSignalMonitor(
+            QualityConfig.getWeakSignalRequiredHits(),
+            QualityConfig.getWeakSignalDurationMs());
+    // legacy smoothing constant removed; smoothing factor comes from provider
     private static final String BOOST_REASON_UNKNOWN = "unknown";
     private static final String BOOST_REASON_FORCE = "force";
     private static final String BOOST_REASON_EDGE_RISK = "edge_risk";
@@ -137,7 +122,6 @@ public class SmartLocationManager {
     private static final String BOOST_REASON_INSIDE = "inside_zone";
     private static final String BOOST_REASON_PROXIMITY = "proximity";
     private static final String BOOST_REASON_MANUAL = "manual";
-    // ✅ PREDICTION_HORIZON_SEC removed - now dynamic based on speed
 
     private static BoostReason mapBoostReason(@Nullable String reason) {
         if (reason == null) {
@@ -161,15 +145,6 @@ public class SmartLocationManager {
     }
 
     // === Adaptive boost (temporary high-frequency updates) ===
-    private static final long BOOST_MIN_INTERVAL_MS = 20_000L; // 冷却收敛
-    private static final long LOW_PRIORITY_BOOST_COOLDOWN_MS = 25_000L;
-    private static final long DISPLACEMENT_WAKE_WINDOW_MS = 5_000L;
-    private static final int DISPLACEMENT_WAKE_REQUIRED_HITS = 2;
-    private static final float DISPLACEMENT_WAKE_THRESHOLD_M = 25.0f;
-    private static final long EDGE_RISK_WINDOW_MS = 4_000L;
-    private static final int EDGE_RISK_REQUIRED_HITS = 2;
-    private static final long JUMP_RISK_WINDOW_MS = 5_000L;
-    private static final int JUMP_RISK_REQUIRED_HITS = 2;
     private long lastLowPriorityBoostMs = 0L;
     private int displacementWakeHits = 0;
     private long lastDisplacementWakeMs = 0L;
@@ -178,7 +153,6 @@ public class SmartLocationManager {
     private int jumpRiskHits = 0;
     private long lastJumpRiskMs = 0L;
 
-    // === 架构师建议：3分钟真静止检测 ===
     private long lastMovingTimeMs = 0L;
     private long lastGoodFixTime = 0L;
     private boolean lastDeliveringIdle = false;
@@ -191,38 +165,21 @@ public class SmartLocationManager {
     private Location lastUiLocation = null;
     private boolean uiFollowActive = false;
     private HeadingSensorController headingSensorController;
-    private static final long DRIVING_DOWNGRADE_GRACE_MS = 5_000L;
-    private static final long IN_VEHICLE_GRACE_MS = 15_000L;
-    private static final float DISPLACEMENT_DRIVING_OVERRIDE_M = 12f;
-    private static final long MOVING_HOLD_MS = 15_000L;
-    private static final long UI_FORCE_DISPATCH_MS = 1_200L;
-    private static final long SINGLE_FIX_BACKOFF_BASE_MS = 8_000L;
-    private static final long SINGLE_FIX_BACKOFF_MAX_MS = 60_000L;
 
     private RequestScheduler requestScheduler;
     private final LocationDispatcher locationDispatcher;
-    private long currentMinDispatchIntervalMs = MIN_DISPATCH_INTERVAL_MOVING_MS;
+    private long currentMinDispatchIntervalMs = StrategyConfig.getMinDispatchIntervalMovingMs();
 
     private LocationPolicy locationPolicy = new RealtimeLocationPolicy();
+    private final LocationPolicyContextProvider policyContextProvider;
     private StrategyManager strategyManager;
+    private final LocationEventBus eventBus = new LocationEventBus();
 
     private boolean singleUpdateInFlight = false;
     private long lastSingleFixUptimeMs = 0L;
     private long lastEmergencyBoostUptimeMs = 0L;
-    private long singleFixBackoffMs = SINGLE_FIX_BACKOFF_BASE_MS;
+    private long singleFixBackoffMs = BurstConfig.getSingleFixBackoffBaseMs();
     private volatile boolean foregroundTrackingActive = false;
-
-    // 常量定义
-    private static final long DELIVERING_IDLE_THRESHOLD_MS = 180_000L; // 3min: avoid red-light/traffic mis-downgrade
-    private static final long INTERVAL_DRIVING_NORMAL_MS = 1_500L;
-    private static final long INTERVAL_DRIVING_SLOW_MS = 2_500L;
-    private static final long INTERVAL_WALKING_MS = 2_000L;
-    private static final long INTERVAL_DELIVERING_MS = 45_000L;
-
-    private static final long MIN_INTERVAL_DRIVING_NORMAL_MS = 800L;
-    private static final long MIN_INTERVAL_DRIVING_SLOW_MS = 1_500L;
-    private static final long MIN_INTERVAL_WALKING_MS = 1_000L;
-    private static final long MIN_INTERVAL_DELIVERING_MS = 30_000L;
 
     public interface WeakSignalListener extends LocationUpdateListener {
         void onWeakSignal();
@@ -246,20 +203,17 @@ public class SmartLocationManager {
         return instance;
     }
 
-    public interface LocationUpdateListener {
+    public interface LocationUpdateListener extends com.hf.easydelivery.core.facade.LocationUpdateListener {
         void onLocationUpdate(Location location, MovementState state);
     }
 
     /**
-     * 请求一段时间的高频定位（可叠加延长保持时间）。
      *
-     * @param durationMs 例如 20_000（20 秒）
      */
     public void requestBoost(long durationMs) {
         requestBoostInternal(durationMs, false, BOOST_REASON_UNKNOWN);
     }
 
-    /** 用户手势/强制提频，绕过静止>3分钟限制。 */
     public void requestBoostForce(long durationMs) {
         requestBoostInternal(durationMs, true, BOOST_REASON_FORCE);
     }
@@ -275,27 +229,18 @@ public class SmartLocationManager {
     private void requestBoostInternal(long durationMs, boolean force, @NonNull String reason) {
         if (strategyManager != null) {
             String reasonKey = reason == null ? BOOST_REASON_UNKNOWN : reason;
-            Telemetry.counter("boost.request");
-            Telemetry.counter("boost." + reasonKey);
-            if (force) {
-                Telemetry.counter("boost.force");
-            }
-            FileLog.getInstance().debug(TAG, "requestBoost reason=" + reason + " force=" + force);
+            eventBus.emitBoostRequested(reasonKey, force);
+            // logged via FileLogLocationObserver
             strategyManager.suggestBoost(mapBoostReason(reasonKey), durationMs, force);
             return;
         }
         long now = System.currentTimeMillis();
 
-        // ✅ 架构师建议#9: 2秒内防止Boost叠加
-        // 防止updateMovementState + displacement wake + edge risk同时触发时叠加
         if (inBurstMode && (now - burstController.getLastChangeMs() < 2_000L)) {
             FileLog.getInstance().debug(TAG, "requestBoost debounced: already boosted recently");
             return;
         }
 
-        // ✅ 架构师建议：只有真·静止3分钟以上才拒绝提频
-        // 允许红灯、塞车时仍保持高频
-        // 启动后还没有任何有效移动时，允许一次提频获取首 fix
         if (lastMovingTimeMs == 0L) {
             lastMovingTimeMs = now;
         } else if (!force && speed < 0.3f && (now - lastMovingTimeMs > 180_000L)) {
@@ -318,12 +263,8 @@ public class SmartLocationManager {
         }
 
         String reasonKey = reason == null ? BOOST_REASON_UNKNOWN : reason;
-        Telemetry.counter("boost.request");
-        Telemetry.counter("boost." + reasonKey);
-        if (force) {
-            Telemetry.counter("boost.force");
-        }
-        FileLog.getInstance().debug(TAG, "requestBoost reason=" + reason + " force=" + force);
+        eventBus.emitBoostRequested(reasonKey, force);
+        // logged via FileLogLocationObserver
         if (durationMs <= 0)
             durationMs = 5_000L;
         if (inBurstMode) {
@@ -334,14 +275,10 @@ public class SmartLocationManager {
     }
 
     /**
-     * 便捷：地图检测到"边缘风险/不平滑风险"时调用。
      *
-     * @param offsetMeters 蓝点相对目标中心的米偏移
-     * @param speedMps     当前速度 m/s
      */
 
     public void requestBoostIfEdgeRisk(float offsetMeters, float speedMps) {
-        // ✅ 低速时不触发边缘风险Boost（只在高速移动时才有意义）
         MovementState state = getCurrentState();
         if (speedMps < 2.0f || state == MovementState.STATIONARY
                 || state == MovementState.WALKING) {
@@ -349,36 +286,36 @@ public class SmartLocationManager {
         }
 
         long now = System.currentTimeMillis();
-        if (now - lastEdgeRiskMs > EDGE_RISK_WINDOW_MS) {
+        if (now - lastEdgeRiskMs > BurstConfig.getEdgeRiskWindowMs()) {
             edgeRiskHits = 0;
         }
         if (offsetMeters > 25f && speedMps > 5f) {
             edgeRiskHits++;
             lastEdgeRiskMs = now;
         }
-        if (edgeRiskHits >= EDGE_RISK_REQUIRED_HITS
-                && now - burstController.getLastChangeMs() >= BOOST_MIN_INTERVAL_MS) {
+        if (edgeRiskHits >= BurstConfig.getEdgeRiskRequiredHits()
+                && now - burstController.getLastChangeMs() >= BurstConfig.getBoostMinIntervalMs()) {
             edgeRiskHits = 0;
             requestBoost(10_000L, BOOST_REASON_EDGE_RISK);
         }
     }
 
     private void maybeTriggerDisplacementBoost(float displacement, long nowMs, boolean requestSingleFix) {
-        if (displacement < DISPLACEMENT_WAKE_THRESHOLD_M) {
+        if (displacement < BurstConfig.getDisplacementWakeThresholdM()) {
             return;
         }
-        if (nowMs - lastDisplacementWakeMs > DISPLACEMENT_WAKE_WINDOW_MS) {
+        if (nowMs - lastDisplacementWakeMs > BurstConfig.getDisplacementWakeWindowMs()) {
             displacementWakeHits = 0;
         }
         displacementWakeHits++;
         lastDisplacementWakeMs = nowMs;
-        if (displacementWakeHits < DISPLACEMENT_WAKE_REQUIRED_HITS) {
+        if (displacementWakeHits < BurstConfig.getDisplacementWakeRequiredHits()) {
             return;
         }
-        if (nowMs - lastLowPriorityBoostMs < LOW_PRIORITY_BOOST_COOLDOWN_MS) {
+        if (nowMs - lastLowPriorityBoostMs < BurstConfig.getLowPriorityBoostCooldownMs()) {
             return;
         }
-        if (nowMs - burstController.getLastChangeMs() < BOOST_MIN_INTERVAL_MS) {
+        if (nowMs - burstController.getLastChangeMs() < BurstConfig.getBoostMinIntervalMs()) {
             return;
         }
         displacementWakeHits = 0;
@@ -392,18 +329,18 @@ public class SmartLocationManager {
     }
 
     private void maybeTriggerJumpBoost(float jumpMeters, long nowMs) {
-        if (nowMs - lastJumpRiskMs > JUMP_RISK_WINDOW_MS) {
+        if (nowMs - lastJumpRiskMs > BurstConfig.getJumpRiskWindowMs()) {
             jumpRiskHits = 0;
         }
         jumpRiskHits++;
         lastJumpRiskMs = nowMs;
-        if (jumpRiskHits < JUMP_RISK_REQUIRED_HITS) {
+        if (jumpRiskHits < BurstConfig.getJumpRiskRequiredHits()) {
             return;
         }
-        if (nowMs - lastLowPriorityBoostMs < LOW_PRIORITY_BOOST_COOLDOWN_MS) {
+        if (nowMs - lastLowPriorityBoostMs < BurstConfig.getLowPriorityBoostCooldownMs()) {
             return;
         }
-        if (nowMs - burstController.getLastChangeMs() < BOOST_MIN_INTERVAL_MS) {
+        if (nowMs - burstController.getLastChangeMs() < BurstConfig.getBoostMinIntervalMs()) {
             return;
         }
         jumpRiskHits = 0;
@@ -416,15 +353,12 @@ public class SmartLocationManager {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this.context);
         handler = new Handler(Looper.getMainLooper());
         strategyManager = new StrategyManager(this.context, this);
-        locationDispatcher = new LocationDispatcher(listeners, strategyManager);
+        locationDispatcher = new LocationDispatcher(listeners, strategyManager, eventBus);
         burstController = new BurstController(handler, new BurstController.Listener() {
             @Override
             public void onBurstEnter(long durationMs) {
                 inBurstMode = true;
-                Telemetry.counter("burst.enter");
-                Telemetry.state("burst", true);
-                FileLog.getInstance().debug(TAG,
-                        String.format("enterBurstMode durationMs=%d", durationMs));
+                eventBus.emitBurstEnter();
                 if (strategyManager != null) {
                     strategyManager.onLocationEngineReady();
                 } else {
@@ -436,10 +370,7 @@ public class SmartLocationManager {
             @Override
             public void onBurstExit(boolean fromTimer) {
                 inBurstMode = false;
-                Telemetry.counter("burst.exit");
-                Telemetry.state("burst", false);
-                FileLog.getInstance().debug(TAG,
-                        String.format("exitBurstMode fromTimer=%s", String.valueOf(fromTimer)));
+                eventBus.emitBurstExit();
                 updateSensorState();
                 if (requestScheduler != null) {
                     requestScheduler.resetLastRequested();
@@ -450,17 +381,91 @@ public class SmartLocationManager {
                     updateLocationParametersForState();
                 }
             }
-        }, BOOST_MIN_INTERVAL_MS);
+        }, BurstConfig.getBoostMinIntervalMs());
         requestScheduler = new RequestScheduler(this.context,
                 new FusedLocationSource(fusedLocationClient),
                 handler);
 
         activityTransitionMonitor = new ActivityTransitionMonitor(this.context, this::handleActivityTransition);
+        eventBus.addObserver(new TelemetryLocationObserver());
+        eventBus.addObserver(new FileLogLocationObserver());
 
         headingSensorController = new HeadingSensorController(this.context, this::handleMotionWake);
+        predictionProvider = new DefaultPredictionProvider(new HeadingProvider() {
+            @Override
+            public boolean hasReliableHeading() {
+                return SmartLocationManager.this.hasReliableHeading();
+            }
+
+            @Override
+            public float getHeadingDegrees() {
+                return SmartLocationManager.this.getCurrentHeading();
+            }
+        });
+        smoothingFactorProvider = new DefaultSmoothingFactorProvider();
+        FallbackStateProvider fallbackStateProvider = new FallbackStateProvider() {
+            @Override
+            public Location getLastPredictedLocation() {
+                return lastPredictedLocation;
+            }
+
+            @Override
+            public Location getLastDispatchedLocation() {
+                return lastDispatchedLocation;
+            }
+
+            @Override
+            public Location getLastSmoothedLocation() {
+                return lastSmoothedLocation;
+            }
+
+            @Override
+            public Location getLastGoodLocation() {
+                return lastLocation;
+            }
+
+            @Override
+            public float getSpeedMps() {
+                return speed;
+            }
+        };
+        fallbackProcessor = new FallbackProcessor(new DefaultFallbackProvider(fallbackStateProvider, predictionProvider));
+        locationPipeline = new LocationPipeline()
+                .addProcessor(new StaleFilterProcessor())
+                .addProcessor(new QualityGateProcessor(fixQualityClassifier, this::getCurrentState))
+                .addProcessor(new SmoothingProcessor())
+                .addProcessor(new PredictionProcessor(predictionProvider))
+                .addProcessor(new FallbackBuilderProcessor(fallbackProcessor))
+                .addProcessor(new ElapsedTimeStampProcessor());
+        policyContextProvider = new LocationPolicyContextProvider(new PolicyContextStateProvider() {
+            @Override
+            public MovementState getMovementState() {
+                return getCurrentState();
+            }
+
+            @Override
+            public boolean isInBurstMode() {
+                return inBurstMode;
+            }
+
+            @Override
+            public boolean isDeliveringAndIdle() {
+                return isDeliveringAndIdle();
+            }
+
+            @Override
+            public boolean isUiFollowActive() {
+                return uiFollowActive;
+            }
+
+            @Override
+            public boolean isMovingFlag() {
+                return movingFlag;
+            }
+        });
     }
 
-    public void setLocationUpdateListener(LocationUpdateListener listener) {
+    public void setLocationUpdateListener(com.hf.easydelivery.core.facade.LocationUpdateListener listener) {
         listeners.clear();
         if (listener != null) {
             listeners.add(listener);
@@ -468,7 +473,7 @@ public class SmartLocationManager {
     }
 
     /** Add an additional listener without removing existing ones. */
-    public void addLocationUpdateListener(LocationUpdateListener listener) {
+    public void addLocationUpdateListener(com.hf.easydelivery.core.facade.LocationUpdateListener listener) {
         if (listener != null) {
             listeners.add(listener);
         }
@@ -483,15 +488,43 @@ public class SmartLocationManager {
     }
 
     private LocationPolicyContext buildLocationPolicyContext() {
-        return new LocationPolicyContext(
-                getCurrentState(),
-                inBurstMode,
-                isDeliveringAndIdle(),
-                uiFollowActive,
-                movingFlag);
+        return policyContextProvider.build();
     }
 
-    public void removeLocationUpdateListener(LocationUpdateListener listener) {
+    private static com.hf.easydelivery.core.facade.MovementState toFacadeState(MovementState state) {
+        if (state == null) {
+            return com.hf.easydelivery.core.facade.MovementState.STATIONARY;
+        }
+        switch (state) {
+            case WALKING:
+                return com.hf.easydelivery.core.facade.MovementState.WALKING;
+            case SLOW_DRIVING:
+                return com.hf.easydelivery.core.facade.MovementState.SLOW_DRIVING;
+            case NORMAL_DRIVING:
+                return com.hf.easydelivery.core.facade.MovementState.NORMAL_DRIVING;
+            case STATIONARY:
+            default:
+                return com.hf.easydelivery.core.facade.MovementState.STATIONARY;
+        }
+    }
+
+    public LocationSnapshot getSnapshot() {
+        return new LocationSnapshot(
+                toFacadeState(getCurrentState()),
+                inBurstMode,
+                uiFollowActive,
+                movingFlag,
+                foregroundTrackingActive,
+                speed,
+                lastUpdateTime,
+                lastGoodFixTime,
+                movementStateMachine.getStationaryDurationMs(System.currentTimeMillis()),
+                getCurrentHeading(),
+                lastLocation == null ? null : new Location(lastLocation),
+                lastSmoothedLocation == null ? null : new Location(lastSmoothedLocation),
+                lastPredictedLocation == null ? null : new Location(lastPredictedLocation));
+    }
+    public void removeLocationUpdateListener(com.hf.easydelivery.core.facade.LocationUpdateListener listener) {
         if (listener != null) {
             listeners.remove(listener);
         }
@@ -506,12 +539,11 @@ public class SmartLocationManager {
         if (foregroundTrackingActive) {
             return;
         }
-        // 启动时重置静止计时，避免继承上次会话的“长时间静止”状态
         lastMovingTimeMs = System.currentTimeMillis();
         lastGoodFixTime = 0L;
         lastEmergencyBoostUptimeMs = 0L;
         lastSingleFixUptimeMs = 0L;
-        singleFixBackoffMs = SINGLE_FIX_BACKOFF_BASE_MS;
+        singleFixBackoffMs = BurstConfig.getSingleFixBackoffBaseMs();
         lastLocation = null;
         lastDispatchedLocation = null;
 
@@ -523,13 +555,11 @@ public class SmartLocationManager {
                     return;
                 }
 
-                // ✅ 架构师建议#6: 批量位置只完整处理最后一个
                 List<Location> locations = locationResult.getLocations();
                 if (locations.isEmpty()) {
                     return;
                 }
 
-                // 完整处理最后一个
                 Location last = locations.get(locations.size() - 1);
                   long locElapsedMs = getElapsedRealtimeMsSafe(last);
                   long ageMs = locElapsedMs > 0 ? (SystemClock.elapsedRealtime() - locElapsedMs) : -1L;
@@ -548,7 +578,7 @@ public class SmartLocationManager {
                                   last.getLongitude(),
                                   ageMs,
                                   dLast));
-                Telemetry.counter("onLocationResult");
+                eventBus.emitLocationResult();
                 updateLocation(last);
             }
         };
@@ -587,230 +617,84 @@ public class SmartLocationManager {
         boolean recentMoving = movingHoldUntilMs > 0 && nowUptime <= movingHoldUntilMs;
         movingFlag = recentMoving;
 
-        // Always keep raw (even if poor) so we can diagnose/repair without UI stalls
         lastRawLocation = newLocation;
 
-        // Treat very old fixes as poor (can happen with batched / cached results)
-        // Prefer monotonic elapsedRealtime to avoid wall-clock skew and cached
-        // timestamps.
-        long ageMs;
         long locElapsedMs = getElapsedRealtimeMsSafe(newLocation);
-        if (locElapsedMs > 0L) {
-            ageMs = SystemClock.elapsedRealtime() - locElapsedMs;
-        } else {
-            ageMs = nowMillis - newLocation.getTime();
-        }
-        // ?Bug#4??????????????return?
-        MovementState state = getCurrentState();
-        FixQualityClassifier.Result quality = fixQualityClassifier.classify(
-                newLocation,
-                lastLocation,
-                speed,
-                state,
-                ageMs,
-                getStaleThresholdMs());
-        boolean staleFix = quality.staleFix;
-        boolean okFix = quality.okFix;
-        boolean goodFix = quality.goodFix;
-        boolean poorFix = quality.poorFix;
-        float goodThreshold = quality.goodThreshold;
-        float okThreshold = quality.okThreshold;
+        long ageMs = locElapsedMs > 0L
+                ? (SystemClock.elapsedRealtime() - locElapsedMs)
+                : (nowMillis - newLocation.getTime());
 
-        // =========================================================
-        // POOR FIX PATH: never stop dispatching, but DO NOT pollute state/speed
-        // =========================================================
-        if (poorFix) {
-            // If we still don't have any good fix, try single high accuracy fix to
-            // bootstrap
-            if (lastGoodFixTime == 0L && shouldRequestSingleFix()) {
-                requestSingleHighAccuracyFix();
-            }
-            // Stale fix even after having good ones: try to pull a fresh high-accuracy fix
-            // once
-            if (staleFix && shouldRequestSingleFix()) {
-                requestSingleHighAccuracyFix();
-            }
-
-            // Use poor-fix motion evidence to avoid freezing driving state
-            if (!staleFix && lastLocation != null
-                    && newLocation.getAccuracy() <= QualityConfig.getAccuracyThresholdStateMax()) {
-                float displacement = lastLocation.distanceTo(newLocation);
-                long newElapsed = getElapsedRealtimeMsSafe(newLocation);
-                long lastElapsed = getElapsedRealtimeMsSafe(lastLocation);
-                long dtMs = (newElapsed > 0 && lastElapsed > 0) ? (newElapsed - lastElapsed)
-                        : (newLocation.getTime() - lastLocation.getTime());
-                float speedFromDisp = 0f;
-                if (dtMs > 0 && displacement > 2.0f) {
-                    speedFromDisp = displacement / (dtMs / 1000f);
-                }
-                float speedFromGps = newLocation.hasSpeed() ? newLocation.getSpeed() : 0f;
-                float motionSpeed = Math.max(speedFromGps, speedFromDisp);
-                lastDisplacementMeters = displacement;
-                if (motionSpeed >= 2.0f || displacement >= DISPLACEMENT_DRIVING_OVERRIDE_M) {
-                    lastMovingTimeMs = nowMillis;
-                    lastDrivingUptimeMs = SystemClock.elapsedRealtime();
-                    movingHoldUntilMs = nowUptime + MOVING_HOLD_MS;
-                    movingFlag = true;
-                    MovementState curState = getCurrentState();
-                    if (curState == MovementState.STATIONARY || curState == MovementState.WALKING) {
-                        MovementState newState = (motionSpeed >= 8.0f)
-                                ? MovementState.NORMAL_DRIVING
-                                : MovementState.SLOW_DRIVING;
-                        if (movementStateMachine.applyExternalState(newState, nowMillis)) {
-                            updateLocationParametersForState();
-                        }
-                    }
-                }
-            }
-
-            // Build a fallback location to keep UI moving smoothly
-            Location fallback = fallbackProcessor.buildFallback(newLocation, nowMillis);
-
-            // Update lastDispatchedLocation for continuity
-            lastDispatchedLocation = fallback;
-
-            // If we have never had a good fix, keep lastLocation as something usable
-            if (lastLocation == null) {
-                lastLocation = fallback;
-                lastUpdateTime = fallback.getTime();
-            }
-
-            // Dispatch to listeners (do not update movement state from poor fix)
-            locationDispatcher.dispatch(fallback, getCurrentState(), currentMinDispatchIntervalMs);
-            lastUiDispatchUptimeMs = locationDispatcher.getLastDispatchUptimeMs();
-            lastUiLocation = fallback;
-
-            // Do NOT forward poor fixes to distance tracker
-            return;
-        }
-
-        // =========================================================
-        // GOOD FIX PATH: update speed/state and normal smoothing/prediction
-        // =========================================================
-
-        // ✅ 速度兜底策略（仅在 good fix 时更新，避免 low-accuracy 污染）
-        float gpsSpeed = newLocation.hasSpeed() ? newLocation.getSpeed() : 0f;
-        float displacementSpeed = 0f;
-        float distance = 0f;
-        if (lastLocation != null) {
-            distance = lastLocation.distanceTo(newLocation);
-            long timeDiff = newLocation.getTime() - lastUpdateTime;
-            if (timeDiff > 0 && distance > 2.0f) {
-                float dtSec = timeDiff / 1000f;
-                float distCap;
-                if (timeDiff < 5_000L) {
-                    distCap = 15.0f; // 短周期防跳点
-                } else {
-                    // 长周期用合理速度上限（约126km/h）约束，避免被低频更新压成“龟速”
-                    distCap = 35.0f * dtSec;
-                }
-                float distForSpeed = Math.min(distance, distCap);
-                displacementSpeed = distForSpeed / dtSec;
-            }
-        }
-        lastDisplacementMeters = distance;
-        speed = Math.max(gpsSpeed, displacementSpeed);
-
-        // ✅ lastMovingTimeMs更新（good fix）
-        if (speed > 0.3f || distance > 2.0f) {
-            lastMovingTimeMs = nowMillis;
-            movingHoldUntilMs = nowUptime + MOVING_HOLD_MS;
-            movingFlag = true;
-        }
-        if (speed >= 2.0f) {
-            lastDrivingUptimeMs = SystemClock.elapsedRealtime();
-        }
-
-        // ✅ 架构师建议：位移>8米立即唤醒（仅 good fix 可信）
-        if (lastLocation != null) {
-            float displacement = lastLocation.distanceTo(newLocation);
-            maybeTriggerDisplacementBoost(displacement, nowMillis, false);
-        }
-
-        // Jump risk：两次点位跨度较大且在快速移动 → 临时提频以避免"到边再跳回"的突兀
-        if (!inBurstMode && prevGood != null) {
-            float jumpMeters = prevGood.distanceTo(newLocation);
-            boolean movingFast = speed > 10f;
-            if (movingFast && jumpMeters > 30f) {
-                maybeTriggerJumpBoost(jumpMeters, nowMillis);
+        float computedSpeed = newLocation.hasSpeed() ? newLocation.getSpeed() : 0f;
+        if (!newLocation.hasSpeed() && prevGood != null) {
+            long prevElapsedMs = getElapsedRealtimeMsSafe(prevGood);
+            long dtMs = (locElapsedMs > 0 && prevElapsedMs > 0)
+                    ? (locElapsedMs - prevElapsedMs)
+                    : (newLocation.getTime() - prevGood.getTime());
+            if (dtMs > 0) {
+                float dist = prevGood.distanceTo(newLocation);
+                computedSpeed = dist / (dtMs / 1000f);
             }
         }
 
-        // Commit GOOD fix as lastLocation (used for state/speed)
-        lastLocation = newLocation;
-        lastGoodLocationUptimeMs = SystemClock.uptimeMillis();
-        long prevUpdateTime = lastUpdateTime;
-
-        boolean stateChanged = updateMovementState();
-        boolean deliveringIdle = isDeliveringAndIdle();
-        boolean deliveringIdleChanged = deliveringIdle != lastDeliveringIdle;
-        lastDeliveringIdle = deliveringIdle;
-
-        // ✅ 全状态防抖：同一个 fix 或极短间隔/微小位移不分发，避免动画/CPU 被刷屏
-        boolean shouldDispatch = true;
-        if (lastSmoothedLocation != null) {
-            long timeDiff = prevUpdateTime <= 0L ? Long.MAX_VALUE : newLocation.getTime() - prevUpdateTime;
-            float d = lastSmoothedLocation.distanceTo(newLocation);
-            long elapsedMs = getElapsedRealtimeMsSafe(newLocation);
-            if (timeDiff < 200L || d < 0.8f) {
-                shouldDispatch = false;
-            }
-            // 同一个 elapsed（同一 fix 被多次回调）直接跳过
-            if (elapsedMs > 0 && elapsedMs == getElapsedRealtimeMsSafe(lastSmoothedLocation)) {
-                shouldDispatch = false;
-            }
-            // 静止去抖：低速 + 低位移 + 最近未处于驾驶
-            if (shouldDispatch
-                    && speed < 0.5f
-                    && (SystemClock.elapsedRealtime() - lastDrivingUptimeMs) > DRIVING_DOWNGRADE_GRACE_MS
-                    && timeDiff < 2000L && d < 2.0f) {
-                shouldDispatch = false;
-            }
-        }
-
-        if (!shouldDispatch) {
-            if (!movingFlag || nowUptime - lastUiDispatchUptimeMs < UI_FORCE_DISPATCH_MS) {
-                return;
-            }
-        }
-
-        double smoothingFactor = computeSmoothingFactor(speed, getCurrentState());
+        double smoothingFactor = smoothingFactorProvider.getSmoothingFactor(computedSpeed, getCurrentState());
         float bearingInput = newLocation.hasBearing() ? newLocation.getBearing() : Float.NaN;
         ProcessingContext processingContext = new ProcessingContext(
                 newLocation,
+                prevGood,
                 lastSmoothedLocation,
-                speed,
+                computedSpeed,
                 smoothingFactor,
-                bearingInput);
+                bearingInput,
+                nowMillis,
+                ageMs,
+                getStaleThresholdMs());
         locationPipeline.process(processingContext);
-        Location outputLoc = processingContext.getOutputLocation();
-        if (outputLoc == null) {
-            outputLoc = newLocation;
-        }
 
-        lastSmoothedLocation = outputLoc;
-        lastPredictedLocation = processingContext.getPredictedLocation();
+        boolean okFix = processingContext.isOkFix();
+        boolean poorFix = processingContext.isPoorFix();
+        boolean stateChanged = false;
+        boolean deliveringIdleChanged = false;
 
-        // Dispatch
-        lastDispatchedLocation = outputLoc;
-        locationDispatcher.dispatch(outputLoc, getCurrentState(), currentMinDispatchIntervalMs);
-        lastUiDispatchUptimeMs = locationDispatcher.getLastDispatchUptimeMs();
-        lastUiLocation = outputLoc;
-        lastUpdateTime = newLocation.getTime();
-
-        // ✅ 弱信号检测优化：连续次数 + 时间窗口
-        if (newLocation.getAccuracy() > WEAK_SIGNAL_THRESHOLD) {
-            if (weakSignalStartTime == 0L) {
-                weakSignalStartTime = System.currentTimeMillis();
+        if (poorFix) {
+            FileLog.getInstance().debug(TAG,
+                    String.format("Poor fix: acc=%.1fm(thr=%.1fm) stale=%s age=%dms",
+                            newLocation.getAccuracy(),
+                            processingContext.getOkThreshold(),
+                            String.valueOf(processingContext.isStaleFix()),
+                            ageMs));
+            if (lastGoodFixTime == 0L) {
+                lastGoodFixTime = nowMillis;
             }
-            weakSignalCount++;
+            long sinceGood = nowMillis - lastGoodFixTime;
+            if (sinceGood > QualityConfig.getPoorSignalGracePeriodMs()) {
+                if (shouldRequestSingleFix()) {
+                    requestSingleHighAccuracyFix();
+                }
+            }
+            if (sinceGood > QualityConfig.getEmergencyBoostThresholdMs()
+                    && (nowUptime - lastEmergencyBoostUptimeMs) > QualityConfig.getEmergencyBoostCooldownMs()) {
+                lastEmergencyBoostUptimeMs = nowUptime;
+                FileLog.getInstance().debug(TAG,
+                        "Emergency boost: no good fix for " + (sinceGood / 1000) + "s");
+                requestBoost(10_000L, BOOST_REASON_EMERGENCY);
+            }
 
-            long weakDuration = System.currentTimeMillis() - weakSignalStartTime;
-            // 只有持续超过15秒且连续次数达标才报警，防止地下车库/短时遮挡误报
-            if (weakSignalCount >= 3 && weakDuration > 15_000L) {
-                weakSignalCount = 0; // reset
-                weakSignalStartTime = 0L;
-                for (LocationUpdateListener l : listeners) {
+            Location fallback = processingContext.getOutputLocation();
+            if (fallback == null) {
+                fallback = fallbackProcessor.buildFallback(newLocation, nowMillis);
+            }
+            if (fallback != null) {
+                FileLog.getInstance().debug(TAG, "dispatch fallback (limited motion update)");
+                lastDispatchedLocation = fallback;
+                locationDispatcher.dispatch(fallback, toFacadeState(getCurrentState()), currentMinDispatchIntervalMs);
+                lastUiDispatchUptimeMs = locationDispatcher.getLastDispatchUptimeMs();
+                lastUiLocation = fallback;
+            }
+
+            if (weakSignalMonitor.update(newLocation.getAccuracy(),
+                    QualityConfig.getWeakSignalThreshold(),
+                    nowMillis)) {
+                for (com.hf.easydelivery.core.facade.LocationUpdateListener l : listeners) {
                     if (l instanceof WeakSignalListener) {
                         try {
                             ((WeakSignalListener) l).onWeakSignal();
@@ -819,18 +703,95 @@ public class SmartLocationManager {
                     }
                 }
             }
-        } else {
-            // 信号恢复，立刻重置
-            weakSignalCount = 0;
-            weakSignalStartTime = 0L;
+            if (stateChanged || deliveringIdleChanged) {
+                updateLocationParametersForState();
+            }
+            return;
+        }
+
+        speed = computedSpeed;
+        float displacement = prevGood != null ? prevGood.distanceTo(newLocation) : 0f;
+        lastDisplacementMeters = displacement;
+        if (speed > 0.5f || displacement > 1.0f) {
+            lastMovingTimeMs = nowMillis;
+            movingHoldUntilMs = nowUptime + BurstConfig.getMovingHoldMs();
+            movingFlag = true;
+        }
+
+        stateChanged = updateMovementState();
+        MovementState state = getCurrentState();
+        if (state == MovementState.SLOW_DRIVING || state == MovementState.NORMAL_DRIVING) {
+            lastDrivingUptimeMs = nowUptime;
+        }
+
+        lastGoodFixTime = nowMillis;
+        lastGoodLocationUptimeMs = nowUptime;
+        lastLocation = newLocation;
+
+        boolean requestSingleFix = okFix && newLocation.getAccuracy() > QualityConfig.getAccuracyThresholdPoor();
+        maybeTriggerDisplacementBoost(displacement, nowMillis, requestSingleFix);
+        if (displacement > 30f && speed > 10f) {
+            maybeTriggerJumpBoost(displacement, nowMillis);
+        }
+
+        boolean deliveringIdleNow = isDeliveringAndIdle();
+        deliveringIdleChanged = deliveringIdleNow != lastDeliveringIdle;
+        lastDeliveringIdle = deliveringIdleNow;
+
+        long newElapsedMs = getElapsedRealtimeMsSafe(newLocation);
+        long lastSmoothedElapsedMs = lastSmoothedLocation != null
+                ? getElapsedRealtimeMsSafe(lastSmoothedLocation)
+                : -1L;
+        boolean shouldDispatch = dispatchGate.shouldDispatch(
+                newLocation,
+                lastSmoothedLocation,
+                lastUpdateTime,
+                lastDrivingUptimeMs,
+                speed,
+                nowUptime,
+                newElapsedMs,
+                lastSmoothedElapsedMs);
+        if (!shouldDispatch) {
+            if (!movingFlag || nowUptime - lastUiDispatchUptimeMs < BurstConfig.getUiForceDispatchMs()) {
+                if (stateChanged || deliveringIdleChanged) {
+                    updateLocationParametersForState();
+                }
+                return;
+            }
+        }
+
+        Location outputLoc = processingContext.getOutputLocation();
+        if (outputLoc == null) {
+            outputLoc = newLocation;
+        }
+
+        lastSmoothedLocation = outputLoc;
+        lastPredictedLocation = processingContext.getPredictedLocation();
+
+        lastDispatchedLocation = outputLoc;
+        locationDispatcher.dispatch(outputLoc, toFacadeState(state), currentMinDispatchIntervalMs);
+        lastUiDispatchUptimeMs = locationDispatcher.getLastDispatchUptimeMs();
+        lastUiLocation = outputLoc;
+        lastUpdateTime = newLocation.getTime();
+
+        if (weakSignalMonitor.update(newLocation.getAccuracy(),
+                QualityConfig.getWeakSignalThreshold(),
+                nowMillis)) {
+            for (com.hf.easydelivery.core.facade.LocationUpdateListener l : listeners) {
+                if (l instanceof WeakSignalListener) {
+                    try {
+                        ((WeakSignalListener) l).onWeakSignal();
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
         }
 
         if (stateChanged || deliveringIdleChanged) {
             updateLocationParametersForState();
         }
 
-        
-        this.forwardToDrivingDistanceTracker(outputLoc, getCurrentState());
+        this.forwardToDrivingDistanceTracker(outputLoc, state);
     }
 
     private boolean updateMovementState() {
@@ -843,9 +804,9 @@ public class SmartLocationManager {
                 lastDrivingUptimeMs,
                 lastInVehicleUptimeMs,
                 lastDisplacementMeters,
-                DRIVING_DOWNGRADE_GRACE_MS,
-                IN_VEHICLE_GRACE_MS,
-                DISPLACEMENT_DRIVING_OVERRIDE_M);
+                StrategyConfig.getDrivingDowngradeGraceMs(),
+                StrategyConfig.getInVehicleGraceMs(),
+                StrategyConfig.getDisplacementDrivingOverrideM());
 
         if (!result.changed) {
             return false;
@@ -889,8 +850,8 @@ public class SmartLocationManager {
                 : (inBurstMode ? StrategyConfig.getBurstMaxDelayMs() : 800L);
         currentMinDispatchIntervalMs = params != null ? params.minDispatchIntervalMs
                 : (getCurrentState() == MovementState.STATIONARY && !movingFlag
-                        ? MIN_DISPATCH_INTERVAL_STATIONARY_MS
-                        : MIN_DISPATCH_INTERVAL_MOVING_MS);
+                        ? StrategyConfig.getMinDispatchIntervalStationaryMs()
+                        : StrategyConfig.getMinDispatchIntervalMovingMs());
         requestScheduler.applyRequest(interval,
                 minInterval,
                 priority,
@@ -902,21 +863,18 @@ public class SmartLocationManager {
 
 
     /**
-     * 判断司机是否处于“送件且不看地图”状态
      */
     private boolean isDeliveringAndIdle() {
         long timeSinceLastMovement = System.currentTimeMillis() - lastMovingTimeMs;
-        // ✅ 优化闲置判定：只有 STATIONARY 且长时间未动才降频；WALKING 状态不进入极低频模式
         return (getCurrentState() == MovementState.STATIONARY)
-                && timeSinceLastMovement > DELIVERING_IDLE_THRESHOLD_MS;
+                && timeSinceLastMovement > StrategyConfig.getDeliveringIdleThresholdMs();
     }
 
     /**
-     * 获取推荐优先级
      */
     private int getRecommendedPriority() {
         if (inBurstMode) {
-            return Priority.PRIORITY_HIGH_ACCURACY; // Boost 模式优先
+            return Priority.PRIORITY_HIGH_ACCURACY;
         }
 
         if (getCurrentState() == MovementState.WALKING
@@ -926,15 +884,13 @@ public class SmartLocationManager {
         }
 
         if (isDeliveringAndIdle()) {
-            return Priority.PRIORITY_BALANCED_POWER_ACCURACY; // 疯狂省电
+            return Priority.PRIORITY_BALANCED_POWER_ACCURACY;
         }
 
-        // 非 Burst 统一降到跟随级精度
         return Priority.PRIORITY_BALANCED_POWER_ACCURACY;
     }
 
     /**
-     * 获取推荐更新间隔（ms）
      */
     private long getRecommendedUpdateInterval() {
         if (inBurstMode) {
@@ -942,25 +898,23 @@ public class SmartLocationManager {
         }
 
         if (isDeliveringAndIdle()) {
-            return INTERVAL_DELIVERING_MS; // 疯狂省电
+            return StrategyConfig.getIntervalDeliveringMs();
         }
 
-        // Driving / Walking / Stationary 刚停车
         switch (getCurrentState()) {
             case STATIONARY:
             case WALKING:
-                return INTERVAL_WALKING_MS; // 刚停车或慢走，高频更新
+                return StrategyConfig.getIntervalWalkingMs();
             case SLOW_DRIVING:
-                return INTERVAL_DRIVING_SLOW_MS;
+                return StrategyConfig.getIntervalDrivingSlowMs();
             case NORMAL_DRIVING:
-                return INTERVAL_DRIVING_NORMAL_MS;
+                return StrategyConfig.getIntervalDrivingNormalMs();
             default:
                 return 4_000L;
         }
     }
 
     /**
-     * 获取最小更新间隔（ms）
      */
     private long getMinUpdateInterval() {
         if (inBurstMode) {
@@ -968,17 +922,17 @@ public class SmartLocationManager {
         }
 
         if (isDeliveringAndIdle()) {
-            return MIN_INTERVAL_DELIVERING_MS; // 极致省电
+            return StrategyConfig.getMinIntervalDeliveringMs();
         }
 
         switch (getCurrentState()) {
             case STATIONARY:
             case WALKING:
-                return MIN_INTERVAL_WALKING_MS;
+                return StrategyConfig.getMinIntervalWalkingMs();
             case SLOW_DRIVING:
-                return MIN_INTERVAL_DRIVING_SLOW_MS;
+                return StrategyConfig.getMinIntervalDrivingSlowMs();
             case NORMAL_DRIVING:
-                return MIN_INTERVAL_DRIVING_NORMAL_MS;
+                return StrategyConfig.getMinIntervalDrivingNormalMs();
             default:
                 return 2_000L;
         }
@@ -1099,6 +1053,7 @@ public class SmartLocationManager {
             } else {
                 context.startService(intent);
             }
+            FileLog.getInstance().debug(TAG, "startForegroundTracking requested");
         } catch (Throwable t) {
             foregroundTrackingActive = false;
             startLocationUpdates();
@@ -1119,6 +1074,7 @@ public class SmartLocationManager {
             Intent intent = new Intent(context, com.hf.easydelivery.service.LocationForegroundService.class);
             intent.setAction(com.hf.easydelivery.service.LocationForegroundService.ACTION_STOP);
             context.startService(intent);
+            FileLog.getInstance().debug(TAG, "stopForegroundTracking requested");
         } catch (Throwable t) {
             FileLog.getInstance().error(TAG, "stopForegroundTracking failed", t);
         }
@@ -1166,7 +1122,7 @@ public class SmartLocationManager {
     private void updateStateFromActivity(MovementState newState) {
         if (newState == MovementState.SLOW_DRIVING || newState == MovementState.NORMAL_DRIVING) {
             lastInVehicleUptimeMs = SystemClock.elapsedRealtime();
-            movingHoldUntilMs = lastInVehicleUptimeMs + MOVING_HOLD_MS;
+            movingHoldUntilMs = lastInVehicleUptimeMs + BurstConfig.getMovingHoldMs();
             movingFlag = true;
         }
         if (movementStateMachine.applyExternalState(newState, System.currentTimeMillis())) {
@@ -1217,7 +1173,7 @@ public class SmartLocationManager {
             return;
         }
         lastSingleFixUptimeMs = nowUptime;
-        singleFixBackoffMs = Math.min(singleFixBackoffMs * 2L, SINGLE_FIX_BACKOFF_MAX_MS);
+        singleFixBackoffMs = Math.min(singleFixBackoffMs * 2L, BurstConfig.getSingleFixBackoffMaxMs());
         singleUpdateInFlight = true;
         CancellationTokenSource tokenSource = new CancellationTokenSource();
         try {
@@ -1257,68 +1213,6 @@ public class SmartLocationManager {
         return new Location(lastPredictedLocation);
     }
 
-    private double computeSmoothingFactor(float speedMps, @NonNull MovementState state) {
-        switch (state) {
-            case NORMAL_DRIVING:
-            case SLOW_DRIVING:
-                // Higher alpha in driving to avoid 5–10s visual lag (urban speeds are often
-                // 5–11 m/s)
-                if (speedMps > 8f)
-                    return 0.8;
-                if (speedMps > 5f)
-                    return 0.65;
-                if (speedMps > 2f)
-                    return 0.55;
-                return 0.2;
-            case WALKING:
-                return 0.2;
-            case STATIONARY:
-            default:
-                return 0.15;
-        }
-    }
-
-    private Location predictFutureLocation(Location base, float speedMps, float bearingDegrees) {
-        float heading = bearingDegrees;
-        if (Float.isNaN(heading)) {
-            heading = hasReliableHeading()
-                    ? headingSensorController.getCurrentHeadingDegrees()
-                    : Float.NaN;
-        }
-        if (Float.isNaN(heading))
-            return null;
-        if (speedMps < MIN_PREDICTION_SPEED_MPS)
-            return null;
-
-        // ✅ 架构师建议#8: 动态预测horizon + 驾驶态轻量前视
-        float horizon = Math.max(0.3f, Math.min(1.2f, speedMps * 0.2f));
-        if (speedMps > 5f) {
-            horizon = Math.min(1.5f, horizon + 0.3f);
-        }
-        double distance = speedMps * horizon;
-
-        if (distance < 1.0)
-            return null;
-        double headingRad = Math.toRadians(heading);
-        double latRad = Math.toRadians(base.getLatitude());
-        double lonRad = Math.toRadians(base.getLongitude());
-        double angularDistance = distance / EARTH_RADIUS_METERS;
-        double newLatRad = Math.asin(Math.sin(latRad) * Math.cos(angularDistance) +
-                Math.cos(latRad) * Math.sin(angularDistance) * Math.cos(headingRad));
-        double newLonRad = lonRad + Math.atan2(Math.sin(headingRad) * Math.sin(angularDistance) * Math.cos(latRad),
-                Math.cos(angularDistance) - Math.sin(latRad) * Math.sin(newLatRad));
-        double newLat = Math.toDegrees(newLatRad);
-        double newLon = Math.toDegrees(newLonRad);
-        Location predicted = new Location(base);
-        predicted.setLatitude(newLat);
-        predicted.setLongitude(newLon);
-        predicted.setTime(System.currentTimeMillis());
-        stampElapsedRealtimeNow(predicted);
-        predicted.setBearing(heading);
-        predicted.setSpeed(speedMps);
-        return predicted;
-    }
-
     private boolean shouldRequestSingleFix() {
         long nowUptime = SystemClock.elapsedRealtime();
         return !singleUpdateInFlight
@@ -1337,60 +1231,6 @@ public class SmartLocationManager {
                     .getInstance(context.getApplicationContext())
                     .onLocationUpdate(loc, state);
         } catch (Throwable ignore) {
-            // 某些构建变体若无 tracker，可安全忽略
-        }
-    }
-
-    @Nullable
-    private Location buildFallbackForDispatch(@NonNull Location raw, long nowMillis) {
-        // 1) Prefer a very recent prediction
-        if (lastPredictedLocation != null) {
-            long age = nowMillis - lastPredictedLocation.getTime();
-            if (age >= 0 && age <= 2_000L) {
-                Location p = new Location(lastPredictedLocation);
-                p.setTime(nowMillis);
-                stampElapsedRealtimeNow(p);
-                return p;
-            }
-        }
-
-        // 2) Short-horizon predict from last dispatched / smoothed location
-        Location base = null;
-        if (lastDispatchedLocation != null) {
-            base = lastDispatchedLocation;
-        } else if (lastSmoothedLocation != null) {
-            base = lastSmoothedLocation;
-        } else if (lastLocation != null) {
-            base = lastLocation;
-        }
-
-        if (base == null)
-            return null;
-
-        float bearingInput = raw.hasBearing() ? raw.getBearing() : Float.NaN;
-        Location predicted = predictFutureLocation(base, speed, bearingInput);
-        if (predicted != null) {
-            predicted.setTime(nowMillis);
-            stampElapsedRealtimeNow(predicted);
-            return predicted;
-        }
-
-        // 3) As a last resort, reuse base to keep UI stable
-        Location reuse = new Location(base);
-        reuse.setTime(nowMillis);
-        stampElapsedRealtimeNow(reuse);
-        return reuse;
-    }
-
-    /**
-     * For synthetic locations (smoothed/predicted/fallback), stamp monotonic time
-     * so downstream
-     * de-duplication based on elapsedRealtime does not accidentally drop updates.
-     */
-    private void stampElapsedRealtimeNow(@NonNull Location loc) {
-        try {
-            loc.setElapsedRealtimeNanos(SystemClock.elapsedRealtimeNanos());
-        } catch (Throwable ignored) {
         }
     }
 
@@ -1404,3 +1244,4 @@ public class SmartLocationManager {
 
 
 }
+

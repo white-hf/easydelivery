@@ -4,6 +4,9 @@ public final class QualityConfig {
     private QualityConfig() {}
 
     private static volatile float accuracyThresholdPoor = 50f;
+    private static volatile float weakSignalThreshold = 100f;
+    private static volatile int weakSignalRequiredHits = 3;
+    private static volatile long weakSignalDurationMs = 15_000L;
     private static volatile float accuracyThresholdStateMax = 120f;
     private static volatile long poorSignalGracePeriodMs = 15_000L;
     private static volatile long emergencyBoostThresholdMs = 15_000L;
@@ -13,6 +16,18 @@ public final class QualityConfig {
 
     public static float getAccuracyThresholdPoor() {
         return accuracyThresholdPoor;
+    }
+
+    public static float getWeakSignalThreshold() {
+        return weakSignalThreshold;
+    }
+
+    public static int getWeakSignalRequiredHits() {
+        return weakSignalRequiredHits;
+    }
+
+    public static long getWeakSignalDurationMs() {
+        return weakSignalDurationMs;
     }
 
     public static float getAccuracyThresholdStateMax() {

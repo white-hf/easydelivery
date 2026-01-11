@@ -26,33 +26,15 @@ import com.hf.easydelivery.map.policy.FollowPolicy;
 import com.hf.easydelivery.map.policy.RealtimeFollowPolicy;
 import java.util.List;
 import com.hf.easydelivery.map.config.ProfileManager;
-import com.hf.easydelivery.core.SmartLocationManager;
+import com.hf.easydelivery.core.facade.LocationControls;
+import com.hf.easydelivery.core.facade.LocationFacade;
+import com.hf.easydelivery.core.facade.LocationSnapshot;
+import com.hf.easydelivery.core.facade.MovementState;
 
 /**
- * 智能相机跟随控制器
- * <p>
- * 核心职责 / Key responsibilities:
- * </p>
- * <ul>
- * <li>根据 {@link SmartLocationManager} 提供的定位/速度状态，生成驾驶视角的相机动画（蓝点居于屏幕下方、平滑
- * zoom/bearing）。</li>
- * <li>接管“自动跟随”开关，处理手势打断、恢复操作以及“当前位置”按钮强制回中心的场景。</li>
- * <li>监测蓝点相对视窗的偏移，触发
- * {@link SmartLocationManager#requestBoostIfEdgeRisk(float, float)}
- * 以提升定位频率。</li>
- * <li>输出日志记录每次跟随指令，便于定位“蓝点走出屏幕”或跟随失效的问题。</li>
- * </ul>
- * <p>
- * 关键策略 / Implementation highlights:
- * </p>
- * <ul>
- * <li>Driving camera placement：利用地图投影把驾驶点下移到 75% screen height，结合 tilt=45°、最小
- * zoom=16。</li>
- * <li>Update throttling：通过上次更新时间、距离与航向变化阈值控制相机刷新，不响应高频抖动。</li>
- * <li>User interaction：手势开始时暂停自动跟随并记录 `autoFollowDisabled`，按钮点击/超时后再调用
- * `follow(...)` 强制回归。</li>
- * <li>Edge boost：估算蓝点和目标视窗点的像素距离，换算成米后请求临时高频定位，确保高速行驶时地图平滑。</li>
- * </ul>
+ * Camera follow controller for the map view.
+ * Handles auto-follow behavior, camera target computation, and temporary boost
+ * requests when the blue dot risks leaving the visible area.
  */
 public class CameraFollowController {
 
@@ -151,7 +133,7 @@ public class CameraFollowController {
                 boolean insideZoneLowSpeed);
 
         boolean shouldUpdateCamera(@NonNull Location location,
-                @NonNull SmartLocationManager.MovementState state,
+                @NonNull MovementState state,
                 long lastUpdateUptime,
                 @Nullable LatLng lastTarget,
                 float lastBearing,
@@ -175,7 +157,7 @@ public class CameraFollowController {
 
         @Override
         public boolean shouldUpdateCamera(@NonNull Location location,
-                @NonNull SmartLocationManager.MovementState state,
+                @NonNull MovementState state,
                 long lastUpdateUptime,
                 @Nullable LatLng lastTarget,
                 float lastBearing,
@@ -242,7 +224,7 @@ public class CameraFollowController {
 
         @Override
         public boolean shouldUpdateCamera(@NonNull Location location,
-                @NonNull SmartLocationManager.MovementState state,
+                @NonNull MovementState state,
                 long lastUpdateUptime,
                 @Nullable LatLng lastTarget,
                 float lastBearing,
@@ -308,8 +290,6 @@ public class CameraFollowController {
 
     /**
      * Bridge for external ProfileManager:
-     * POWERSAVER → BASIC (battery friendly)
-     * ADVANCED → STANDARD (current default behavior; can be mapped to ADVANCED in
      * future)
      */
     public void applyAppProfile(@NonNull ProfileManager.AppProfile appProfile) {
@@ -353,7 +333,9 @@ public class CameraFollowController {
     private final FileLog logger = FileLog.getInstance();
 
     @Nullable
-    private SmartLocationManager smartLocationManager;
+    private LocationFacade locationFacade;
+    @Nullable
+    private LocationControls locationControls;
 
     @Nullable
     private ValueAnimator cameraAnimator;
@@ -365,7 +347,6 @@ public class CameraFollowController {
     private float currentSpeedMps = Float.NaN;
     private float currentBearingDeg = Float.NaN;
     private float currentHeadingDeg = Float.NaN;
-    // 是否曾经进入过“真实驾驶”模式（速度超过阈值），用于控制居中策略
     private boolean hasEverEnteredDrivingMode = false;
     private GateSnapshot lastGateSnapshot;
     // Paused-by-user state (map gestures or light intervention)
@@ -383,14 +364,12 @@ public class CameraFollowController {
     private boolean navigationModeEnabled = false;
     // Smooth lookAhead transition to avoid camera jitter
     private double lastLookAheadMeters = 35d;
-    // Smooth speed→zoom transitions
     private float lastSpeedZoom = Float.NaN;
     private int lastSpeedBand = -1; // 0:near,1:city,2:suburb,3:highway
     // Dedup keys for camera updates
     private String lastCameraKey = null;
     private long lastCameraKeyTimeMs = 0L;
 
-    // ✅ 修复进入驾驶时zoom突变：跟踪驾驶模式开始时间
     private long drivingModeStartTime = 0;
 
     // --- Phase 3: jitter gating ---
@@ -402,8 +381,10 @@ public class CameraFollowController {
         this.mapView = mapView;
     }
 
-    public void setSmartLocationManager(@Nullable SmartLocationManager manager) {
-        this.smartLocationManager = manager;
+    public void setLocationProviders(@Nullable LocationFacade facade,
+            @Nullable LocationControls controls) {
+        this.locationFacade = facade;
+        this.locationControls = controls;
     }
 
     public void setNavigationModeEnabled(boolean enabled) {
@@ -415,7 +396,6 @@ public class CameraFollowController {
     }
 
     /**
-     * ✅ 修复进入驾驶时zoom突变：记录驾驶模式开始时间
      */
     public void setDrivingModeStartTime(long timestamp) {
         this.drivingModeStartTime = timestamp;
@@ -444,7 +424,6 @@ public class CameraFollowController {
         capturingUserBearing = false;
     }
 
-    // 兼容旧接口：返回是否曾进入驾驶模式（对应旧 hasCenteredOnUser 语义）
     public boolean hasCenteredOnUser() {
         return hasEverEnteredDrivingMode;
     }
@@ -475,7 +454,7 @@ public class CameraFollowController {
 
     /** Resume auto-follow and recenter the camera. */
     public void resumeFollow(@NonNull Location location,
-            @NonNull SmartLocationManager.MovementState state,
+            @NonNull MovementState state,
             @Nullable Float preferredZoom) {
         float zoom = (preferredZoom != null) ? preferredZoom : DRIVING_MIN_ZOOM;
         pausedByUser = false;
@@ -542,14 +521,13 @@ public class CameraFollowController {
         boolean navMode = context.isNavigationMode;
 
         // ============================================================
-        // [PATCH #1] —— 恢复旧 follow()：导航模式必须覆盖用户交互
         // ============================================================
         boolean isUserInteracting = context.isUserInteracting;
         boolean isAutoFollowPaused = context.isAutoFollowPaused;
 
         if (navMode) {
-            isUserInteracting = false; // 旧行为：导航模式下强制取消交互
-            isAutoFollowPaused = false; // 旧行为：导航模式强制启用 auto follow
+            isUserInteracting = false;
+            isAutoFollowPaused = false;
             hasEverEnteredDrivingMode = false;
         }
 
@@ -622,7 +600,6 @@ public class CameraFollowController {
         boolean allowAutoFollow = !isAutoFollowPaused || navMode;
 
         // ============================================================
-        // 4. Force-Follow（恢复旧 follow() 完整逻辑）
         // ============================================================
         boolean shouldForce = false;
 
@@ -645,7 +622,6 @@ public class CameraFollowController {
         }
 
         // ============================================================
-        // [PATCH #2] —— 恢复 edge-force（不能放在后面）
         // ============================================================
         boolean lowSpeedInside = context.isLowSpeedInsideDeliveryZone() || navMode;
         if (!shouldForce && lowSpeedInside && allowAutoFollow) {
@@ -660,7 +636,6 @@ public class CameraFollowController {
         }
 
         // ============================================================
-        // 5. Determine AllowCameraMove（必须根据 force 先算）
         // ============================================================
         boolean driving = drivingLikely || navMode;
 
@@ -688,7 +663,6 @@ public class CameraFollowController {
         }
 
         // ============================================================
-        // 6. shouldUpdateCamera（保持旧 follow() 的判断）
         // ============================================================
         boolean canUpdateCamera = shouldForce ||
                 followStrategy.shouldUpdateCamera(
@@ -709,7 +683,6 @@ public class CameraFollowController {
         }
 
         // ============================================================
-        // 7. Build Target Camera（完全按原逻辑分支）
         // ============================================================
         CameraPosition targetCamera;
 
@@ -742,7 +715,6 @@ public class CameraFollowController {
         }
 
         // ============================================================
-        // 8. Micro-update skip（保留 + 静止去抖）
         // ============================================================
         if (lastCameraTargetLatLng != null) {
             float px = 0f;
@@ -760,17 +732,15 @@ public class CameraFollowController {
 
             float zoomDelta = Math.abs(targetCamera.zoom - googleMap.getCameraPosition().zoom);
 
-            // 静止/步行额外去抖：1s内且移动很小则跳过
             long now = SystemClock.uptimeMillis();
-            boolean stationaryOrWalk = context.movementState == SmartLocationManager.MovementState.STATIONARY
-                    || context.movementState == SmartLocationManager.MovementState.WALKING;
+            boolean stationaryOrWalk = context.movementState == MovementState.STATIONARY
+                    || context.movementState == MovementState.WALKING;
             boolean shortInterval = now - lastCameraUpdateUptime < 1000L;
 
             if (px < MIN_PIXEL_DELTA && bearingDelta < MIN_BEARING_DELTA_DEG && zoomDelta < 0.01f && !shouldForce) {
                 logD("updateCamera(): micro-update skipped");
                 return false;
             }
-            // 仅静止/步行时做额外去抖，驾驶态不屏蔽更新
             if (!drivingLikely && stationaryOrWalk && shortInterval
                     && px < MIN_PIXEL_DELTA && zoomDelta < 0.02f && !shouldForce) {
                 logD("updateCamera(): stationary debounce skipped");
@@ -799,12 +769,12 @@ public class CameraFollowController {
         }
 
         // --- Edge Boost for location manager ---
-        if (smartLocationManager != null && driving) {
+        if (locationControls != null && driving) {
             LatLng driverLL2 = new LatLng(context.location.getLatitude(), context.location.getLongitude());
             LatLng edgeRef2 = (context.isDriving() && lastCameraTargetLatLng != null) ? lastCameraTargetLatLng
                     : driverLL2;
             float offset = estimateEdgeOffsetMeters(edgeRef2);
-            smartLocationManager.requestBoostIfEdgeRisk(offset, context.location.getSpeed());
+            locationControls.requestBoostIfEdgeRisk(offset, context.location.getSpeed());
         }
 
         return true;
@@ -872,7 +842,6 @@ public class CameraFollowController {
                 || (context.nearestPackageDistanceMeters > 0
                         && context.nearestPackageDistanceMeters <= SMART_ZOOM_NEAR_METERS);
         if (allowSmartZoom) {
-            // ✅ Fix: Only use "Smart Zoom" (fit-to-package) when close to the target.
             // When far away (e.g. 20km commute), stay in cruise zoom even when stationary
             // to prevent annoying zoom jumps (e.g. from 14.9 to 16.5) when stopping at
             // lights.
@@ -896,15 +865,15 @@ public class CameraFollowController {
     }
 
     public float computePreferredZoomForManualCenter(@NonNull Location location,
-            @NonNull SmartLocationManager.MovementState state,
+            @NonNull MovementState state,
             float nearestPackageDistanceMeters,
             int visibleMapHeightPx) {
         if (nearestPackageDistanceMeters <= 0) {
             return DRIVING_MIN_ZOOM;
         }
 
-        boolean stationaryOrWalking = state == SmartLocationManager.MovementState.STATIONARY
-                || state == SmartLocationManager.MovementState.WALKING;
+        boolean stationaryOrWalking = state == MovementState.STATIONARY
+                || state == MovementState.WALKING;
         if (stationaryOrWalking) {
             if (nearestPackageDistanceMeters > 1500f) {
                 return DRIVING_MIN_ZOOM;
@@ -949,7 +918,7 @@ public class CameraFollowController {
     }
 
     public boolean follow(@NonNull Location location,
-            @NonNull SmartLocationManager.MovementState state,
+            @NonNull MovementState state,
             boolean force,
             boolean autoFollowEnabled,
             boolean isUserInteracting,
@@ -961,7 +930,6 @@ public class CameraFollowController {
                 + ", state=" + state
                 + ", speedKmh=" + (location.hasSpeed() ? location.getSpeed() * 3.6f : 0f));
 
-        // 长时间未更新相机，重置驾驶标记，避免长时间停车后不再回中
         if (lastCameraUpdateUptime > 0) {
             long idleMs = SystemClock.uptimeMillis() - lastCameraUpdateUptime;
             if (idleMs > 15_000L) {
@@ -977,7 +945,7 @@ public class CameraFollowController {
             autoFollowEnabled = true;
             isUserInteracting = false;
             force = true;
-            hasEverEnteredDrivingMode = false; // 导航模式下保持强制跟随
+            hasEverEnteredDrivingMode = false;
         }
 
         // If user has paused auto-follow, ignore unless forced or navigation mode is on
@@ -987,9 +955,9 @@ public class CameraFollowController {
         }
 
         boolean driving = navMode || isDrivingState(state);
-        boolean lowSpeedInside = navMode || (insideDeliveryZone && (state == SmartLocationManager.MovementState.WALKING
-                || state == SmartLocationManager.MovementState.SLOW_DRIVING
-                || state == SmartLocationManager.MovementState.STATIONARY));
+        boolean lowSpeedInside = navMode || (insideDeliveryZone && (state == MovementState.WALKING
+                || state == MovementState.SLOW_DRIVING
+                || state == MovementState.STATIONARY));
         boolean poorQuality = (!Float.isNaN(currentAccuracyMeters) && currentAccuracyMeters > 50f)
                 || currentLocationAgeMs > 3_000L;
         if (lowSpeedInside && autoFollowEnabled && !force) {
@@ -1062,7 +1030,7 @@ public class CameraFollowController {
                 bearingDelta = 360f - bearingDelta;
             float zoomDelta = Math.abs(targetCamera.zoom - googleMap.getCameraPosition().zoom);
             if (px < MIN_PIXEL_DELTA && bearingDelta < MIN_BEARING_DELTA_DEG && zoomDelta < 0.01f && !force) {
-                logD("follow() micro update skipped: px=" + px + ", bearingΔ=" + bearingDelta + ", zoomΔ=" + zoomDelta);
+                logD("follow() micro update skipped: px=" + px + ", bearingDelta=" + bearingDelta + ", zoomDelta=" + zoomDelta);
                 return false;
             }
         }
@@ -1087,26 +1055,25 @@ public class CameraFollowController {
         lastCameraUpdateUptime = SystemClock.uptimeMillis();
         lastCameraTargetLatLng = targetCamera.target;
         lastCameraBearing = targetCamera.bearing;
-        // 只有真实驾驶且速度超过 10km/h 时才认为进入“驾驶模式”
         if (isDrivingState(state) && location.hasSpeed() && location.getSpeed() * 3.6f >= 10f) {
             hasEverEnteredDrivingMode = true;
             logD("follow(): entered driving mode (speed>=10km/h)");
         }
         lastLocationLatLng = new LatLng(location.getLatitude(), location.getLongitude());
-        if (smartLocationManager != null && driving) {
+        if (locationControls != null && driving) {
             if (!poorQuality) {
                 LatLng driverLL2 = new LatLng(location.getLatitude(), location.getLongitude());
                 LatLng edgeRef2 = (driving && lastCameraTargetLatLng != null) ? lastCameraTargetLatLng : driverLL2;
                 float offset = estimateEdgeOffsetMeters(edgeRef2);
                 logD("edgeBoost offsetM=" + offset + ", speed=" + location.getSpeed());
-                smartLocationManager.requestBoostIfEdgeRisk(offset, location.getSpeed());
+                locationControls.requestBoostIfEdgeRisk(offset, location.getSpeed());
             }
         }
         return true;
     }
 
     public void centerOn(@NonNull Location location,
-            @NonNull SmartLocationManager.MovementState state,
+            @NonNull MovementState state,
             float preferredFollowZoom) {
         hasEverEnteredDrivingMode = false;
         follow(location, state, true, true, false, false, preferredFollowZoom);
@@ -1189,12 +1156,10 @@ public class CameraFollowController {
     }
 
     private float computeSpeedZoom(@NonNull Location location, float preferredFollowZoom) {
-        // ✅ 修复进入驾驶时zoom突变：驾驶开始2秒内保持上次zoom
         long now = System.currentTimeMillis();
         if (drivingModeStartTime > 0) {
             long timeSinceEnteringDriving = now - drivingModeStartTime;
             if (timeSinceEnteringDriving < 2000) {
-                // 使用上次的zoom，避免speedZoom在第一帧造成突变
                 if (!Float.isNaN(lastSpeedZoom)) {
                     logD("computeSpeedZoom: delaying speedZoom, using lastSpeedZoom=" + lastSpeedZoom);
                     return lastSpeedZoom;
@@ -1203,7 +1168,6 @@ public class CameraFollowController {
         }
 
         float kmh = location.hasSpeed() ? (location.getSpeed() * 3.6f) : 0f;
-        // 滞回分档，减少在阈值附近来回切换
         if (lastSpeedBand < 0)
             lastSpeedBand = 0;
         switch (lastSpeedBand) {
@@ -1247,10 +1211,9 @@ public class CameraFollowController {
 
         float targetZoom = Math.max(baseZoom, Math.max(preferredFollowZoom, DRIVING_MIN_ZOOM));
         if (Math.abs(targetZoom - lastSpeedZoom) < 0.25f) {
-            targetZoom = lastSpeedZoom; // 保持当前 zoom
+            targetZoom = lastSpeedZoom;
         }
 
-        // 低通：单次调整不超过 0.2，避免上下跳变
         if (Float.isNaN(lastSpeedZoom)) {
             lastSpeedZoom = targetZoom;
         } else {
@@ -1458,7 +1421,7 @@ public class CameraFollowController {
     }
 
     private static final class GateSnapshot {
-        private SmartLocationManager.MovementState movementState;
+        private MovementState movementState;
         private boolean navMode;
         private boolean driving;
         private boolean allowAutoFollow;
@@ -1468,9 +1431,9 @@ public class CameraFollowController {
         private boolean hasEverEnteredDrivingMode;
     }
 
-    private boolean isDrivingState(@NonNull SmartLocationManager.MovementState state) {
-        return state == SmartLocationManager.MovementState.SLOW_DRIVING
-                || state == SmartLocationManager.MovementState.NORMAL_DRIVING;
+    private boolean isDrivingState(@NonNull MovementState state) {
+        return state == MovementState.SLOW_DRIVING
+                || state == MovementState.NORMAL_DRIVING;
     }
 
     private float normalizeBearing(float bearing) {
@@ -1502,8 +1465,9 @@ public class CameraFollowController {
                 return normalizeBearing((float) heading);
             }
         }
-        if (smartLocationManager != null) {
-            float heading = smartLocationManager.getCurrentHeading();
+        if (locationFacade != null) {
+            LocationSnapshot snapshot = locationFacade.getSnapshot();
+            float heading = snapshot.currentHeadingDeg;
             if (!Float.isNaN(heading)) {
                 return normalizeBearing(heading);
             }
@@ -1516,7 +1480,7 @@ public class CameraFollowController {
 
     /** Phase 3 convenience: apply unified focus decision to camera. */
     public void applyDecision(@NonNull Location loc,
-            @NonNull SmartLocationManager.MovementState mv,
+            @NonNull MovementState mv,
             boolean interacting,
             boolean allowAutoFollow,
             @NonNull DeliveryFocusManager.FocusDecision decision) {
@@ -1529,7 +1493,7 @@ public class CameraFollowController {
     }
 
     public void resumeFollowNow(@NonNull Location loc,
-            @NonNull SmartLocationManager.MovementState state,
+            @NonNull MovementState state,
             float preferredZoom,
             boolean alignToCenter,
             boolean insideDeliveryZone) {
@@ -1539,7 +1503,7 @@ public class CameraFollowController {
         }
         boolean useCentered = alignToCenter
                 || !isDrivingState(state)
-                || (insideDeliveryZone && state != SmartLocationManager.MovementState.NORMAL_DRIVING);
+                || (insideDeliveryZone && state != MovementState.NORMAL_DRIVING);
         CameraPosition targetCamera = useCentered
                 ? buildCenteredCamera(loc)
                 : buildDrivingCamera(loc, preferredZoom);
@@ -1566,9 +1530,9 @@ public class CameraFollowController {
         }
         hasEverEnteredDrivingMode = false;
 
-        // 改成永不抑制 + 强制重置时间戳
         suppressFollowUntilMs = 0L;
-        lastCameraUpdateUptime = 0L; // 让下一帧一定能过 timeOk 判定
+        lastCameraUpdateUptime = 0L;
     }
 
 }
+
