@@ -20,10 +20,12 @@ import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.Priority;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.R;
-import com.hf.easydelivery.core.SmartLocationManager;
 import com.hf.easydelivery.core.source.ForegroundServiceLocationSource;
 import com.hf.easydelivery.core.source.LocationSource;
 import com.hf.easydelivery.core.strategy.StrategyConfig;
+import com.hf.easydelivery.core.facade.DefaultLocationFacadeProvider;
+import com.hf.easydelivery.core.facade.ForegroundLocationConsumer;
+import com.hf.easydelivery.core.facade.LocationFacadeProvider;
 
 public class LocationForegroundService extends Service {
     public static final String ACTION_START = "com.hf.easydelivery.action.FG_LOC_START";
@@ -34,6 +36,8 @@ public class LocationForegroundService extends Service {
 
     private LocationSource locationSource;
     private LocationCallback locationCallback;
+    private final LocationFacadeProvider locationFacadeProvider =
+            DefaultLocationFacadeProvider.getInstance();
 
     @Override
     public void onCreate() {
@@ -87,9 +91,10 @@ public class LocationForegroundService extends Service {
                 if (locationResult.getLocations().isEmpty()) {
                     return;
                 }
-                SmartLocationManager mgr = SmartLocationManager.getInstance(getApplicationContext());
-                if (mgr != null) {
-                    mgr.onForegroundLocation(locationResult.getLastLocation());
+                ForegroundLocationConsumer consumer =
+                        locationFacadeProvider.getForegroundLocationConsumer(getApplicationContext());
+                if (consumer != null) {
+                    consumer.onForegroundLocation(locationResult.getLastLocation());
                 }
             }
         };

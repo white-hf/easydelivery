@@ -63,11 +63,12 @@ import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.core.DeliveryinfoMgr;
 import com.hf.easydelivery.core.PendingPackagesMgr;
 import com.hf.easydelivery.core.PowerSaverSelector;
-import com.hf.easydelivery.core.SmartLocationManager;
 import com.hf.easydelivery.core.facade.LocationFacade;
 import com.hf.easydelivery.core.facade.MovementState;
 import com.hf.easydelivery.core.facade.LocationSnapshot;
 import com.hf.easydelivery.core.facade.LocationUpdateListener;
+import com.hf.easydelivery.core.facade.LocationFacadeProvider;
+import com.hf.easydelivery.core.facade.DefaultLocationFacadeProvider;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.dao.PackageEntity;
 
@@ -168,6 +169,8 @@ public class CameraActivity extends AppCompatActivity
     private MatchResult activeAutoApartmentMatch;
     private final Set<String> apartmentAutoFilePaths = new HashSet<>();
     private LocationFacade smartLocationManager;
+    private final LocationFacadeProvider locationFacadeProvider =
+            DefaultLocationFacadeProvider.getInstance();
     private Location lastKnownLocation;
     private DeliveryInfo deliveryInfo;
 
@@ -406,10 +409,10 @@ public class CameraActivity extends AppCompatActivity
             return;
         }
         try {
-            smartLocationManager = SmartLocationManager.getInstance(getApplicationContext());
+            smartLocationManager = locationFacadeProvider.getLocationFacade(getApplicationContext());
             if (smartLocationManager == null) {
                 FileLog.getInstance().error(TAG,
-                        "initLocationManager: SmartLocationManager unavailable (context null?)");
+                        "initLocationManager: LocationFacade unavailable (context null?)");
                 return;
             }
         } catch (Exception e) {

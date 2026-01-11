@@ -58,6 +58,7 @@ import com.hf.easydelivery.core.pipeline.SmoothingFactorProvider;
 import com.hf.easydelivery.core.dispatch.LocationDispatcher;
 import com.hf.easydelivery.core.dispatch.DispatchGate;
 import com.hf.easydelivery.core.facade.LocationControls;
+import com.hf.easydelivery.core.facade.ForegroundLocationConsumer;
 import com.hf.easydelivery.core.facade.LocationFacade;
 import com.hf.easydelivery.core.facade.LocationSnapshot;
 import com.hf.easydelivery.core.burst.BurstConfig;
@@ -75,8 +76,7 @@ import java.util.List;
  * dispatching. It coordinates policy, burst/boost behavior, smoothing/prediction,
  * and listener notifications while balancing responsiveness and power usage.
  */
-public class SmartLocationManager implements LocationFacade, LocationControls {
-    private static final long BURST_MODE_DURATION_MS = 60 * 1000; // 1 minute
+public class SmartLocationManager implements LocationFacade, LocationControls, ForegroundLocationConsumer {
     private static SmartLocationManager instance;
     private static final String TAG = "SmartLocationManager";
 
@@ -111,37 +111,16 @@ public class SmartLocationManager implements LocationFacade, LocationControls {
             QualityConfig.getWeakSignalRequiredHits(),
             QualityConfig.getWeakSignalDurationMs());
     // legacy smoothing constant removed; smoothing factor comes from provider
-    private static final String BOOST_REASON_UNKNOWN = "unknown";
-    private static final String BOOST_REASON_FORCE = "force";
-    private static final String BOOST_REASON_EDGE_RISK = "edge_risk";
-    private static final String BOOST_REASON_POOR_FIX = "poor_fix";
-    private static final String BOOST_REASON_EMERGENCY = "emergency";
-    private static final String BOOST_REASON_DISPLACEMENT = "displacement_wake";
-    private static final String BOOST_REASON_JUMP = "jump_risk";
-    private static final String BOOST_REASON_MOTION = "motion_wake";
-    private static final String BOOST_REASON_INSIDE = "inside_zone";
-    private static final String BOOST_REASON_PROXIMITY = "proximity";
-    private static final String BOOST_REASON_MANUAL = "manual";
 
     private static BoostReason mapBoostReason(@Nullable String reason) {
-        if (reason == null) {
-            return BoostReason.UNKNOWN;
+        BoostReason parsed = BoostReason.fromKey(reason);
+        if (parsed == BoostReason.EDGE_RISK) {
+            return BoostReason.EDGE_FALLBACK;
         }
-        switch (reason) {
-            case BOOST_REASON_EDGE_RISK:
-                return BoostReason.EDGE_FALLBACK;
-            case BOOST_REASON_PROXIMITY:
-            case BOOST_REASON_INSIDE:
-                return BoostReason.PROXIMITY;
-            case BOOST_REASON_DISPLACEMENT:
-                return BoostReason.DISPLACEMENT;
-            case BOOST_REASON_EMERGENCY:
-                return BoostReason.EMERGENCY;
-            case BOOST_REASON_MOTION:
-                return BoostReason.MOTION;
-            default:
-                return BoostReason.UNKNOWN;
+        if (parsed == BoostReason.INSIDE) {
+            return BoostReason.PROXIMITY;
         }
+        return parsed;
     }
 
     // === Adaptive boost (temporary high-frequency updates) ===
@@ -211,11 +190,11 @@ public class SmartLocationManager implements LocationFacade, LocationControls {
      *
      */
     public void requestBoost(long durationMs) {
-        requestBoostInternal(durationMs, false, BOOST_REASON_UNKNOWN);
+        requestBoostInternal(durationMs, false, BoostReason.UNKNOWN.getKey());
     }
 
     public void requestBoostForce(long durationMs) {
-        requestBoostInternal(durationMs, true, BOOST_REASON_FORCE);
+        requestBoostInternal(durationMs, true, BoostReason.FORCE.getKey());
     }
 
     public void requestBoost(long durationMs, @NonNull String reason) {
@@ -228,7 +207,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls {
 
     private void requestBoostInternal(long durationMs, boolean force, @NonNull String reason) {
         if (strategyManager != null) {
-            String reasonKey = reason == null ? BOOST_REASON_UNKNOWN : reason;
+            String reasonKey = reason == null ? BoostReason.UNKNOWN.getKey() : reason;
             eventBus.emitBoostRequested(reasonKey, force);
             // logged via FileLogLocationObserver
             strategyManager.suggestBoost(mapBoostReason(reasonKey), durationMs, force);
@@ -262,7 +241,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls {
             FileLog.getInstance().debug(TAG, "requestBoost forced by user/gesture");
         }
 
-        String reasonKey = reason == null ? BOOST_REASON_UNKNOWN : reason;
+        String reasonKey = reason == null ? BoostReason.UNKNOWN.getKey() : reason;
         eventBus.emitBoostRequested(reasonKey, force);
         // logged via FileLogLocationObserver
         if (durationMs <= 0)
@@ -296,7 +275,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls {
         if (edgeRiskHits >= BurstConfig.getEdgeRiskRequiredHits()
                 && now - burstController.getLastChangeMs() >= BurstConfig.getBoostMinIntervalMs()) {
             edgeRiskHits = 0;
-            requestBoost(10_000L, BOOST_REASON_EDGE_RISK);
+            requestBoost(10_000L, BoostReason.EDGE_RISK.getKey());
         }
     }
 
@@ -322,7 +301,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls {
         lastLowPriorityBoostMs = nowMs;
         FileLog.getInstance().debug(TAG,
                 String.format("Displacement wake: %.1fm -> boost", displacement));
-        requestBoost(8_000L, BOOST_REASON_DISPLACEMENT);
+        requestBoost(8_000L, BoostReason.DISPLACEMENT.getKey());
         if (requestSingleFix) {
             requestSingleHighAccuracyFix();
         }
@@ -345,7 +324,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls {
         }
         jumpRiskHits = 0;
         lastLowPriorityBoostMs = nowMs;
-        requestBoost(8_000L, BOOST_REASON_JUMP);
+        requestBoost(8_000L, BoostReason.JUMP.getKey());
     }
 
     private SmartLocationManager(Context context) {
@@ -676,7 +655,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls {
                 lastEmergencyBoostUptimeMs = nowUptime;
                 FileLog.getInstance().debug(TAG,
                         "Emergency boost: no good fix for " + (sinceGood / 1000) + "s");
-                requestBoost(10_000L, BOOST_REASON_EMERGENCY);
+                requestBoost(10_000L, BoostReason.EMERGENCY.getKey());
             }
 
             Location fallback = processingContext.getOutputLocation();
@@ -813,7 +792,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls {
         }
 
         if (result.wasNotDriving && result.newState != MovementState.STATIONARY) {
-            requestBoost(10_000L, BOOST_REASON_MOTION);
+            requestBoost(10_000L, BoostReason.MOTION.getKey());
             // ????????????WALKING??DRIVING?????????
             requestSingleHighAccuracyFix();
         }
@@ -1153,7 +1132,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls {
         lastMovingTimeMs = System.currentTimeMillis();
         FileLog.getInstance().debug(TAG, "motion wake detected -> boost + single fix");
         try {
-            requestBoostForce(10_000L, BOOST_REASON_MOTION);
+            requestBoostForce(10_000L, BoostReason.MOTION.getKey());
         } catch (Throwable ignore) {
         }
         requestSingleHighAccuracyFix();
@@ -1244,4 +1223,5 @@ public class SmartLocationManager implements LocationFacade, LocationControls {
 
 
 }
+
 
