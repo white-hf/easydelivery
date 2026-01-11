@@ -13,6 +13,9 @@ public final class PredictionProcessor implements LocationProcessor {
 
     @Override
     public void process(ProcessingContext context) {
+        if (context.isPoorFix()) {
+            return;
+        }
         Location raw = context.getRawLocation();
         Location predicted = provider.predict(raw, context.getSpeedMps(), context.getBearingInput());
         context.setPredictedLocation(predicted);

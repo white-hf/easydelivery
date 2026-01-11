@@ -5,7 +5,7 @@ import android.location.Location;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.hf.easydelivery.core.SmartLocationManager;
+import com.hf.easydelivery.core.facade.MovementState;
 import com.hf.easydelivery.dao.DeliveryInfo;
 
 /**
@@ -44,7 +44,7 @@ public final class SimpleEtaEstimator {
      */
     public long estimateSeconds(@Nullable Location from,
                                 @Nullable DeliveryInfo target,
-                                @Nullable SmartLocationManager.MovementState movementState) {
+                                @Nullable MovementState movementState) {
         if (from == null || target == null) return -1L;
         double lat = target.getLatitude();
         double lon = target.getLongitude();
@@ -69,9 +69,9 @@ public final class SimpleEtaEstimator {
         return Math.max(0L, eta);
     }
 
-    private float pickSpeed(@Nullable SmartLocationManager.MovementState mv, float distanceMeters) {
-        SmartLocationManager.MovementState state = mv == null
-                ? SmartLocationManager.MovementState.SLOW_DRIVING
+    private float pickSpeed(@Nullable MovementState mv, float distanceMeters) {
+        MovementState state = mv == null
+                ? MovementState.SLOW_DRIVING
                 : mv;
         switch (state) {
             case STATIONARY:

@@ -8,6 +8,9 @@ import androidx.annotation.NonNull;
 public final class SmoothingProcessor implements LocationProcessor {
     @Override
     public void process(ProcessingContext context) {
+        if (context.isPoorFix()) {
+            return;
+        }
         Location lastSmoothed = context.getLastSmoothedLocation();
         Location raw = context.getRawLocation();
         if (lastSmoothed == null) {

@@ -3,7 +3,7 @@ package com.hf.easydelivery.map;
 import android.location.Location;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import com.hf.easydelivery.core.SmartLocationManager;
+import com.hf.easydelivery.core.facade.MovementState;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import java.util.List;
 
@@ -22,7 +22,7 @@ public class CameraUpdateContext {
     @NonNull
     public final Location location;
     @NonNull
-    public final SmartLocationManager.MovementState movementState;
+    public final MovementState movementState;
     public final float accuracyMeters;
     public final long locationAgeMs;
     public final LocationSource locationSource;
@@ -42,7 +42,7 @@ public class CameraUpdateContext {
 
     public CameraUpdateContext(
             @NonNull Location location,
-            @NonNull SmartLocationManager.MovementState movementState,
+            @NonNull MovementState movementState,
             float accuracyMeters,
             long locationAgeMs,
             @NonNull LocationSource locationSource,
@@ -78,8 +78,8 @@ public class CameraUpdateContext {
     }
 
     public boolean isDriving() {
-        return movementState == SmartLocationManager.MovementState.SLOW_DRIVING ||
-                movementState == SmartLocationManager.MovementState.NORMAL_DRIVING;
+        return movementState == MovementState.SLOW_DRIVING ||
+                movementState == MovementState.NORMAL_DRIVING;
     }
 
     public boolean isMovingBySpeed() {
@@ -91,13 +91,13 @@ public class CameraUpdateContext {
     }
 
     public boolean isStationaryOrWalking() {
-        return movementState == SmartLocationManager.MovementState.STATIONARY ||
-                movementState == SmartLocationManager.MovementState.WALKING;
+        return movementState == MovementState.STATIONARY ||
+                movementState == MovementState.WALKING;
     }
 
     public boolean isLowSpeedInsideDeliveryZone() {
-        return insideDeliveryZone && (movementState == SmartLocationManager.MovementState.WALKING
-                || movementState == SmartLocationManager.MovementState.SLOW_DRIVING
-                || movementState == SmartLocationManager.MovementState.STATIONARY);
+        return insideDeliveryZone && (movementState == MovementState.WALKING
+                || movementState == MovementState.SLOW_DRIVING
+                || movementState == MovementState.STATIONARY);
     }
 }
