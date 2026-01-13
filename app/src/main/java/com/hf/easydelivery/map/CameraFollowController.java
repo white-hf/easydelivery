@@ -54,7 +54,7 @@ public class CameraFollowController {
         }
     }
 
-    private static final float DRIVING_MIN_ZOOM = 16.5f;
+    private static final float DRIVING_MIN_ZOOM = 15.0f;
     private static final float DRIVING_TARGET_SCREEN_FRACTION_Y = 0.65f;
     private static final float NAVIGATION_TARGET_SCREEN_FRACTION_Y = 0.86f;
     private static final float DEFAULT_TILT = 45f;
@@ -68,6 +68,7 @@ public class CameraFollowController {
     private static final float EDGE_FORCE_METERS = 25f;
     private static final float SMART_ZOOM_NEAR_METERS = 800f;
     private static final float LIST_VIEW_NEAR_METERS = 800f;
+    private static final float LIST_VIEW_FAR_SUPPRESS_METERS = 5000f;
     private static final int LIST_VIEW_MIN_ITEMS = 1;
 
     // Adaptive animation + lookAhead smoothing
@@ -552,6 +553,7 @@ public class CameraFollowController {
                         && context.nearestPackageDistanceMeters <= SMART_ZOOM_NEAR_METERS);
         boolean smartZoomApplicable = allowSmartZoom &&
                 context.nearestPackageDistanceMeters > 0;
+        boolean farDistance = context.nearestPackageDistanceMeters > LIST_VIEW_FAR_SUPPRESS_METERS;
 
         int nearbyCount = context.nearbyDeliveries == null ? 0 : context.nearbyDeliveries.size();
         boolean allowListView = stationaryOrWalking
@@ -560,8 +562,15 @@ public class CameraFollowController {
                         && context.nearestPackageDistanceMeters <= LIST_VIEW_NEAR_METERS
                         && nearbyCount >= LIST_VIEW_MIN_ITEMS);
         allowListView = allowListView && !isUserInteracting;
+        if (!isAutoFollowPaused && !navMode) {
+            allowListView = false;
+        }
         if (stationaryOrWalking && context.stationaryDurationMs < getListEntryStationaryMs()) {
             allowListView = false;
+        }
+        if (stationaryOrWalking && farDistance) {
+            allowListView = false;
+            listHoldActive = false;
         }
         boolean allowEnterList = allowListView
                 && (!inFollowMode || !followHoldActive)
