@@ -292,6 +292,9 @@ public class MapInnerFragment extends Fragment
     private static final long AUTO_FOLLOW_PAUSE_MS = 8000L;
     private long lastToolbarTapMs = 0L;
 
+    private static final long FG_MIN_ON_MS = 120_000L;
+    private static final long FG_STOP_GRACE_MS = 60_000L;
+
     private static final float FAR_DISTANCE_SAMPLE_THRESHOLD_M = 1500f;
     private static final long FAR_SAMPLE_MIN_INTERVAL_MS = 2500L;
     private static final long NEAR_SAMPLE_MIN_INTERVAL_MS = 800L;
@@ -307,6 +310,12 @@ public class MapInnerFragment extends Fragment
     private long commuteSuppressUntilMs = 0L;
     private long lastCommuteSuppressedKey = 0L;
     private int edgeOutsideConsecutive = 0;
+
+    private long fgLastStartMs = 0L;
+    private long fgStopPendingSinceMs = 0L;
+    private long fgLastStopMs = 0L;
+    private final Handler foregroundTrackingHandler = new Handler(Looper.getMainLooper());
+    private final Runnable foregroundTrackingRunnable = this::updateForegroundTracking;
 
     /** Expose for developer panel to apply follow config at runtime. */
     @Nullable
@@ -2146,15 +2155,41 @@ public class MapInnerFragment extends Fragment
             return;
         }
         boolean realtime = profileManager.getCurrent() != ProfileManager.AppProfile.POWERSAVER;
-        boolean followActive = !autoFollowPausedByGesture;
-        boolean driving = lastMovementState == MovementState.SLOW_DRIVING
-                || lastMovementState == MovementState.NORMAL_DRIVING;
-        boolean shouldEnable = isResumed() && realtime && followActive && driving;
-        if (shouldEnable && !locationControls.isForegroundTrackingActive()) {
-            locationControls.startForegroundTracking();
-        } else if (!shouldEnable && locationControls.isForegroundTrackingActive()) {
-            locationControls.stopForegroundTracking(isResumed());
+        boolean shouldEnable = isResumed() && realtime;
+        boolean isActive = locationControls.isForegroundTrackingActive();
+        long now = SystemClock.elapsedRealtime();
+        if (isActive && fgLastStartMs == 0L) {
+            fgLastStartMs = now;
         }
+        if (shouldEnable) {
+            fgStopPendingSinceMs = 0L;
+            foregroundTrackingHandler.removeCallbacks(foregroundTrackingRunnable);
+            if (!isActive) {
+                locationControls.startForegroundTracking();
+                fgLastStartMs = now;
+            }
+            return;
+        }
+        if (!isActive) {
+            fgStopPendingSinceMs = 0L;
+            foregroundTrackingHandler.removeCallbacks(foregroundTrackingRunnable);
+            return;
+        }
+        if (fgStopPendingSinceMs == 0L) {
+            fgStopPendingSinceMs = now;
+            foregroundTrackingHandler.removeCallbacks(foregroundTrackingRunnable);
+            foregroundTrackingHandler.postDelayed(foregroundTrackingRunnable, FG_STOP_GRACE_MS);
+            return;
+        }
+        long activeDurationMs = now - fgLastStartMs;
+        long pendingDurationMs = now - fgStopPendingSinceMs;
+        if (activeDurationMs < FG_MIN_ON_MS || pendingDurationMs < FG_STOP_GRACE_MS) {
+            return;
+        }
+        locationControls.stopForegroundTracking(isResumed());
+        fgLastStopMs = now;
+        fgStopPendingSinceMs = 0L;
+        foregroundTrackingHandler.removeCallbacks(foregroundTrackingRunnable);
     }
 
     @Override
@@ -2218,6 +2253,7 @@ public class MapInnerFragment extends Fragment
             } catch (Throwable ignore) {
             }
         }
+        foregroundTrackingHandler.removeCallbacks(foregroundTrackingRunnable);
         hideInfoPillCompletely();
         currentMapDeliveries = Collections.emptyList();
         nearestDeliveries = Collections.emptyList();

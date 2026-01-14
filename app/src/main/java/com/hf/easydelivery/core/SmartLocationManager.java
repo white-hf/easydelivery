@@ -159,6 +159,8 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
     private long lastEmergencyBoostUptimeMs = 0L;
     private long singleFixBackoffMs = BurstConfig.getSingleFixBackoffBaseMs();
     private volatile boolean foregroundTrackingActive = false;
+    private static final long ACTIVITY_FG_MIN_INTERVAL_MS = 10_000L;
+    private long lastActivityFgUptimeMs = 0L;
 
     public interface WeakSignalListener extends LocationUpdateListener {
         void onWeakSignal();
@@ -1100,9 +1102,16 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
 
     private void updateStateFromActivity(MovementState newState) {
         if (newState == MovementState.SLOW_DRIVING || newState == MovementState.NORMAL_DRIVING) {
-            lastInVehicleUptimeMs = SystemClock.elapsedRealtime();
+            long nowUptime = SystemClock.elapsedRealtime();
+            lastInVehicleUptimeMs = nowUptime;
             movingHoldUntilMs = lastInVehicleUptimeMs + BurstConfig.getMovingHoldMs();
             movingFlag = true;
+            if (!foregroundTrackingActive
+                    && (nowUptime - lastActivityFgUptimeMs) >= ACTIVITY_FG_MIN_INTERVAL_MS) {
+                lastActivityFgUptimeMs = nowUptime;
+                startForegroundTracking();
+            }
+            requestBoost(StrategyConfig.getBurstDurationMs(), BoostReason.MOTION.getKey());
         }
         if (movementStateMachine.applyExternalState(newState, System.currentTimeMillis())) {
             updateLocationParametersForState();
