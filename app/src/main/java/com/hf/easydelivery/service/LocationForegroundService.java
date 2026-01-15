@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.location.Location;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.Looper;
@@ -36,6 +37,8 @@ public class LocationForegroundService extends Service {
 
     private LocationSource locationSource;
     private LocationCallback locationCallback;
+    private long lastCallbackUptimeMs = 0L;
+    private long lastElapsedMs = -1L;
     private final LocationFacadeProvider locationFacadeProvider =
             DefaultLocationFacadeProvider.getInstance();
 
@@ -91,10 +94,33 @@ public class LocationForegroundService extends Service {
                 if (locationResult.getLocations().isEmpty()) {
                     return;
                 }
+                Location last = locationResult.getLastLocation();
+                long nowUptime = android.os.SystemClock.uptimeMillis();
+                long deltaMs = lastCallbackUptimeMs == 0L ? -1L : (nowUptime - lastCallbackUptimeMs);
+                lastCallbackUptimeMs = nowUptime;
+                long elapsedMs = -1L;
+                try {
+                    elapsedMs = last.getElapsedRealtimeNanos() / 1_000_000L;
+                } catch (Throwable ignore) {
+                }
+                long ageMs = elapsedMs > 0 ? (android.os.SystemClock.elapsedRealtime() - elapsedMs) : -1L;
+                float dLast = -1f;
+                if (lastElapsedMs > 0 && elapsedMs > 0 && lastElapsedMs != elapsedMs) {
+                    dLast = 0f;
+                }
+                lastElapsedMs = elapsedMs;
+                FileLog.getInstance().debug(TAG,
+                        String.format("onLocationResult: deltaMs=%d acc=%.1fm ageMs=%d elapsedMs=%d lat=%.6f lng=%.6f",
+                                deltaMs,
+                                last.getAccuracy(),
+                                ageMs,
+                                elapsedMs,
+                                last.getLatitude(),
+                                last.getLongitude()));
                 ForegroundLocationConsumer consumer =
                         locationFacadeProvider.getForegroundLocationConsumer(getApplicationContext());
                 if (consumer != null) {
-                    consumer.onForegroundLocation(locationResult.getLastLocation());
+                    consumer.onForegroundLocation(last);
                 }
             }
         };

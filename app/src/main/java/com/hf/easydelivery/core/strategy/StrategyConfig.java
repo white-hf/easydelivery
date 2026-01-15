@@ -1,7 +1,8 @@
 package com.hf.easydelivery.core.strategy;
 
 public final class StrategyConfig {
-    private StrategyConfig() {}
+    private StrategyConfig() {
+    }
 
     private static final long REALTIME_INTERVAL_MIN_MS = 1_000L;
     private static final long REALTIME_INTERVAL_MAX_MS = 2_000L;
@@ -42,22 +43,22 @@ public final class StrategyConfig {
     private static final float MIN_PREDICTION_SPEED_MPS = 0.8f;
     private static final double EARTH_RADIUS_METERS = 6378137.0;
 
-    private static volatile long realtimeIntervalMs = 1500L;
-    private static volatile long realtimeMinIntervalMs = 800L;
-    private static volatile float realtimeMinDistanceM = 0.5f;
-    private static volatile long burstIntervalMs = 1000L;
-    private static volatile long burstMinIntervalMs = 1000L;
-    private static volatile float burstMinDistanceM = 0.5f;
-    private static volatile long burstMaxDelayMs = 800L;
+    private static volatile long realtimeIntervalMs = 1000L;
+    private static volatile long realtimeMinIntervalMs = 500L;
+    private static volatile float realtimeMinDistanceM = 0f;
+    private static volatile long burstIntervalMs = 800L;
+    private static volatile long burstMinIntervalMs = 400L;
+    private static volatile float burstMinDistanceM = 0f;
+    private static volatile long burstMaxDelayMs = 0L;
 
     private static volatile long powerSaveCooldownMs = 30_000L;
-    private static volatile long powerSaveIntervalMovingMs = 10_000L;
+    private static volatile long powerSaveIntervalMovingMs = 8_000L;
     private static volatile long powerSaveIntervalStationaryMs = 15_000L;
     private static volatile long powerSaveMinIntervalMs = 8_000L;
-    private static volatile float powerSaveMinDistanceMovingM = 3.0f;
-    private static volatile float powerSaveMinDistanceStationaryM = 6.0f;
+    private static volatile float powerSaveMinDistanceMovingM = 8.0f;
+    private static volatile float powerSaveMinDistanceStationaryM = 10.0f;
 
-    private static volatile long burstDurationMs = 12_000L;
+    private static volatile long burstDurationMs = 15_000L;
 
     public static void applyPerfBalance(float balance) {
         float t = clamp01(balance);
@@ -67,10 +68,13 @@ public final class StrategyConfig {
 
         setPowerSaveCooldownMs(lerpLong(POWERSAVE_COOLDOWN_MIN_MS, POWERSAVE_COOLDOWN_MAX_MS, t));
         setPowerSaveIntervalMovingMs(lerpLong(POWERSAVE_MOVING_INTERVAL_MIN_MS, POWERSAVE_MOVING_INTERVAL_MAX_MS, t));
-        setPowerSaveIntervalStationaryMs(lerpLong(POWERSAVE_STATIONARY_INTERVAL_MIN_MS, POWERSAVE_STATIONARY_INTERVAL_MAX_MS, t));
+        setPowerSaveIntervalStationaryMs(
+                lerpLong(POWERSAVE_STATIONARY_INTERVAL_MIN_MS, POWERSAVE_STATIONARY_INTERVAL_MAX_MS, t));
         setPowerSaveMinIntervalMs(lerpLong(POWERSAVE_MIN_INTERVAL_MIN_MS, POWERSAVE_MIN_INTERVAL_MAX_MS, t));
-        setPowerSaveMinDistanceMovingM(lerpFloat(POWERSAVE_MIN_DISTANCE_MOVING_MIN_M, POWERSAVE_MIN_DISTANCE_MOVING_MAX_M, t));
-        setPowerSaveMinDistanceStationaryM(lerpFloat(POWERSAVE_MIN_DISTANCE_STATIONARY_MIN_M, POWERSAVE_MIN_DISTANCE_STATIONARY_MAX_M, t));
+        setPowerSaveMinDistanceMovingM(
+                lerpFloat(POWERSAVE_MIN_DISTANCE_MOVING_MIN_M, POWERSAVE_MIN_DISTANCE_MOVING_MAX_M, t));
+        setPowerSaveMinDistanceStationaryM(
+                lerpFloat(POWERSAVE_MIN_DISTANCE_STATIONARY_MIN_M, POWERSAVE_MIN_DISTANCE_STATIONARY_MAX_M, t));
         setBurstDurationMs(lerpLong(BURST_DURATION_MIN_MS, BURST_DURATION_MAX_MS, t));
     }
 
@@ -83,8 +87,10 @@ public final class StrategyConfig {
     }
 
     private static float clamp01(float v) {
-        if (v < 0f) return 0f;
-        if (v > 1f) return 1f;
+        if (v < 0f)
+            return 0f;
+        if (v > 1f)
+            return 1f;
         return v;
     }
 

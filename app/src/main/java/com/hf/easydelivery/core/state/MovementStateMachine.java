@@ -8,6 +8,13 @@ public final class MovementStateMachine {
     private MovementState currentState = MovementState.STATIONARY;
     private MovementState previousState = MovementState.STATIONARY;
     private long continuousStationaryStartMs = 0L;
+    private int walkingEnterCount = 0;
+    private int walkingExitCount = 0;
+
+    private static final float WALKING_ENTER_MPS = 1.2f;
+    private static final float WALKING_EXIT_MPS = 0.6f;
+    private static final int WALKING_ENTER_REQUIRED = 2;
+    private static final int WALKING_EXIT_REQUIRED = 2;
 
     public static final class Result {
         public final boolean changed;
@@ -40,15 +47,42 @@ public final class MovementStateMachine {
             long inVehicleGraceMs,
             float displacementOverrideM) {
         MovementState oldState = currentState;
-        MovementState newState;
+        MovementState speedState;
         if (speedMps < 0.5f) {
-            newState = MovementState.STATIONARY;
+            speedState = MovementState.STATIONARY;
         } else if (speedMps < 2f) {
-            newState = MovementState.WALKING;
+            speedState = MovementState.WALKING;
         } else if (speedMps < 8f) {
-            newState = MovementState.SLOW_DRIVING;
+            speedState = MovementState.SLOW_DRIVING;
         } else {
-            newState = MovementState.NORMAL_DRIVING;
+            speedState = MovementState.NORMAL_DRIVING;
+        }
+
+        MovementState newState = speedState;
+        if (speedState == MovementState.WALKING && oldState == MovementState.STATIONARY) {
+            if (speedMps >= WALKING_ENTER_MPS) {
+                walkingEnterCount++;
+            } else {
+                walkingEnterCount = 0;
+            }
+            if (walkingEnterCount < WALKING_ENTER_REQUIRED) {
+                newState = MovementState.STATIONARY;
+            }
+        } else {
+            walkingEnterCount = 0;
+        }
+
+        if (speedState == MovementState.STATIONARY && oldState == MovementState.WALKING) {
+            if (speedMps <= WALKING_EXIT_MPS) {
+                walkingExitCount++;
+            } else {
+                walkingExitCount = 0;
+            }
+            if (walkingExitCount < WALKING_EXIT_REQUIRED) {
+                newState = MovementState.WALKING;
+            }
+        } else {
+            walkingExitCount = 0;
         }
 
         boolean wasDriving = oldState == MovementState.SLOW_DRIVING
