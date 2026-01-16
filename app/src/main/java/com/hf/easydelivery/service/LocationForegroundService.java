@@ -1,5 +1,7 @@
 package com.hf.easydelivery.service;
 
+import static com.google.android.gms.location.Granularity.GRANULARITY_FINE;
+
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -130,6 +132,7 @@ public class LocationForegroundService extends Service {
                 .setMinUpdateIntervalMillis(StrategyConfig.getRealtimeMinIntervalMs())
                 .setMinUpdateDistanceMeters(StrategyConfig.getRealtimeMinDistanceM())
                 .setMaxUpdateDelayMillis(0L)
+                .setGranularity(GRANULARITY_FINE)
                 .setWaitForAccurateLocation(false)
                 .build();
 

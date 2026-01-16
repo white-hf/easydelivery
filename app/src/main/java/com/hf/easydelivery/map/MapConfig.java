@@ -12,7 +12,7 @@ public final class MapConfig {
     public static final float DISTANCE_EPSILON_M = 0.8f;
 
     // Zoom / smart zoom
-    public static final float DEFAULT_FOLLOW_ZOOM = 17f;
+    public static final float DEFAULT_FOLLOW_ZOOM = 15f;
     public static final float CLOSE_DISTANCE_METERS = 90f;
     public static final float APPROACH_DISTANCE_METERS = 260f;
     public static final float LEAVE_DISTANCE_METERS = 360f;

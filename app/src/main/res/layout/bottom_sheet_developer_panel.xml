@@ -179,6 +179,18 @@
             <EditText android:id="@+id/et_zoom_approach_meters" android:inputType="numberDecimal"/>
             <TextView android:text="@string/dev_panel_approach_zoom"/>
             <EditText android:id="@+id/et_zoom_approach_zoom" android:inputType="numberDecimal"/>
+            <TextView android:text="@string/dev_panel_default_follow_zoom"/>
+            <EditText android:id="@+id/et_zoom_default_follow" android:inputType="numberDecimal"/>
+            <TextView android:text="@string/dev_panel_driving_min_zoom"/>
+            <EditText android:id="@+id/et_zoom_driving_min" android:inputType="numberDecimal"/>
+            <TextView android:text="@string/dev_panel_speed_zoom_near"/>
+            <EditText android:id="@+id/et_zoom_speed_near" android:inputType="numberDecimal"/>
+            <TextView android:text="@string/dev_panel_speed_zoom_city"/>
+            <EditText android:id="@+id/et_zoom_speed_city" android:inputType="numberDecimal"/>
+            <TextView android:text="@string/dev_panel_speed_zoom_suburb"/>
+            <EditText android:id="@+id/et_zoom_speed_suburb" android:inputType="numberDecimal"/>
+            <TextView android:text="@string/dev_panel_speed_zoom_highway"/>
+            <EditText android:id="@+id/et_zoom_speed_highway" android:inputType="numberDecimal"/>
         </GridLayout>
         <Button
             android:id="@+id/btn_apply_zoom"
