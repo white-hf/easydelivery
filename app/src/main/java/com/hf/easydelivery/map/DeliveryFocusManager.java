@@ -100,7 +100,7 @@ public class DeliveryFocusManager {
 
     private static final Comparator<DeliveryInfo> ADDRESS_COMPARATOR = (a, b) -> compareDeliveriesForAddress(a, b);
 
-    public static final float DEFAULT_FOLLOW_ZOOM = 17f;
+    public static final float DEFAULT_FOLLOW_ZOOM = 15f;
     private static final float CLOSE_DISTANCE_METERS = 90f; // CLOSE_DISTANCE_METERS: 强贴近（站点前/楼下）
     private static final float APPROACH_DISTANCE_METERS = 260f; // APPROACH_DISTANCE_METERS: 逐步接近（最后一段）
     private static final float LEAVE_DISTANCE_METERS = 360f; // LEAVE_DISTANCE_METERS: 离开回到巡航视角

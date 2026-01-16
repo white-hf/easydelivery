@@ -273,6 +273,12 @@
     <string name="dev_panel_close_zoom">closeZoom</string>
     <string name="dev_panel_approach_meters">approachMeters</string>
     <string name="dev_panel_approach_zoom">approachZoom</string>
+    <string name="dev_panel_default_follow_zoom">defaultFollowZoom</string>
+    <string name="dev_panel_driving_min_zoom">drivingMinZoom</string>
+    <string name="dev_panel_speed_zoom_near">speedZoomNear</string>
+    <string name="dev_panel_speed_zoom_city">speedZoomCity</string>
+    <string name="dev_panel_speed_zoom_suburb">speedZoomSuburb</string>
+    <string name="dev_panel_speed_zoom_highway">speedZoomHighway</string>
     <string name="dev_panel_apply_zoom">Apply zoom</string>
     <string name="dev_panel_experiments">Experiments</string>
     <string name="dev_panel_enable_inside_boost">Enable inside-zone GPS boost</string>

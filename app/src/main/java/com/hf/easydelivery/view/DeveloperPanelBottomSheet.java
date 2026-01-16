@@ -24,6 +24,7 @@ import com.hf.easydelivery.map.DeliveryFocusManager;
 import com.hf.easydelivery.map.InfoPillProximityController;
 import com.hf.easydelivery.map.MapInnerFragment;
 import com.hf.easydelivery.map.CameraFollowController.FollowConfig;
+import com.hf.easydelivery.map.CameraFollowController.ZoomTuningConfig;
 import com.hf.easydelivery.map.InfoPillProximityController.ProximityConfig;
 import com.hf.easydelivery.map.DeliveryFocusManager.ZoomConfig;
 import com.hf.easydelivery.map.config.ProfileManager;
@@ -39,6 +40,8 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
     private EditText etEnterRadius, etExitRadius, etThrottleDrive, etThrottleFoot;
     private EditText etFollowStdInterval, etFollowStdDist, etFollowStdHeading;
     private EditText etZoomCloseMeters, etZoomCloseZoom, etZoomApproachMeters, etZoomApproachZoom;
+    private EditText etZoomDefaultFollow, etZoomDrivingMin;
+    private EditText etZoomSpeedNear, etZoomSpeedCity, etZoomSpeedSuburb, etZoomSpeedHighway;
     private SwitchCompat switchInsideBoost;
     private SeekBar seekPerfBalance;
 
@@ -103,6 +106,12 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
         etZoomCloseZoom = view.findViewById(R.id.et_zoom_close_zoom);
         etZoomApproachMeters = view.findViewById(R.id.et_zoom_approach_meters);
         etZoomApproachZoom = view.findViewById(R.id.et_zoom_approach_zoom);
+        etZoomDefaultFollow = view.findViewById(R.id.et_zoom_default_follow);
+        etZoomDrivingMin = view.findViewById(R.id.et_zoom_driving_min);
+        etZoomSpeedNear = view.findViewById(R.id.et_zoom_speed_near);
+        etZoomSpeedCity = view.findViewById(R.id.et_zoom_speed_city);
+        etZoomSpeedSuburb = view.findViewById(R.id.et_zoom_speed_suburb);
+        etZoomSpeedHighway = view.findViewById(R.id.et_zoom_speed_highway);
         switchInsideBoost = view.findViewById(R.id.switch_inside_boost);
         seekPerfBalance = view.findViewById(R.id.seek_perf_balance);
     }
@@ -207,6 +216,14 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
             }
         }
 
+        ZoomTuningConfig zoomTuningConfig = CameraFollowController.getZoomTuningConfig();
+        etZoomDefaultFollow.setText(String.valueOf(zoomTuningConfig.defaultFollowZoom));
+        etZoomDrivingMin.setText(String.valueOf(zoomTuningConfig.drivingMinZoom));
+        etZoomSpeedNear.setText(String.valueOf(zoomTuningConfig.speedZoomNear));
+        etZoomSpeedCity.setText(String.valueOf(zoomTuningConfig.speedZoomCity));
+        etZoomSpeedSuburb.setText(String.valueOf(zoomTuningConfig.speedZoomSuburb));
+        etZoomSpeedHighway.setText(String.valueOf(zoomTuningConfig.speedZoomHighway));
+
         if (switchInsideBoost != null) {
             if (mapFragment != null) {
                 switchInsideBoost.setChecked(mapFragment.isInsideZoneBoostEnabled());
@@ -283,12 +300,21 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
             newConfig.approachMeters = Float.parseFloat(etZoomApproachMeters.getText().toString());
             newConfig.approachZoom = Float.parseFloat(etZoomApproachZoom.getText().toString());
 
+            ZoomTuningConfig zoomTuning = new ZoomTuningConfig();
+            zoomTuning.defaultFollowZoom = Float.parseFloat(etZoomDefaultFollow.getText().toString());
+            zoomTuning.drivingMinZoom = Float.parseFloat(etZoomDrivingMin.getText().toString());
+            zoomTuning.speedZoomNear = Float.parseFloat(etZoomSpeedNear.getText().toString());
+            zoomTuning.speedZoomCity = Float.parseFloat(etZoomSpeedCity.getText().toString());
+            zoomTuning.speedZoomSuburb = Float.parseFloat(etZoomSpeedSuburb.getText().toString());
+            zoomTuning.speedZoomHighway = Float.parseFloat(etZoomSpeedHighway.getText().toString());
+
             DeliveryFocusManager focusMgr = (mapFragment == null) ? null : mapFragment.getFocusManager();
             if (focusMgr == null) {
                 Toast.makeText(getContext(), R.string.dev_panel_focus_unavailable, Toast.LENGTH_SHORT).show();
                 return;
             }
             focusMgr.applyZoomConfig(newConfig);
+            CameraFollowController.applyZoomTuningConfig(zoomTuning);
 
             FileLog.getInstance().debug(TAG, "Applied new ZoomConfig");
             Toast.makeText(getContext(), R.string.dev_panel_zoom_applied, Toast.LENGTH_SHORT).show();

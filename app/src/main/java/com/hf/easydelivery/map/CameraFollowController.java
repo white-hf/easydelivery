@@ -54,17 +54,23 @@ public class CameraFollowController {
         }
     }
 
-    private static final float DRIVING_MIN_ZOOM = 15.0f;
+    // Tunable zoom parameters (developer panel).
+    public static final class ZoomTuningConfig {
+        public float defaultFollowZoom = 15.0f;
+        public float drivingMinZoom = 14.5f;
+        public float speedZoomNear = 18.8f;
+        public float speedZoomCity = 17.5f;
+        public float speedZoomSuburb = 16.5f;
+        public float speedZoomHighway = 15.5f;
+    }
+
+    private static final ZoomTuningConfig ZOOM_TUNING_CONFIG = new ZoomTuningConfig();
     private static final float DRIVING_TARGET_SCREEN_FRACTION_Y = 0.65f;
     private static final float NAVIGATION_TARGET_SCREEN_FRACTION_Y = 0.86f;
     private static final float DEFAULT_TILT = 45f;
     private static final float DRIVING_TILT_DEGREES = 55f;
     private static final float NAVIGATION_TILT_DEGREES = 60f;
     private static final float BROWSE_TILT_DEGREES = 35f;
-    private static final float SPEED_ZOOM_NEAR = 18.8f;
-    private static final float SPEED_ZOOM_CITY = 17.5f;
-    private static final float SPEED_ZOOM_SUBURB = 16.5f;
-    private static final float SPEED_ZOOM_HIGHWAY = 15.5f;
     private static final float EDGE_FORCE_METERS = 25f;
     private static final float SMART_ZOOM_NEAR_METERS = 800f;
     private static final float LIST_VIEW_NEAR_METERS = 800f;
@@ -124,6 +130,34 @@ public class CameraFollowController {
         FOLLOW_CONFIG.basicIntervalMs = cfg.basicIntervalMs;
         FOLLOW_CONFIG.basicDistM = cfg.basicDistM;
         FOLLOW_CONFIG.basicHeadingDeg = cfg.basicHeadingDeg;
+    }
+
+    @NonNull
+    public static ZoomTuningConfig getZoomTuningConfig() {
+        return ZOOM_TUNING_CONFIG;
+    }
+
+    public static void applyZoomTuningConfig(@NonNull ZoomTuningConfig cfg) {
+        if (cfg == null)
+            return;
+        if (!Float.isNaN(cfg.defaultFollowZoom) && cfg.defaultFollowZoom > 0f) {
+            ZOOM_TUNING_CONFIG.defaultFollowZoom = cfg.defaultFollowZoom;
+        }
+        if (!Float.isNaN(cfg.drivingMinZoom) && cfg.drivingMinZoom > 0f) {
+            ZOOM_TUNING_CONFIG.drivingMinZoom = cfg.drivingMinZoom;
+        }
+        if (!Float.isNaN(cfg.speedZoomNear) && cfg.speedZoomNear > 0f) {
+            ZOOM_TUNING_CONFIG.speedZoomNear = cfg.speedZoomNear;
+        }
+        if (!Float.isNaN(cfg.speedZoomCity) && cfg.speedZoomCity > 0f) {
+            ZOOM_TUNING_CONFIG.speedZoomCity = cfg.speedZoomCity;
+        }
+        if (!Float.isNaN(cfg.speedZoomSuburb) && cfg.speedZoomSuburb > 0f) {
+            ZOOM_TUNING_CONFIG.speedZoomSuburb = cfg.speedZoomSuburb;
+        }
+        if (!Float.isNaN(cfg.speedZoomHighway) && cfg.speedZoomHighway > 0f) {
+            ZOOM_TUNING_CONFIG.speedZoomHighway = cfg.speedZoomHighway;
+        }
     }
 
     private interface FollowStrategy {
@@ -457,7 +491,7 @@ public class CameraFollowController {
     public void resumeFollow(@NonNull Location location,
             @NonNull MovementState state,
             @Nullable Float preferredZoom) {
-        float zoom = (preferredZoom != null) ? preferredZoom : DRIVING_MIN_ZOOM;
+        float zoom = (preferredZoom != null) ? preferredZoom : ZOOM_TUNING_CONFIG.defaultFollowZoom;
         pausedByUser = false;
         hasEverEnteredDrivingMode = false;
         logD("resumeFollow(): clearing paused flag and forcing recenter, zoom=" + zoom
@@ -844,7 +878,7 @@ public class CameraFollowController {
 
     private float computePreferredZoom(CameraUpdateContext context) {
         if (context.nearestPackageDistanceMeters <= 0) {
-            return DRIVING_MIN_ZOOM;
+            return ZOOM_TUNING_CONFIG.defaultFollowZoom;
         }
 
         boolean allowSmartZoom = !context.isDrivingLikely()
@@ -855,7 +889,7 @@ public class CameraFollowController {
             // to prevent annoying zoom jumps (e.g. from 14.9 to 16.5) when stopping at
             // lights.
             if (context.nearestPackageDistanceMeters > 1500f) {
-                return DRIVING_MIN_ZOOM;
+                return ZOOM_TUNING_CONFIG.drivingMinZoom;
             }
 
             float smartZoom = DeliveryFocusManager.computeSmartZoom(
@@ -869,7 +903,7 @@ public class CameraFollowController {
             }
         }
 
-        float result = computeSpeedZoom(context.location, DRIVING_MIN_ZOOM);
+        float result = computeSpeedZoom(context.location, ZOOM_TUNING_CONFIG.defaultFollowZoom);
         return result;
     }
 
@@ -878,14 +912,14 @@ public class CameraFollowController {
             float nearestPackageDistanceMeters,
             int visibleMapHeightPx) {
         if (nearestPackageDistanceMeters <= 0) {
-            return DRIVING_MIN_ZOOM;
+            return ZOOM_TUNING_CONFIG.defaultFollowZoom;
         }
 
         boolean stationaryOrWalking = state == MovementState.STATIONARY
                 || state == MovementState.WALKING;
         if (stationaryOrWalking) {
             if (nearestPackageDistanceMeters > 1500f) {
-                return DRIVING_MIN_ZOOM;
+                return ZOOM_TUNING_CONFIG.drivingMinZoom;
             }
 
             float smartZoom = DeliveryFocusManager.computeSmartZoom(
@@ -898,7 +932,7 @@ public class CameraFollowController {
             }
         }
 
-        return computeSpeedZoom(location, DRIVING_MIN_ZOOM);
+        return computeSpeedZoom(location, ZOOM_TUNING_CONFIG.defaultFollowZoom);
     }
 
     private boolean shouldAllowAutoFollow(CameraUpdateContext context) {
@@ -1147,7 +1181,7 @@ public class CameraFollowController {
             zoom = preferredZoom;
             logD("buildCenteredCamera: using preferredZoom=" + zoom);
         } else {
-            zoom = current.zoom < 15f ? 15f : current.zoom;
+            zoom = current.zoom < ZOOM_TUNING_CONFIG.defaultFollowZoom ? ZOOM_TUNING_CONFIG.defaultFollowZoom : current.zoom;
             logD("buildCenteredCamera: keeping current zoom=" + zoom);
         }
 
@@ -1205,20 +1239,20 @@ public class CameraFollowController {
         float baseZoom;
         switch (lastSpeedBand) {
             case 0:
-                baseZoom = SPEED_ZOOM_NEAR;
+                baseZoom = ZOOM_TUNING_CONFIG.speedZoomNear;
                 break;
             case 1:
-                baseZoom = SPEED_ZOOM_CITY;
+                baseZoom = ZOOM_TUNING_CONFIG.speedZoomCity;
                 break;
             case 2:
-                baseZoom = SPEED_ZOOM_SUBURB;
+                baseZoom = ZOOM_TUNING_CONFIG.speedZoomSuburb;
                 break;
             default:
-                baseZoom = SPEED_ZOOM_HIGHWAY;
+                baseZoom = ZOOM_TUNING_CONFIG.speedZoomHighway;
                 break;
         }
 
-        float targetZoom = Math.max(baseZoom, Math.max(preferredFollowZoom, DRIVING_MIN_ZOOM));
+        float targetZoom = Math.max(baseZoom, Math.max(preferredFollowZoom, ZOOM_TUNING_CONFIG.drivingMinZoom));
         if (Math.abs(targetZoom - lastSpeedZoom) < 0.25f) {
             targetZoom = lastSpeedZoom;
         }
