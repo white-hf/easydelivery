@@ -76,6 +76,8 @@ public class CameraFollowController {
     private static final float LIST_VIEW_NEAR_METERS = 800f;
     private static final float LIST_VIEW_FAR_SUPPRESS_METERS = 5000f;
     private static final int LIST_VIEW_MIN_ITEMS = 1;
+    private static final long LIST_VIEW_MIN_INTERVAL_MS = 10_000L;
+    private static final long LIST_VIEW_RESUME_COOLDOWN_MS = 8_000L;
 
     // Adaptive animation + lookAhead smoothing
     private static final long CAMERA_ANIM_MIN_MS = 120L;
@@ -93,6 +95,9 @@ public class CameraFollowController {
     private long suppressFollowUntilMs = 0L;
     private String lastCameraMode = null;
     private long lastModeChangeUptimeMs = 0L;
+    private long lastListViewUptimeMs = 0L;
+    private long lastAutoFollowResumeMs = 0L;
+    private long lastAutoFollowPauseMs = 0L;
     private FollowPolicy followPolicy = new RealtimeFollowPolicy();
 
     // ==== Auto-Follow Strategy (Basic/Standard/Advanced) ====
@@ -596,7 +601,7 @@ public class CameraFollowController {
                         && context.nearestPackageDistanceMeters <= LIST_VIEW_NEAR_METERS
                         && nearbyCount >= LIST_VIEW_MIN_ITEMS);
         allowListView = allowListView && !isUserInteracting;
-        if (!isAutoFollowPaused && !navMode) {
+        if (isAutoFollowPaused && !navMode) {
             allowListView = false;
         }
         if (stationaryOrWalking && context.stationaryDurationMs < getListEntryStationaryMs()) {
@@ -605,6 +610,17 @@ public class CameraFollowController {
         if (stationaryOrWalking && farDistance) {
             allowListView = false;
             listHoldActive = false;
+        }
+        if (context.isManualCenterHold) {
+            allowListView = false;
+        }
+        if (lastAutoFollowResumeMs > 0L
+                && (nowUptime - lastAutoFollowResumeMs) < LIST_VIEW_RESUME_COOLDOWN_MS) {
+            allowListView = false;
+        }
+        if (lastListViewUptimeMs > 0L
+                && (nowUptime - lastListViewUptimeMs) < LIST_VIEW_MIN_INTERVAL_MS) {
+            allowListView = false;
         }
         boolean allowEnterList = allowListView
                 && (!inFollowMode || !followHoldActive)
@@ -622,6 +638,7 @@ public class CameraFollowController {
                     recordCameraMode("list", reason);
                     Telemetry.counter("camera.animate");
                     Telemetry.counter("camera.listView");
+                    lastListViewUptimeMs = nowUptime;
                     googleMap.animateCamera(listUpdate);
                     return true;
                 }
@@ -1403,6 +1420,7 @@ public class CameraFollowController {
     }
 
     private void logGateChanges(@NonNull GateSnapshot current) {
+        long nowUptimeMs = SystemClock.uptimeMillis();
         boolean changed = false;
         StringBuilder sb = new StringBuilder();
         if (lastGateSnapshot == null) {
@@ -1442,6 +1460,11 @@ public class CameraFollowController {
             }
             if (lastGateSnapshot.isAutoFollowPaused != current.isAutoFollowPaused) {
                 appendChange(sb, "autoFollowPaused", lastGateSnapshot.isAutoFollowPaused, current.isAutoFollowPaused);
+                if (current.isAutoFollowPaused) {
+                    lastAutoFollowPauseMs = nowUptimeMs;
+                } else {
+                    lastAutoFollowResumeMs = nowUptimeMs;
+                }
                 changed = true;
             }
             if (lastGateSnapshot.hasEverEnteredDrivingMode != current.hasEverEnteredDrivingMode) {
