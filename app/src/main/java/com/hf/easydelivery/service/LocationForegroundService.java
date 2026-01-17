@@ -30,6 +30,7 @@ import com.hf.easydelivery.core.strategy.StrategyConfig;
 import com.hf.easydelivery.core.facade.DefaultLocationFacadeProvider;
 import com.hf.easydelivery.core.facade.ForegroundLocationConsumer;
 import com.hf.easydelivery.core.facade.LocationFacadeProvider;
+import com.hf.easydelivery.map.config.ProfileManager;
 
 public class LocationForegroundService extends Service {
     public static final String ACTION_START = "com.hf.easydelivery.action.FG_LOC_START";
@@ -132,10 +133,18 @@ public class LocationForegroundService extends Service {
             }
         };
 
-        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY)
-                .setIntervalMillis(StrategyConfig.getRealtimeIntervalMs())
-                .setMinUpdateIntervalMillis(StrategyConfig.getRealtimeMinIntervalMs())
-                .setMinUpdateDistanceMeters(StrategyConfig.getRealtimeMinDistanceM())
+        ProfileManager profileManager = ProfileManager.get(this);
+        boolean powerSave = profileManager.isPowerSaver();
+        long intervalMs = powerSave ? StrategyConfig.getFgPowerSaveIntervalMs()
+                                    : StrategyConfig.getFgRealtimeIntervalMs();
+        long minIntervalMs = powerSave ? StrategyConfig.getFgPowerSaveMinIntervalMs()
+                                       : StrategyConfig.getFgRealtimeMinIntervalMs();
+        float minDistanceM = powerSave ? StrategyConfig.getFgPowerSaveMinDistanceM()
+                                       : StrategyConfig.getFgRealtimeMinDistanceM();
+
+        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+                .setMinUpdateIntervalMillis(minIntervalMs)
+                .setMinUpdateDistanceMeters(minDistanceM)
                 .setMaxUpdateDelayMillis(0L)
                 .setGranularity(GRANULARITY_FINE)
                 .setWaitForAccurateLocation(false)

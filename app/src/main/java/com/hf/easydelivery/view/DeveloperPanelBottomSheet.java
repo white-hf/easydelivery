@@ -28,6 +28,7 @@ import com.hf.easydelivery.map.CameraFollowController.ZoomTuningConfig;
 import com.hf.easydelivery.map.InfoPillProximityController.ProximityConfig;
 import com.hf.easydelivery.map.DeliveryFocusManager.ZoomConfig;
 import com.hf.easydelivery.map.config.ProfileManager;
+import com.hf.easydelivery.core.strategy.StrategyConfig;
 
 public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
 
@@ -42,6 +43,8 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
     private EditText etZoomCloseMeters, etZoomCloseZoom, etZoomApproachMeters, etZoomApproachZoom;
     private EditText etZoomDefaultFollow, etZoomDrivingMin;
     private EditText etZoomSpeedNear, etZoomSpeedCity, etZoomSpeedSuburb, etZoomSpeedHighway;
+    private EditText etFgRtInterval, etFgRtMinInterval, etFgRtMinDistance;
+    private EditText etFgPsInterval, etFgPsMinInterval, etFgPsMinDistance;
     private SwitchCompat switchInsideBoost;
     private SeekBar seekPerfBalance;
 
@@ -112,6 +115,12 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
         etZoomSpeedCity = view.findViewById(R.id.et_zoom_speed_city);
         etZoomSpeedSuburb = view.findViewById(R.id.et_zoom_speed_suburb);
         etZoomSpeedHighway = view.findViewById(R.id.et_zoom_speed_highway);
+        etFgRtInterval = view.findViewById(R.id.et_fg_rt_interval);
+        etFgRtMinInterval = view.findViewById(R.id.et_fg_rt_min_interval);
+        etFgRtMinDistance = view.findViewById(R.id.et_fg_rt_min_distance);
+        etFgPsInterval = view.findViewById(R.id.et_fg_ps_interval);
+        etFgPsMinInterval = view.findViewById(R.id.et_fg_ps_min_interval);
+        etFgPsMinDistance = view.findViewById(R.id.et_fg_ps_min_distance);
         switchInsideBoost = view.findViewById(R.id.switch_inside_boost);
         seekPerfBalance = view.findViewById(R.id.seek_perf_balance);
     }
@@ -236,6 +245,25 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
             }
         }
 
+        if (etFgRtInterval != null) {
+            etFgRtInterval.setText(String.valueOf(StrategyConfig.getFgRealtimeIntervalMs()));
+        }
+        if (etFgRtMinInterval != null) {
+            etFgRtMinInterval.setText(String.valueOf(StrategyConfig.getFgRealtimeMinIntervalMs()));
+        }
+        if (etFgRtMinDistance != null) {
+            etFgRtMinDistance.setText(String.valueOf(StrategyConfig.getFgRealtimeMinDistanceM()));
+        }
+        if (etFgPsInterval != null) {
+            etFgPsInterval.setText(String.valueOf(StrategyConfig.getFgPowerSaveIntervalMs()));
+        }
+        if (etFgPsMinInterval != null) {
+            etFgPsMinInterval.setText(String.valueOf(StrategyConfig.getFgPowerSaveMinIntervalMs()));
+        }
+        if (etFgPsMinDistance != null) {
+            etFgPsMinDistance.setText(String.valueOf(StrategyConfig.getFgPowerSaveMinDistanceM()));
+        }
+
         if (mapFragment == null) {
             FileLog.getInstance().debug(TAG, "Developer panel running without MapInnerFragment: Follow/Zoom sections limited");
         }
@@ -251,6 +279,36 @@ public class DeveloperPanelBottomSheet extends BottomSheetDialogFragment {
         view.findViewById(R.id.btn_apply_proximity).setOnClickListener(v -> applyProximityConfig());
         view.findViewById(R.id.btn_apply_follow).setOnClickListener(v -> applyFollowConfig());
         view.findViewById(R.id.btn_apply_zoom).setOnClickListener(v -> applyZoomConfig());
+        View btnApplyFgLocation = view.findViewById(R.id.btn_apply_fg_location);
+        if (btnApplyFgLocation != null) {
+            btnApplyFgLocation.setOnClickListener(v -> applyFgLocationConfig());
+        }
+    }
+
+    private void applyFgLocationConfig() {
+        try {
+            if (etFgRtInterval != null) {
+                StrategyConfig.setFgRealtimeIntervalMs(Long.parseLong(etFgRtInterval.getText().toString()));
+            }
+            if (etFgRtMinInterval != null) {
+                StrategyConfig.setFgRealtimeMinIntervalMs(Long.parseLong(etFgRtMinInterval.getText().toString()));
+            }
+            if (etFgRtMinDistance != null) {
+                StrategyConfig.setFgRealtimeMinDistanceM(Float.parseFloat(etFgRtMinDistance.getText().toString()));
+            }
+            if (etFgPsInterval != null) {
+                StrategyConfig.setFgPowerSaveIntervalMs(Long.parseLong(etFgPsInterval.getText().toString()));
+            }
+            if (etFgPsMinInterval != null) {
+                StrategyConfig.setFgPowerSaveMinIntervalMs(Long.parseLong(etFgPsMinInterval.getText().toString()));
+            }
+            if (etFgPsMinDistance != null) {
+                StrategyConfig.setFgPowerSaveMinDistanceM(Float.parseFloat(etFgPsMinDistance.getText().toString()));
+            }
+            Toast.makeText(getContext(), R.string.dev_panel_fg_location_applied, Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            handleApplyError(e);
+        }
     }
 
     private void applyProximityConfig() {
