@@ -13,6 +13,7 @@ import androidx.viewpager2.widget.ViewPager2;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
+import com.hf.easydelivery.core.SmartLocationManager;
 import com.hf.easydelivery.map.MapHostFragment;
 
 public class MainActivity extends AppCompatActivity
@@ -37,7 +38,8 @@ public class MainActivity extends AppCompatActivity
                         .setTitle(R.string.exit_confirm_title)
                         .setMessage(R.string.exit_confirm_message)
                         .setPositiveButton(R.string.action_exit, (dialog, which) -> {
-                            setEnabled(false); // 避免重复触发
+                            setEnabled(false);
+                            stopLocationTrackingForExit(); // 避免重复触发
                             MainActivity.super.onBackPressed();
                         })
                         .setNegativeButton(R.string.action_cancel, (dialog, which) -> {
@@ -162,6 +164,9 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     protected void onDestroy() {
+        if (isFinishing()) {
+            stopLocationTrackingForExit();
+        }
         super.onDestroy();
     }
 
@@ -191,6 +196,14 @@ public class MainActivity extends AppCompatActivity
     }
 
     // 判断是否已登录（可自定义token规则）
+    private void stopLocationTrackingForExit() {
+        SmartLocationManager mgr = SmartLocationManager.getInstance(this);
+        if (mgr != null) {
+            mgr.stopForegroundTracking(false);
+            mgr.stopLocationUpdates();
+        }
+    }
+
     private boolean isLoggedIn() {
         return ResourceMgr.getInstance().getLoginInfo().bIsLoggedIn;
     }

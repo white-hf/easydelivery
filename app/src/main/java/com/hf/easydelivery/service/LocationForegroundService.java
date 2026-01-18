@@ -28,6 +28,7 @@ import com.hf.easydelivery.R;
 import com.hf.easydelivery.core.source.ForegroundServiceLocationSource;
 import com.hf.easydelivery.core.source.LocationSource;
 import com.hf.easydelivery.core.strategy.StrategyConfig;
+import com.hf.easydelivery.core.SmartLocationManager;
 import com.hf.easydelivery.core.facade.DefaultLocationFacadeProvider;
 import com.hf.easydelivery.core.facade.ForegroundLocationConsumer;
 import com.hf.easydelivery.core.facade.LocationFacadeProvider;
@@ -65,7 +66,14 @@ public class LocationForegroundService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        locationSource = new ForegroundServiceLocationSource(this);
+        SmartLocationManager manager = SmartLocationManager.getInstance(this);
+        if (manager != null && manager.getFusedLocationClient() != null) {
+            locationSource = new ForegroundServiceLocationSource(manager.getFusedLocationClient());
+            FileLog.getInstance().debug(TAG, "onCreate: reuse fusedLocationClient from SmartLocationManager");
+        } else {
+            locationSource = new ForegroundServiceLocationSource(this);
+            FileLog.getInstance().warning(TAG, "onCreate: fallback to new fusedLocationClient");
+        }
         createNotificationChannel();
         destroyed = false;
     }
