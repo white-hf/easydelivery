@@ -11,6 +11,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.location.Location;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 
@@ -38,11 +39,26 @@ public class LocationForegroundService extends Service {
     private static final String CHANNEL_ID = "fg_location_channel";
     private static final int NOTIFICATION_ID = 4102;
     private static final String TAG = "LocationFgService";
+    private static final long RETRY_BASE_DELAY_MS = 2_000L;
+    private static final long RETRY_MAX_DELAY_MS = 5_000L;
 
     private LocationSource locationSource;
     private LocationCallback locationCallback;
     private long lastCallbackUptimeMs = 0L;
     private long lastElapsedMs = -1L;
+    private boolean destroyed = false;
+    private int retryAttempts = 0;
+    private final Handler retryHandler = new Handler(Looper.getMainLooper());
+    private final Runnable retryRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (destroyed) {
+                return;
+            }
+            FileLog.getInstance().warning(TAG, "retry startForegroundTracking after failure, attempt=" + retryAttempts);
+            startForegroundTracking();
+        }
+    };
     private final LocationFacadeProvider locationFacadeProvider =
             DefaultLocationFacadeProvider.getInstance();
 
@@ -51,14 +67,16 @@ public class LocationForegroundService extends Service {
         super.onCreate();
         locationSource = new ForegroundServiceLocationSource(this);
         createNotificationChannel();
+        destroyed = false;
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
+        FileLog.getInstance().debug(TAG, "onStartCommand: action=" + action + ", startId=" + startId + ", flags=" + flags + ", restarted=" + (intent == null));
         if (ACTION_STOP.equals(action)) {
             stopForegroundTracking();
-            FileLog.getInstance().debug(TAG, "stopForegroundTracking completed");
+            stopForeground(true);
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -67,14 +85,17 @@ public class LocationForegroundService extends Service {
         } else {
             startForeground(NOTIFICATION_ID, buildNotification());
         }
-        FileLog.getInstance().debug(TAG, "startForeground completed");
+        FileLog.getInstance().debug(TAG, "startForeground completed, sdkInt=" + Build.VERSION.SDK_INT);
         startForegroundTracking();
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
+        FileLog.getInstance().debug(TAG, "onDestroy: callbackActive=" + (locationCallback != null) + ", thread=" + Thread.currentThread().getName());
         stopForegroundTracking();
+        stopForeground(true);
+        destroyed = true;
         super.onDestroy();
     }
 
@@ -99,10 +120,12 @@ public class LocationForegroundService extends Service {
                 if (locationResult == null) {
                     return;
                 }
+                int batchSize = locationResult.getLocations().size();
                 if (locationResult.getLocations().isEmpty()) {
                     return;
                 }
                 Location last = locationResult.getLastLocation();
+                String provider = last != null ? last.getProvider() : "unknown";
                 long nowUptime = android.os.SystemClock.uptimeMillis();
                 long deltaMs = lastCallbackUptimeMs == 0L ? -1L : (nowUptime - lastCallbackUptimeMs);
                 lastCallbackUptimeMs = nowUptime;
@@ -118,13 +141,17 @@ public class LocationForegroundService extends Service {
                 }
                 lastElapsedMs = elapsedMs;
                 FileLog.getInstance().debug(TAG,
-                        String.format("onLocationResult: deltaMs=%d acc=%.1fm ageMs=%d elapsedMs=%d lat=%.6f lng=%.6f",
+                        String.format("onLocationResult: deltaMs=%d acc=%.1fm ageMs=%d elapsedMs=%d lat=%.6f lng=%.6f batch=%d provider=%s speed=%.2f bearing=%.1f",
                                 deltaMs,
                                 last.getAccuracy(),
                                 ageMs,
                                 elapsedMs,
                                 last.getLatitude(),
-                                last.getLongitude()));
+                                last.getLongitude(),
+                                batchSize,
+                                provider,
+                                last.getSpeed(),
+                                last.getBearing()));
                 ForegroundLocationConsumer consumer =
                         locationFacadeProvider.getForegroundLocationConsumer(getApplicationContext());
                 if (consumer != null) {
@@ -141,11 +168,18 @@ public class LocationForegroundService extends Service {
                                        : StrategyConfig.getFgRealtimeMinIntervalMs();
         float minDistanceM = powerSave ? StrategyConfig.getFgPowerSaveMinDistanceM()
                                        : StrategyConfig.getFgRealtimeMinDistanceM();
+        long maxDelayMs = 0L;
+        FileLog.getInstance().debug(TAG, "startForegroundTracking: powerSave=" + powerSave
+                + " intervalMs=" + intervalMs
+                + " minIntervalMs=" + minIntervalMs
+                + " minDistanceM=" + minDistanceM
+                + " maxDelayMs=" + maxDelayMs
+                + " priority=HIGH_ACCURACY");
 
         LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
                 .setMinUpdateIntervalMillis(minIntervalMs)
                 .setMinUpdateDistanceMeters(minDistanceM)
-                .setMaxUpdateDelayMillis(0L)
+                .setMaxUpdateDelayMillis(maxDelayMs)
                 .setGranularity(GRANULARITY_FINE)
                 .setWaitForAccurateLocation(false)
                 .build();
@@ -153,15 +187,35 @@ public class LocationForegroundService extends Service {
         locationSource.requestLocationUpdates(locationRequest,
                 locationCallback,
                 Looper.getMainLooper())
-                .addOnSuccessListener(unused -> FileLog.getInstance().debug(TAG, "requestLocationUpdates success"))
-                .addOnFailureListener(e -> FileLog.getInstance().error(TAG, "requestLocationUpdates failed", e));
+                .addOnSuccessListener(unused -> {
+                    retryAttempts = 0;
+                    FileLog.getInstance().debug(TAG, "requestLocationUpdates success");
+                })
+                .addOnFailureListener(e -> {
+                    FileLog.getInstance().error(TAG, "requestLocationUpdates failed", e);
+                    locationCallback = null;
+                    scheduleRetry();
+                });
     }
 
     private void stopForegroundTracking() {
         if (locationSource != null && locationCallback != null) {
             locationSource.removeLocationUpdates(locationCallback);
+            FileLog.getInstance().debug(TAG, "removeLocationUpdates requested");
         }
+        retryHandler.removeCallbacks(retryRunnable);
         locationCallback = null;
+        FileLog.getInstance().debug(TAG, "stopForegroundTracking completed");
+    }
+
+    private void scheduleRetry() {
+        if (destroyed) {
+            return;
+        }
+        retryAttempts += 1;
+        long delayMs = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * retryAttempts);
+        retryHandler.removeCallbacks(retryRunnable);
+        retryHandler.postDelayed(retryRunnable, delayMs);
     }
 
     private Notification buildNotification() {
@@ -170,7 +224,9 @@ public class LocationForegroundService extends Service {
                 .setContentTitle(getString(R.string.fg_location_title))
                 .setContentText(getString(R.string.fg_location_text))
                 .setOngoing(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .build();
     }
 

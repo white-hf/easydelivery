@@ -2119,6 +2119,7 @@ public class MapInnerFragment extends Fragment
         if (mapView != null)
             mapView.onResume();
         requireActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        updateForegroundTracking();
         if (locationFacade != null && locationControls != null) {
             // CRITICAL: Re-register listener to prevent CameraActivity or other components
             // from stealing updates
@@ -2126,7 +2127,6 @@ public class MapInnerFragment extends Fragment
             locationFacade.addLocationUpdateListener(this);
             locationFacade.startLocationUpdates();
         }
-        updateForegroundTracking();
         updateUiTickInterval();
         scheduleUiTick();
     }
