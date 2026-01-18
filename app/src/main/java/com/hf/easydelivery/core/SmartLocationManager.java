@@ -182,6 +182,11 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
         return instance;
     }
 
+    @Nullable
+    public FusedLocationProviderClient getFusedLocationClient() {
+        return fusedLocationClient;
+    }
+
     public interface LocationUpdateListener extends com.hf.easydelivery.core.facade.LocationUpdateListener {
         void onLocationUpdate(Location location, MovementState state);
     }
@@ -516,6 +521,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
             return;
         }
         if (foregroundTrackingActive) {
+            FileLog.getInstance().debug(TAG, "startLocationUpdates skipped: foreground tracking active");
             return;
         }
         lastMovingTimeMs = System.currentTimeMillis();
@@ -981,6 +987,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
         }
         currentMinDispatchIntervalMs = params.minDispatchIntervalMs;
         if (foregroundTrackingActive) {
+            FileLog.getInstance().debug(TAG, "applyLocationRequest skipped: foreground tracking active reason=" + reason);
             return;
         }
         FileLog.getInstance().debug(TAG,

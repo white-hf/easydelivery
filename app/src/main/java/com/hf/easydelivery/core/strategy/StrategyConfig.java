@@ -46,6 +46,9 @@ public final class StrategyConfig {
     private static volatile long realtimeIntervalMs = 1500L;
     private static volatile long realtimeMinIntervalMs = 800L;
     private static volatile float realtimeMinDistanceM = 0.5f;
+    private static volatile long fgRealtimeIntervalMs = realtimeIntervalMs;
+    private static volatile long fgRealtimeMinIntervalMs = realtimeMinIntervalMs;
+    private static volatile float fgRealtimeMinDistanceM = realtimeMinDistanceM;
     private static volatile long burstIntervalMs = 1000L;
     private static volatile long burstMinIntervalMs = 1000L;
     private static volatile float burstMinDistanceM = 0.5f;
@@ -57,6 +60,9 @@ public final class StrategyConfig {
     private static volatile long powerSaveMinIntervalMs = 8_000L;
     private static volatile float powerSaveMinDistanceMovingM = 3.0f;
     private static volatile float powerSaveMinDistanceStationaryM = 6.0f;
+    private static volatile long fgPowerSaveIntervalMs = powerSaveIntervalMovingMs;
+    private static volatile long fgPowerSaveMinIntervalMs = powerSaveMinIntervalMs;
+    private static volatile float fgPowerSaveMinDistanceM = powerSaveMinDistanceMovingM;
 
     private static volatile long burstDurationMs = 12_000L;
 
@@ -118,6 +124,30 @@ public final class StrategyConfig {
         realtimeMinDistanceM = Math.max(0f, value);
     }
 
+    public static long getFgRealtimeIntervalMs() {
+        return fgRealtimeIntervalMs;
+    }
+
+    public static void setFgRealtimeIntervalMs(long value) {
+        fgRealtimeIntervalMs = Math.max(500L, value);
+    }
+
+    public static long getFgRealtimeMinIntervalMs() {
+        return fgRealtimeMinIntervalMs;
+    }
+
+    public static void setFgRealtimeMinIntervalMs(long value) {
+        fgRealtimeMinIntervalMs = Math.max(250L, value);
+    }
+
+    public static float getFgRealtimeMinDistanceM() {
+        return fgRealtimeMinDistanceM;
+    }
+
+    public static void setFgRealtimeMinDistanceM(float value) {
+        fgRealtimeMinDistanceM = Math.max(0f, value);
+    }
+
     public static long getPowerSaveCooldownMs() {
         return powerSaveCooldownMs;
     }
@@ -164,6 +194,30 @@ public final class StrategyConfig {
 
     public static void setPowerSaveMinDistanceStationaryM(float value) {
         powerSaveMinDistanceStationaryM = Math.max(2.0f, value);
+    }
+
+    public static long getFgPowerSaveIntervalMs() {
+        return fgPowerSaveIntervalMs;
+    }
+
+    public static void setFgPowerSaveIntervalMs(long value) {
+        fgPowerSaveIntervalMs = Math.max(5_000L, value);
+    }
+
+    public static long getFgPowerSaveMinIntervalMs() {
+        return fgPowerSaveMinIntervalMs;
+    }
+
+    public static void setFgPowerSaveMinIntervalMs(long value) {
+        fgPowerSaveMinIntervalMs = Math.max(2_000L, value);
+    }
+
+    public static float getFgPowerSaveMinDistanceM() {
+        return fgPowerSaveMinDistanceM;
+    }
+
+    public static void setFgPowerSaveMinDistanceM(float value) {
+        fgPowerSaveMinDistanceM = Math.max(0f, value);
     }
 
     public static long getBurstDurationMs() {

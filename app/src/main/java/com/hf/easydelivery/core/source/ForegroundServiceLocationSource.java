@@ -14,6 +14,10 @@ import com.google.android.gms.tasks.Task;
 public final class ForegroundServiceLocationSource implements LocationSource {
     private final FusedLocationProviderClient client;
 
+    public ForegroundServiceLocationSource(@NonNull FusedLocationProviderClient client) {
+        this.client = client;
+    }
+
     public ForegroundServiceLocationSource(@NonNull Context context) {
         client = LocationServices.getFusedLocationProviderClient(context.getApplicationContext());
     }

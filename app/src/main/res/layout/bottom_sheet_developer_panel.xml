@@ -104,6 +104,69 @@
             android:layout_gravity="end"
             android:text="@string/dev_panel_apply_profile" />
 
+        <!-- Foreground Location Config Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/dev_panel_fg_location_config"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/dev_panel_fg_realtime" />
+
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="2">
+            <TextView android:text="@string/dev_panel_fg_interval" />
+            <EditText
+                android:id="@+id/et_fg_rt_interval"
+                android:inputType="number" />
+            <TextView android:text="@string/dev_panel_fg_min_interval" />
+            <EditText
+                android:id="@+id/et_fg_rt_min_interval"
+                android:inputType="number" />
+            <TextView android:text="@string/dev_panel_fg_min_distance" />
+            <EditText
+                android:id="@+id/et_fg_rt_min_distance"
+                android:inputType="numberDecimal" />
+        </GridLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/dev_panel_fg_powersave" />
+
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="2">
+            <TextView android:text="@string/dev_panel_fg_interval" />
+            <EditText
+                android:id="@+id/et_fg_ps_interval"
+                android:inputType="number" />
+            <TextView android:text="@string/dev_panel_fg_min_interval" />
+            <EditText
+                android:id="@+id/et_fg_ps_min_interval"
+                android:inputType="number" />
+            <TextView android:text="@string/dev_panel_fg_min_distance" />
+            <EditText
+                android:id="@+id/et_fg_ps_min_distance"
+                android:inputType="numberDecimal" />
+        </GridLayout>
+
+        <Button
+            android:id="@+id/btn_apply_fg_location"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:text="@string/dev_panel_apply_fg_location" />
+
         <!-- Proximity Config Section -->
         <TextView
             android:layout_width="wrap_content"
