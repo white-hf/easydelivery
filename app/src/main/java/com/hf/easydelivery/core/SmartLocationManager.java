@@ -336,6 +336,9 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
         this.context = context.getApplicationContext();
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this.context);
         handler = new Handler(Looper.getMainLooper());
+        requestScheduler = new RequestScheduler(this.context,
+                new FusedLocationSource(fusedLocationClient),
+                handler);
         strategyManager = new StrategyManager(this.context, this);
         locationDispatcher = new LocationDispatcher(listeners, strategyManager, eventBus);
         burstController = new BurstController(handler, new BurstController.Listener() {
@@ -366,9 +369,6 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
                 }
             }
         }, BurstConfig.getBoostMinIntervalMs());
-        requestScheduler = new RequestScheduler(this.context,
-                new FusedLocationSource(fusedLocationClient),
-                handler);
 
         activityTransitionMonitor = new ActivityTransitionMonitor(this.context, this::handleActivityTransition);
         eventBus.addObserver(new TelemetryLocationObserver());
