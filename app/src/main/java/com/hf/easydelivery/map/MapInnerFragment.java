@@ -132,12 +132,17 @@ public class MapInnerFragment extends Fragment
     private static final long STALE_LOCATION_MS_DRIVING = 2_000L;
     private static final long STALE_LOCATION_MS_OTHER = 5_000L;
     private static final long MAX_PREDICTED_UI_AGE_MS = 1_500L;
+    private final String instanceId = Integer.toHexString(System.identityHashCode(this));
 
     private void logD(String msg) {
         try {
             FileLog.getInstance().debug(TAG, msg);
         } catch (Throwable ignore) {
         }
+    }
+
+    private void logInstance(String msg) {
+        logD("instance=" + instanceId + " " + msg);
     }
 
     private MapView mapView;
@@ -218,6 +223,7 @@ public class MapInnerFragment extends Fragment
     private long manualCenterHoldUntilMs = 0L;
     private InfoPillProximityController.RegionState currentRegionState = InfoPillProximityController.RegionState.IN_TRANSIT;
     private boolean insideZoneBoostEnabled = false;
+    private boolean locationListenerRegistered = false;
     private long lastInsideBoostMs = 0L;
     private boolean forceProximityEvaluation = false;
     private long autoFollowPausedAtMs = 0L;
@@ -342,6 +348,7 @@ public class MapInnerFragment extends Fragment
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
             @Nullable Bundle savedInstanceState) {
         FileLog.i(TAG, "onCreateView: enter");
+        logInstance("onCreateView");
         View view = inflater.inflate(R.layout.activity_map, container, false);
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
 
@@ -1244,7 +1251,11 @@ public class MapInnerFragment extends Fragment
         locationControls = locationFacadeProvider.getLocationControls(requireContext());
         if (locationFacade != null) {
             applyPerfBalance(profileManager != null ? profileManager.getPerfBalance() : 0f);
-            locationFacade.addLocationUpdateListener(this);
+            if (!locationListenerRegistered) {
+                locationFacade.addLocationUpdateListener(this);
+                locationListenerRegistered = true;
+                logInstance("addLocationUpdateListener");
+            }
             locationFacade.startLocationUpdates();
         }
         if (cameraController != null) {
@@ -2116,6 +2127,7 @@ public class MapInnerFragment extends Fragment
     @Override
     public void onResume() {
         super.onResume();
+        logInstance("onResume resumed=" + isResumed());
         if (mapView != null)
             mapView.onResume();
         requireActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -2124,7 +2136,11 @@ public class MapInnerFragment extends Fragment
             // CRITICAL: Re-register listener to prevent CameraActivity or other components
             // from stealing updates
             locationControls.setUiFollowActive(true);
-            locationFacade.addLocationUpdateListener(this);
+            if (!locationListenerRegistered) {
+                locationFacade.addLocationUpdateListener(this);
+                locationListenerRegistered = true;
+                logInstance("addLocationUpdateListener");
+            }
             locationFacade.startLocationUpdates();
         }
         updateUiTickInterval();
@@ -2134,6 +2150,7 @@ public class MapInnerFragment extends Fragment
     @Override
     public void onPause() {
         super.onPause();
+        logInstance("onPause resumed=" + isResumed());
         if (mapView != null)
             mapView.onPause();
         if (googleMap != null)
@@ -2144,6 +2161,14 @@ public class MapInnerFragment extends Fragment
         if (locationFacade != null && locationControls != null) {
             locationControls.setUiFollowActive(false);
             locationFacade.stopLocationUpdates();
+            if (locationListenerRegistered) {
+                try {
+                    locationFacade.removeLocationUpdateListener(this);
+                    logInstance("removeLocationUpdateListener");
+                } catch (Throwable ignore) {
+                }
+                locationListenerRegistered = false;
+            }
         }
         updateForegroundTracking();
         cameraUpdateHandler.removeCallbacks(uiTickRunnable);
@@ -2165,6 +2190,7 @@ public class MapInnerFragment extends Fragment
             fgStopPendingSinceMs = 0L;
             foregroundTrackingHandler.removeCallbacks(foregroundTrackingRunnable);
             if (!isActive) {
+                logInstance("fg start: shouldEnable=true realtime=" + realtime + " resumed=" + isResumed());
                 locationControls.startForegroundTracking();
                 fgLastStartMs = now;
             }
@@ -2178,6 +2204,7 @@ public class MapInnerFragment extends Fragment
         if (fgStopPendingSinceMs == 0L) {
             fgStopPendingSinceMs = now;
             foregroundTrackingHandler.removeCallbacks(foregroundTrackingRunnable);
+            logInstance("fg stop pending: shouldEnable=false realtime=" + realtime + " resumed=" + isResumed());
             foregroundTrackingHandler.postDelayed(foregroundTrackingRunnable, FG_STOP_GRACE_MS);
             return;
         }
@@ -2186,6 +2213,7 @@ public class MapInnerFragment extends Fragment
         if (activeDurationMs < FG_MIN_ON_MS || pendingDurationMs < FG_STOP_GRACE_MS) {
             return;
         }
+        logInstance("fg stop: activeMs=" + activeDurationMs + " pendingMs=" + pendingDurationMs);
         locationControls.stopForegroundTracking(isResumed());
         fgLastStopMs = now;
         fgStopPendingSinceMs = 0L;
@@ -2195,6 +2223,7 @@ public class MapInnerFragment extends Fragment
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        logInstance("onDestroyView");
         if (profileManager != null) {
             try {
                 profileManager.removeListener(profileListener);
@@ -2250,8 +2279,10 @@ public class MapInnerFragment extends Fragment
         if (locationFacade != null) {
             try {
                 locationFacade.removeLocationUpdateListener(this);
+                logInstance("removeLocationUpdateListener");
             } catch (Throwable ignore) {
             }
+            locationListenerRegistered = false;
         }
         foregroundTrackingHandler.removeCallbacks(foregroundTrackingRunnable);
         hideInfoPillCompletely();

@@ -95,6 +95,18 @@ public class MapHostFragment extends Fragment {
         mapFrag = (MapInnerFragment) fm.findFragmentByTag("map");
         listFrag = (PackageListFragment) fm.findFragmentByTag("list");
 
+        boolean removedExtraMap = false;
+        FragmentTransaction cleanupTx = fm.beginTransaction();
+        for (Fragment child : fm.getFragments()) {
+            if (child instanceof MapInnerFragment && child != mapFrag) {
+                cleanupTx.remove(child);
+                removedExtraMap = true;
+            }
+        }
+        if (removedExtraMap) {
+            cleanupTx.commitNowAllowingStateLoss();
+        }
+
         if (mapFrag == null) {
             mapFrag = new MapInnerFragment();
             fm.beginTransaction()
