@@ -193,6 +193,16 @@ public class MainActivity extends AppCompatActivity
             return 3;
         }
 
+        @Override
+        public long getItemId(int position) {
+            return position;
+        }
+
+        @Override
+        public boolean containsItem(long itemId) {
+            return itemId >= 0 && itemId < 3;
+        }
+
     }
 
     // 判断是否已登录（可自定义token规则）
