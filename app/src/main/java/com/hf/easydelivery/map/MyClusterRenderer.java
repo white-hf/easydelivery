@@ -13,6 +13,7 @@ import androidx.core.content.ContextCompat;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.Marker;
 import com.google.maps.android.clustering.Cluster;
 import com.google.maps.android.clustering.ClusterItem;
 import com.google.maps.android.clustering.ClusterManager;
@@ -58,6 +59,19 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
             }
         }
         markerOptions.icon(createCustomMarker(item.getTitle()));
+    }
+
+    @Override
+    protected void onClusterItemUpdated(T item, Marker marker) {
+        super.onClusterItemUpdated(item, marker);
+        if (item instanceof DeliveryInfo) {
+            String key = ((DeliveryInfo) item).getStableKey();
+            com.google.android.gms.maps.model.LatLng override = spiderfyPositions.get(key);
+            if (override != null) {
+                marker.setPosition(override);
+            }
+        }
+        marker.setIcon(createCustomMarker(item.getTitle()));
     }
 
     private BitmapDescriptor createCustomMarker(String title) {

@@ -736,7 +736,8 @@ public class MapInnerFragment extends Fragment
         currentMapDeliveries = sanitized;
         logD("updateMapItems sanitized=" + sanitized.size());
         if (myClusterRenderer != null) {
-            myClusterRenderer.setSpiderfyPositions(buildSpiderfyPositions(sanitized));
+            float zoom = googleMap != null ? googleMap.getCameraPosition().zoom : 15f;
+            myClusterRenderer.setSpiderfyPositions(buildSpiderfyPositions(sanitized, zoom));
         }
         clusterManager.cluster();
 
@@ -785,7 +786,7 @@ public class MapInnerFragment extends Fragment
         }
     }
 
-    private Map<String, LatLng> buildSpiderfyPositions(List<DeliveryInfo> items) {
+    private Map<String, LatLng> buildSpiderfyPositions(List<DeliveryInfo> items, float zoom) {
         Map<String, List<DeliveryInfo>> groups = new HashMap<>();
         for (DeliveryInfo info : items) {
             if (info == null)
@@ -806,7 +807,8 @@ public class MapInnerFragment extends Fragment
             double baseLat = group.get(0).getLatitude();
             double baseLng = group.get(0).getLongitude();
             int count = group.size();
-            double radiusMeters = Math.min(12.0, 4.0 + count * 1.5);
+            double zoomScale = Math.max(0.6, Math.min(1.6, (18.0 - zoom) / 6.0));
+            double radiusMeters = Math.min(30.0, (4.0 + count * 1.5) * zoomScale);
             double metersToLat = 1.0 / 111320.0;
             double cosLat = Math.cos(Math.toRadians(baseLat));
             if (Math.abs(cosLat) < 1e-6) {
