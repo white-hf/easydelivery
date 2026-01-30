@@ -6,7 +6,6 @@ import android.text.TextUtils;
 import androidx.annotation.Nullable;
 
 import com.hf.courierservice.apihelper.FileLog;
-import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.dao.ApartmentPhotoEntity;
 import com.hf.easydelivery.dao.DeliveryInfo;
 
@@ -62,27 +61,20 @@ public class ApartmentPhotoService {
     public ApartmentAddressKeyBuilder.KeyData buildKeyData(@Nullable DeliveryInfo info) {
         ApartmentAddressKeyBuilder.KeyData keyData = ApartmentAddressKeyBuilder.fromDelivery(info);
         String address = info != null ? info.getAddress() : "";
-        FileLog.getInstance().debug(TAG,
-                "buildKeyData: key=" + keyData.key + ", display=" + keyData.displayAddress
-                        + ", isApartment=" + keyData.isApartment + ", structured=" + keyData.hasStructuredKey
-                        + ", address=" + address);
         return keyData;
     }
 
     public boolean hasPhotoForKey(@Nullable String key) {
         if (TextUtils.isEmpty(key)) {
-            FileLog.getInstance().debug(TAG, "hasPhotoForKey: empty key");
             return false;
         }
         if (isStructuredKey(key)) {
             ApartmentPhotoEntity entity = findEntityByStructuredKey(key);
             boolean found = entity != null && !TextUtils.isEmpty(entity.filePath);
-            FileLog.getInstance().debug(TAG, "hasPhotoForKey: structured key=" + key + " found=" + found);
             return found;
         }
         ApartmentPhotoEntity entity = repository.findByKey(key);
         boolean found = entity != null && !TextUtils.isEmpty(entity.filePath);
-        FileLog.getInstance().debug(TAG, "hasPhotoForKey: manual key=" + key + " found=" + found);
         return found;
     }
 
@@ -94,19 +86,12 @@ public class ApartmentPhotoService {
             ApartmentPhotoEntity entity = isStructuredKey(keyData.key)
                     ? findEntityByStructuredKey(keyData.key)
                     : repository.findByKey(keyData.key);
-            FileLog.getInstance().debug(TAG,
-                    "findMatch: key=" + keyData.key + " structured=" + isStructuredKey(keyData.key)
-                            + " hit=" + (entity != null));
             MatchResult match = validateEntity(entity, false);
             if (match != null) {
                 repository.updateLastUsed(match.entity.id, System.currentTimeMillis());
-                FileLog.getInstance().debug(TAG,
-                        "findMatch: key match success id=" + match.entity.id + " key=" + match.entity.addressKey);
                 return match;
             }
-            FileLog.getInstance().debug(TAG, "findMatch: key match invalid or missing file key=" + keyData.key);
         }
-        FileLog.getInstance().debug(TAG, "findMatch: fallback to fuzzy");
         return fuzzyMatch(info.getAddress());
     }
 
@@ -115,27 +100,20 @@ public class ApartmentPhotoService {
         String normalizedAddress = fullAddress.toLowerCase(Locale.US);
         List<ApartmentPhotoEntity> all = repository.listAll();
         if (all == null || all.isEmpty()) {
-            FileLog.getInstance().debug(TAG, "fuzzyMatch: empty photo list");
             return null;
         }
-        FileLog.getInstance().debug(TAG, "fuzzyMatch: address=" + fullAddress + " entries=" + all.size());
         for (ApartmentPhotoEntity entity : all) {
             if (entity == null || TextUtils.isEmpty(entity.addressKey)) continue;
             String key = entity.addressKey.toLowerCase(Locale.US).trim();
             if (key.isEmpty()) continue;
             if (normalizedAddress.contains(key)) {
-                FileLog.getInstance().debug(TAG,
-                        "fuzzyMatch: candidate id=" + entity.id + " key=" + entity.addressKey);
                 MatchResult match = validateEntity(entity, true);
                 if (match != null) {
                     repository.updateLastUsed(match.entity.id, System.currentTimeMillis());
-                    FileLog.getInstance().debug(TAG,
-                            "fuzzyMatch: success id=" + match.entity.id + " key=" + match.entity.addressKey);
                     return match;
                 }
             }
         }
-        FileLog.getInstance().debug(TAG, "fuzzyMatch: no match");
         return null;
     }
 
@@ -164,7 +142,7 @@ public class ApartmentPhotoService {
         }
         String keyToUse = addressKey;
         if (TextUtils.isEmpty(keyToUse)) {
-            // 使用司机编辑的展示地址生成手动 key，确保后续能模糊匹配
+            // Use a manual key derived from the display address for fuzzy matching.
             keyToUse = ApartmentAddressKeyBuilder.manualKeyFromInput(displayAddress);
         }
         if (TextUtils.isEmpty(keyToUse)) {
@@ -172,8 +150,6 @@ public class ApartmentPhotoService {
                     "savePhoto: missing key addressKey=" + addressKey + " display=" + displayAddress);
             return false;
         }
-        FileLog.getInstance().debug(TAG,
-                "savePhoto: key=" + keyToUse + " manual=" + manualSource + " display=" + displayAddress);
         File dest = new File(storageDir, "apt_" + System.currentTimeMillis() + ".jpg");
         try {
             copyFile(sourceFile, dest);
@@ -185,8 +161,6 @@ public class ApartmentPhotoService {
         ApartmentPhotoEntity existing = isStructuredKey(keyToUse)
                 ? findEntityByStructuredKey(keyToUse)
                 : repository.findByKey(keyToUse);
-        FileLog.getInstance().debug(TAG,
-                "savePhoto: upsert key=" + keyToUse + " existing=" + (existing != null));
         ApartmentPhotoEntity entity = existing != null ? existing : new ApartmentPhotoEntity();
         entity.addressKey = keyToUse;
         entity.displayAddress = displayAddress;
@@ -198,14 +172,11 @@ public class ApartmentPhotoService {
         if (id > 0) {
             entity.id = id;
         }
-        FileLog.getInstance().debug(TAG, "savePhoto: saved id=" + entity.id + " path=" + entity.filePath);
         if (id > 0 && existing != null && !TextUtils.isEmpty(existing.filePath)
                 && !existing.filePath.equals(dest.getAbsolutePath())) {
             File old = new File(existing.filePath);
             if (old.exists()) {
                 boolean deleted = old.delete();
-                FileLog.getInstance().debug(TAG,
-                        "savePhoto: delete old path=" + existing.filePath + " success=" + deleted);
             }
         } else if (id <= 0) {
             FileLog.getInstance().warning(TAG, "savePhoto: upsert failed, keep old file");
@@ -299,21 +270,16 @@ public class ApartmentPhotoService {
         }
         ApartmentPhotoEntity direct = repository.findByKey(key);
         if (direct != null) {
-            FileLog.getInstance().debug(TAG, "findEntityByStructuredKey: direct hit key=" + key);
             return direct;
         }
         KeyParts target = parseKeyParts(key);
         if (target == null || TextUtils.isEmpty(target.street) || TextUtils.isEmpty(target.number)) {
-            FileLog.getInstance().debug(TAG, "findEntityByStructuredKey: invalid key=" + key);
             return null;
         }
         List<ApartmentPhotoEntity> all = repository.listAll();
         if (all == null || all.isEmpty()) {
-            FileLog.getInstance().debug(TAG, "findEntityByStructuredKey: empty list key=" + key);
             return null;
         }
-        FileLog.getInstance().debug(TAG,
-                "findEntityByStructuredKey: scan key=" + key + " entries=" + all.size());
         ApartmentPhotoEntity unitMatch = null;
         ApartmentPhotoEntity unitEmptyCandidate = null;
         int unitEmptyMatches = 0;
@@ -344,19 +310,10 @@ public class ApartmentPhotoService {
             }
         }
         if (unitMatch != null) {
-            FileLog.getInstance().debug(TAG,
-                    "findEntityByStructuredKey: unit match id=" + unitMatch.id + " key=" + unitMatch.addressKey);
             return unitMatch;
         }
         if (!TextUtils.isEmpty(target.unit) && unitEmptyMatches > 1) {
-            FileLog.getInstance().debug(TAG,
-                    "findEntityByStructuredKey: ambiguous unit key=" + key + " matches=" + unitEmptyMatches);
             return null;
-        }
-        if (unitEmptyCandidate != null) {
-            FileLog.getInstance().debug(TAG,
-                    "findEntityByStructuredKey: unit-empty id=" + unitEmptyCandidate.id + " key="
-                            + unitEmptyCandidate.addressKey);
         }
         return unitEmptyCandidate;
     }

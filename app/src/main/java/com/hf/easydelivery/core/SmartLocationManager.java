@@ -1048,7 +1048,8 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
     }
 
     public void stopForegroundTracking() {
-        stopForegroundTracking(true);
+        // Do not resume normal fused updates when FG stops.
+        stopForegroundTracking(false);
     }
 
     public void stopForegroundTracking(boolean resumeNormal) {

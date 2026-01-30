@@ -207,13 +207,16 @@ public class LocationForegroundService extends Service {
     }
 
     private void stopForegroundTracking() {
+        boolean hadCallback = locationCallback != null;
         if (locationSource != null && locationCallback != null) {
             locationSource.removeLocationUpdates(locationCallback);
             FileLog.getInstance().debug(TAG, "removeLocationUpdates requested");
         }
         retryHandler.removeCallbacks(retryRunnable);
         locationCallback = null;
-        FileLog.getInstance().debug(TAG, "stopForegroundTracking completed");
+        if (hadCallback) {
+            FileLog.getInstance().debug(TAG, "stopForegroundTracking completed");
+        }
     }
 
     private void scheduleRetry() {

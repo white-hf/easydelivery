@@ -299,7 +299,7 @@ public class MapInnerFragment extends Fragment
     private long lastToolbarTapMs = 0L;
 
     private static final long FG_MIN_ON_MS = 120_000L;
-    private static final long FG_STOP_GRACE_MS = 60_000L;
+    private static final long FG_STOP_GRACE_MS = 120_000L;
 
     private static final float FAR_DISTANCE_SAMPLE_THRESHOLD_M = 1500f;
     private static final long FAR_SAMPLE_MIN_INTERVAL_MS = 2500L;
@@ -2216,7 +2216,7 @@ public class MapInnerFragment extends Fragment
             return;
         }
         logInstance("fg stop: activeMs=" + activeDurationMs + " pendingMs=" + pendingDurationMs);
-        locationControls.stopForegroundTracking(isResumed());
+        locationControls.stopForegroundTracking(false);
         fgLastStopMs = now;
         fgStopPendingSinceMs = 0L;
         foregroundTrackingHandler.removeCallbacks(foregroundTrackingRunnable);
