@@ -246,7 +246,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                         Toast.makeText(getContext(), R.string.scan_query_unscanned_toast, Toast.LENGTH_SHORT).show();
                         return true;
                     } else if (id == R.id.action_submit_offline) {
-                        scanViewModel.submitOfflineScans();
+                        submitOfflineWithPrecheck();
                         return true;
                     } else if (id == R.id.action_generate_report) {
                         confirmGenerateReport();
@@ -280,7 +280,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                     Toast.makeText(getContext(), R.string.scan_query_unscanned_toast, Toast.LENGTH_SHORT).show();
                     return true;
                 } else if (id == R.id.action_submit_offline) {
-                    scanViewModel.submitOfflineScans();
+                    submitOfflineWithPrecheck();
                     return true;
                 } else if (id == R.id.action_generate_report) {
                     confirmGenerateReport();
@@ -509,6 +509,29 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
     }
 
     private void confirmGenerateReport() {
+        scanViewModel.loadPendingOfflineCount(new ScanViewModel.PendingCountCallback() {
+            @Override
+            public void onResult(int count) {
+                if (count > 0) {
+                    new AlertDialog.Builder(requireContext())
+                            .setTitle(R.string.scan_confirm_submit_title)
+                            .setMessage(getString(R.string.scan_confirm_submit_message_format, count))
+                            .setPositiveButton(R.string.action_yes, (dialog, which) -> showGenerateReportConfirmDialog())
+                            .setNegativeButton(R.string.action_cancel, null)
+                            .show();
+                } else {
+                    showGenerateReportConfirmDialog();
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Toast.makeText(getContext(), R.string.scan_query_offline_failed, Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void showGenerateReportConfirmDialog() {
         int scannedCount = 0;
         int unscannedCount = 0;
         List<ScanItem> scanned = scanViewModel.getScannedListLive().getValue();
@@ -525,6 +548,43 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                         (dialog, which) -> scanViewModel.generateScanBatchReport())
                 .setNegativeButton(R.string.action_cancel, null)
                 .show();
+    }
+
+    private void submitOfflineWithPrecheck() {
+        scanViewModel.fetchOpenScanBatch(new ScanViewModel.OpenBatchCallback() {
+            @Override
+            public void onResult(boolean hasOpen) {
+                if (hasOpen) {
+                    scanViewModel.submitOfflineScans();
+                    return;
+                }
+                new AlertDialog.Builder(requireContext())
+                        .setTitle(R.string.scan_report_closed_title)
+                        .setMessage(R.string.scan_report_closed_or_invalid)
+                        .setPositiveButton(R.string.action_yes, (dialog, which) ->
+                                scanViewModel.createScanBatchForSubmit(new ScanViewModel.OpenBatchCallback() {
+                                    @Override
+                                    public void onResult(boolean created) {
+                                        if (created) {
+                                            scanViewModel.submitOfflineScans();
+                                        }
+                                    }
+
+                                    @Override
+                                    public void onError(Exception e) {
+                                        Toast.makeText(getContext(), R.string.scan_create_batch_failed, Toast.LENGTH_SHORT).show();
+                                    }
+                                })
+                        )
+                        .setNegativeButton(R.string.action_cancel, null)
+                        .show();
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Toast.makeText(getContext(), R.string.scan_query_offline_failed, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void bindCameraNow() {

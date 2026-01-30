@@ -114,10 +114,10 @@ import com.hf.easydelivery.apartment.ApartmentPhotoService;
 import com.hf.easydelivery.apartment.ApartmentPhotoService.MatchResult;
 
 /**
- * CameraActivity（从 Fragment 完整改造为 Activity）
- * - 相机统一改用 CameraServie（共享、可避免与扫码页竞争）
- * - 修复所有 Fragment API 遗留：requireActivity()/getArguments()/view.findViewById 等
- * - UI/业务逻辑保持不变（缩略图/短信/拨号/完成校验等）
+ * CameraActivity (migrated from Fragment to Activity).
+ * - Uses CameraService for a shared camera instance to avoid scanner conflicts.
+ * - Removes Fragment-only API usage (requireActivity/getArguments/view.findViewById).
+ * - Keeps UI and business behavior unchanged (thumbnails/SMS/call/validation).
  */
 public class CameraActivity extends AppCompatActivity
         implements SensorEventListener, LocationUpdateListener {
@@ -148,7 +148,7 @@ public class CameraActivity extends AppCompatActivity
 
     private ImageCapture imageCapture;
 
-    // 传感器
+    // Sensors
     private SensorManager sensorManager;
     private Sensor accelerometer, magnetometer, lightSensor;
     private final float[] accelerometerReading = new float[3];
@@ -156,7 +156,7 @@ public class CameraActivity extends AppCompatActivity
     private float ambientLux = Float.NaN;
     private float lastPitchDegrees = Float.NaN;
 
-    // 业务参数
+    // Business parameters
     private Long mOrderId;
     private double targetLatitude = Double.NaN;
     private double targetLongitude = Double.NaN;
@@ -174,10 +174,10 @@ public class CameraActivity extends AppCompatActivity
     private Location lastKnownLocation;
     private DeliveryInfo deliveryInfo;
 
-    // 宿主 chrome
+    // Host chrome
     private View hostToolbar, hostBottomBar;
 
-    // 相机服务
+    // Camera service
     // private final CameraService cameraServie = CameraService.getInstance();
     // private boolean cameraBound = false;
     private boolean cameraStarted = false;
@@ -211,13 +211,13 @@ public class CameraActivity extends AppCompatActivity
     // Executor for background image processing
     private final ExecutorService cameraExecutor = Executors.newSingleThreadExecutor();
 
-    // ---------- Activity 生命周期 ----------
+    // ---------- Activity lifecycle ----------
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera);
 
-        // 1) 读取参数（从 Intent）
+        // 1) Read parameters (from Intent)
         Bundle args = getIntent() != null ? getIntent().getExtras() : null;
         if (args != null) {
             mOrderId = args.getLong("order_id", -1);
@@ -234,7 +234,7 @@ public class CameraActivity extends AppCompatActivity
             FileLog.getInstance().error(TAG, "Failed to init barcode scanner: " + e.getMessage(), e);
         }
 
-        // 2) 顶部信息栏
+        // 2) Top info bar
         infoBar = findViewById(R.id.info_bar);
         tvRouteNumber = findViewById(R.id.tv_route_number);
         tvOrderSn = findViewById(R.id.tv_tracking_number);
@@ -250,15 +250,15 @@ public class CameraActivity extends AppCompatActivity
             tvUnitNumber.setText(deliveryInfo.getUnitNumber());
             tvAddress.setText(deliveryInfo.getAddress());
 
-            // --- 让地址可点击进入导航 ---
+            // --- Make address clickable for navigation ---
             tvAddress.setClickable(true);
             tvAddress.setFocusable(true);
             tvAddress.setContentDescription(getString(R.string.tap_to_navigate));
 
-            // 下划线效果，像可点击的链接
+            // Underline to indicate a clickable link
             tvAddress.setPaintFlags(tvAddress.getPaintFlags() | android.graphics.Paint.UNDERLINE_TEXT_FLAG);
 
-            // 触摸水波纹反馈（有则用）
+            // Ripple feedback on touch (if available)
             try {
                 android.util.TypedValue out = new android.util.TypedValue();
                 if (getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, out, true)) {
@@ -267,7 +267,7 @@ public class CameraActivity extends AppCompatActivity
             } catch (Exception ignore) {
             }
 
-            // 略微增大可点区域
+            // Slightly increase tap target
             int padH = (int) (8 * getResources().getDisplayMetrics().density);
             int padV = (int) (4 * getResources().getDisplayMetrics().density);
             tvAddress.setPadding(
@@ -276,7 +276,7 @@ public class CameraActivity extends AppCompatActivity
                     tvAddress.getPaddingRight() + padH,
                     tvAddress.getPaddingBottom() + padV);
 
-            // 右侧加一个导航小图标（系统自带）
+            // Add a small navigation icon on the right (system)
             try {
                 tvAddress.setCompoundDrawablesWithIntrinsicBounds(0, 0, android.R.drawable.ic_menu_directions, 0);
                 tvAddress.setCompoundDrawablePadding((int) (6 * getResources().getDisplayMetrics().density));
@@ -287,7 +287,7 @@ public class CameraActivity extends AppCompatActivity
         }
         initLocationManager();
 
-        // 3) 缩略图栏
+        // 3) Thumbnail bar
         thumbnailContainer = findViewById(R.id.thumbnail_container);
         mImageFiles.clear();
         mImageViews.clear();
@@ -301,7 +301,7 @@ public class CameraActivity extends AppCompatActivity
         apartmentPhotoService = ApartmentPhotoService.getInstance(this);
         initApartmentAssist();
 
-        // 4) 拍照/相册/重拍栏
+        // 4) Capture/gallery/retake bar
         captureButton = findViewById(R.id.shutter_button);
         galleryButton = findViewById(R.id.gallery_button);
         retakeButton = findViewById(R.id.retake_button);
@@ -310,7 +310,7 @@ public class CameraActivity extends AppCompatActivity
         galleryButton.setOnClickListener(v -> openGallery());
         retakeButton.setOnClickListener(v -> removeLastThumbnail());
 
-        // 5) 底部操作栏
+        // 5) Bottom action bar
         smsButton = findViewById(R.id.sms_button);
         phoneButton = findViewById(R.id.phone_button);
         failButton = findViewById(R.id.fail_button);
@@ -328,18 +328,17 @@ public class CameraActivity extends AppCompatActivity
         });
         updateOkButtonState();
 
-        // 6) 预览区
+        // 6) Preview area
         previewView = findViewById(R.id.previewView);
         // Removed direct call to startCamera()
 
-        // 7) 传感器
+        // 7) Sensors
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
             accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
             magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
             lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
             if (lightSensor == null) {
-                FileLog.getInstance().debug(TAG, "light sensor unavailable; fallback to CameraX auto flash");
             }
         } else {
             Toast.makeText(this, R.string.camera_sensor_unavailable, Toast.LENGTH_SHORT).show();
@@ -347,7 +346,7 @@ public class CameraActivity extends AppCompatActivity
             return;
         }
 
-        // 8) 浮动关闭键（可选）
+        // 8) Floating close button (optional)
         ImageButton closeButton = findViewById(R.id.btn_close);
         if (closeButton == null) {
             try {
@@ -379,11 +378,9 @@ public class CameraActivity extends AppCompatActivity
         }
         if (closeButton != null) {
             closeButton.setOnClickListener(v -> finish());
-        } else {
-            FileLog.getInstance().debug(TAG, "closeButton not found in layout, skipping listener setup");
-        }
+        } else {        }
 
-        // 9) 可选隐藏 cancel 按钮
+        // 9) Optional cancel button handling
         try {
             int cancelId = getResources().getIdentifier("cancel_button", "id", getPackageName());
             if (cancelId != 0) {
@@ -391,14 +388,12 @@ public class CameraActivity extends AppCompatActivity
                 if (cb != null)
                     cb.setVisibility(View.GONE);
             }
-        } catch (Exception e) {
-            FileLog.getInstance().debug(TAG, "optional cancel_button not found: " + e.getMessage());
-        }
+        } catch (Exception e) {        }
 
-        // 10) 权限/相机准备
+        // 10) Permissions / camera setup
         initCamera();
 
-        // 全屏沉浸
+        // Fullscreen immersive
         prepareHostChromeRefs();
         enterImmersiveFullscreen();
         hideHostChrome();
@@ -530,9 +525,7 @@ public class CameraActivity extends AppCompatActivity
 
     @Override
     protected void onStart() {
-        super.onStart();
-        FileLog.getInstance().debug(TAG, "onStart: no-op");
-    }
+        super.onStart();    }
 
     @Override
     protected void onResume() {
@@ -580,9 +573,7 @@ public class CameraActivity extends AppCompatActivity
     }
 
     @Override
-    protected void onDestroy() {
-        FileLog.getInstance().debug(TAG, "onDestroy: clean up.");
-        showHostChrome();
+    protected void onDestroy() {        showHostChrome();
         stopLocationTracking();
         if (!cameraExecutor.isShutdown()) {
             cameraExecutor.shutdown();
@@ -679,7 +670,7 @@ public class CameraActivity extends AppCompatActivity
         }
     }
 
-    // ---------- 传感器 ----------
+    // ---------- Sensors ----------
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (event.sensor == accelerometer) {
@@ -709,7 +700,7 @@ public class CameraActivity extends AppCompatActivity
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
     }
 
-    // ---------- 权限/相机绑定（CameraServie） ----------
+    // ---------- Permissions / camera binding (CameraService) ----------
     private void initCamera() {
         if (PermissionUtils.hasCameraPermission(this)) {
             startCamera();
@@ -745,7 +736,7 @@ public class CameraActivity extends AppCompatActivity
         }
     }
 
-    // ---------- 业务/UI 工具 ----------
+    // ---------- Business/UI helpers ----------
     private String ellipsis(String str, int maxLen) {
         if (str == null)
             return "";
@@ -947,8 +938,6 @@ public class CameraActivity extends AppCompatActivity
         }
         if (lastFlashOn != useFlash) {
             lastFlashOn = useFlash;
-            FileLog.getInstance().debug(TAG,
-                    "applyDynamicFlashMode: mode=" + (useFlash ? "ON" : "OFF") + " lux=" + ambientLux);
         }
     }
 
@@ -1104,7 +1093,7 @@ public class CameraActivity extends AppCompatActivity
     }
 
     private boolean switchToNextPackage() {
-        // TODO: 批量包裹切换
+        // TODO: batch parcel switch
         return false;
     }
 
@@ -1331,10 +1320,7 @@ public class CameraActivity extends AppCompatActivity
         new Thread(() -> service.retryDelivery(params,
                 new RetryDeliveryRspCb(infoSnapshotTrue.getOrderSn(), new RetryDeliveryRspCb.Callback() {
                     @Override
-                    public void onSuccess() {
-                        FileLog.getInstance().debug(TAG,
-                                "Retry delivery API success for order: " + infoSnapshotTrue.getOrderSn());
-                        runOnUiThread(() -> {
+                    public void onSuccess() {                        runOnUiThread(() -> {
                             pd.dismiss();
                             Toast.makeText(CameraActivity.this, R.string.camera_retry_success, Toast.LENGTH_SHORT).show();
                             // Retry is a direct API call, no need to submitPackage (which queues for async
@@ -1449,17 +1435,15 @@ public class CameraActivity extends AppCompatActivity
                 .toArray(String[]::new));
     }
 
-    // ---------- 拍照反馈 ----------
+    // ---------- Capture feedback ----------
     private void playShutterFeedback() {
-        // 1. 播放系统相机快门声
+        // 1) Play system shutter sound
         try {
             android.media.MediaActionSound sound = new android.media.MediaActionSound();
             sound.play(android.media.MediaActionSound.SHUTTER_CLICK);
-        } catch (Exception e) {
-            FileLog.getInstance().debug(TAG, "Shutter sound failed: " + e.getMessage());
-        }
+        } catch (Exception e) {        }
 
-        // 2. 屏幕闪烁效果
+        // 2) Screen flash effect
         if (previewView != null) {
             View flashView = new View(this);
             flashView.setBackgroundColor(android.graphics.Color.WHITE);
@@ -1485,14 +1469,12 @@ public class CameraActivity extends AppCompatActivity
         }
     }
 
-    // ---------- 拍照（走 CameraServie） ----------
-    private void takePicture() {
-        FileLog.getInstance().debug(TAG, "takePicture via CameraX");
-        applyProximityZoom(true);
+    // ---------- Capture (via CameraService) ----------
+    private void takePicture() {        applyProximityZoom(true);
         applyDynamicFlashMode();
         final CaptureIntent intentForShot = lastResolvedIntent;
 
-        // --- 播放拍照反馈 ---
+        // --- Play capture feedback ---
         playShutterFeedback();
         boolean full = true;
         for (File imageFile : mImageFiles) {
@@ -1633,9 +1615,7 @@ public class CameraActivity extends AppCompatActivity
 
     private void startCamera() {
 
-        if (cameraStarted) {
-            FileLog.getInstance().debug(TAG, "startCamera: already started, skipping");
-            return;
+        if (cameraStarted) {            return;
         }
         cameraStarted = true;
         ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
@@ -1676,8 +1656,8 @@ public class CameraActivity extends AppCompatActivity
     }
 
     /**
-     * 从当前定位到包裹目的地（targetLatitude, targetLongitude）发起导航。
-     * 优先使用 Google Maps turn-by-turn；不可用时回退到通用 VIEW。
+     * Start navigation from current location to the delivery target (targetLatitude, targetLongitude).
+     * Prefer Google Maps turn-by-turn; fallback to generic VIEW if unavailable.
      */
     private void openNavigationToPackage() {
         double lat = resolveTargetLatitude();
@@ -1686,7 +1666,7 @@ public class CameraActivity extends AppCompatActivity
             Toast.makeText(this, getString(R.string.nav_location_invalid), Toast.LENGTH_SHORT).show();
             return;
         }
-        // 1) 优先：Google Maps 导航
+        // 1) Prefer Google Maps navigation
         try {
             android.net.Uri gmmIntentUri = android.net.Uri.parse("google.navigation:q=" + lat + "," + lng + "&mode=d");
             Intent mapIntent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
@@ -1698,7 +1678,7 @@ public class CameraActivity extends AppCompatActivity
         } catch (Exception ignored) {
         }
 
-        // 2) 回退：任意地图应用 / 浏览器
+        // 2) Fallback: any map app or browser
         try {
             String url = "https://www.google.com/maps/dir/?api=1&destination=" + lat + "," + lng
                     + "&travelmode=driving";
@@ -1737,16 +1717,13 @@ public class CameraActivity extends AppCompatActivity
         if (distance > 150f) {
             Toast.makeText(this,
                     getString(R.string.camera_distance_mismatch_format, distance),
-                    Toast.LENGTH_SHORT).show();
-            FileLog.getInstance().debug(TAG, "warnIfFarFromTarget: distance=" + distance + " target=(" + targetLat + ","
-                    + targetLng + ") current=(" + currentLat + "," + currentLng + ")");
-            return true;
+                    Toast.LENGTH_SHORT).show();            return true;
         }
         return false;
     }
 
     private void findAndShowNextPackages(DeliveryInfo currentInfo) {
-        // 使用 PowerSaverSelector：同址优先 + 距离补足（+3），一次性在送达后触发
+        // Use PowerSaverSelector: same-address first + distance padding (+3), triggered after delivery
         if (currentInfo == null) {
             finish();
             return;
@@ -1757,8 +1734,8 @@ public class CameraActivity extends AppCompatActivity
             return;
         }
         PowerSaverSelector.Params params = new PowerSaverSelector.Params();
-        params.extraNearCount = 3; // “同址数量 + 3”
-        params.nearRadiusMeters = 150f; // 对非同址的软半径；≤0 则不限制
+        params.extraNearCount = 3; // "same-address count + 3"
+        params.nearRadiusMeters = 150f; // Soft radius for non-same-address items; <= 0 disables
 
         Location ref = buildLocationFromPackage(currentInfo);
         if (ref == null) {
@@ -1768,28 +1745,21 @@ public class CameraActivity extends AppCompatActivity
         List<DeliveryInfo> next = new PowerSaverSelector().selectNext(currentInfo, ref, mgr, params);
         int count = next == null ? 0 : next.size();
         if (count == 0) {
-            try {
-                FileLog.getInstance().debug(TAG, "findAndShowNextPackages: no candidates, finishing camera flow");
-            } catch (Throwable ignore) {
+            try {            } catch (Throwable ignore) {
             }
             finish();
             return;
         }
         if (count == 1) {
-            try {
-                FileLog.getInstance().debug(TAG, "findAndShowNextPackages: single candidate -> auto switch");
-            } catch (Throwable ignore) {
+            try {            } catch (Throwable ignore) {
             }
-            // 仅一条：直接切换
+            // Single candidate: switch directly
             resetForNewPackage(next.get(0));
             return;
         }
-        try {
-            FileLog.getInstance().debug(TAG,
-                    "findAndShowNextPackages: multiple candidates=" + count + " -> show chooser");
-        } catch (Throwable ignore) {
+        try {        } catch (Throwable ignore) {
         }
-        // 多条：弹出选择
+        // Multiple candidates: show selector
         showNextPackageChooser(next);
     }
 

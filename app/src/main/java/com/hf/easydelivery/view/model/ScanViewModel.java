@@ -15,6 +15,7 @@ import com.hf.courierservice.Result;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.courierservice.bean.ScanBatchCreateData;
 import com.hf.courierservice.bean.ScanBatchGenerateReportData;
+import com.hf.courierservice.bean.ScanBatchReportData;
 import com.hf.courierservice.bean.ScanBatchReviewData;
 import com.hf.courierservice.bean.ToBePickedUpBriefData;
 import com.hf.easydelivery.ResourceMgr;
@@ -59,6 +60,16 @@ public class ScanViewModel extends ViewModel implements Subscriber {
 
     private static final String TAG = "ScanViewModel";
     private static final String REVIEW_STATUS = "REVIEW";
+
+    public interface PendingCountCallback {
+        void onResult(int count);
+        void onError(Exception e);
+    }
+
+    public interface OpenBatchCallback {
+        void onResult(boolean hasOpen);
+        void onError(Exception e);
+    }
 
     // --- 新增：用于提交状态的枚举 ---
     public enum SubmissionState { IDLE, SUBMITTING, COMPLETE, FAILED }
@@ -555,6 +566,86 @@ public class ScanViewModel extends ViewModel implements Subscriber {
     private void pushBatchFields() {
         scanBatchIdLive.postValue(resourceMgr.getDeliveryinfoMgr().getScanBatchId());
         scanBatchStatusLive.postValue(resourceMgr.getDeliveryinfoMgr().getScanBatchStatus());
+    }
+
+    public void loadPendingOfflineCount(@NonNull PendingCountCallback callback) {
+        resourceMgr.getDbHandler().post(() -> {
+            try {
+                String strToday = Utils.getCurrentDate();
+                Integer driverId = resourceMgr.getLoginInfo().loginId;
+                List<ScanRecord> list = resourceMgr.getmMydb().getScanRecordDao()
+                        .loadByDate(strToday, false, driverId);
+                resourceMgr.getMainHandler().post(() -> callback.onResult(list.size()));
+            } catch (Exception e) {
+                resourceMgr.getMainHandler().post(() -> callback.onError(e));
+            }
+        });
+    }
+
+    public void fetchOpenScanBatch(@NonNull OpenBatchCallback callback) {
+        ResourceMgr.LoginInfo loginInfo = resourceMgr.getLoginInfo();
+        resourceMgr.getCourierService().fetchDriverReport(loginInfo.warehouseId, loginInfo.loginId, Utils.getCurrentDate(),
+                new IResponseCallBack<List<ScanBatchReportData>>() {
+                    @Override
+                    public void onComplete(Result<List<ScanBatchReportData>> result) {
+                        if (!(result instanceof Result.Success)) {
+                            resourceMgr.getMainHandler().post(() -> callback.onResult(false));
+                            return;
+                        }
+                        List<ScanBatchReportData> lst = ((Result.Success<List<ScanBatchReportData>>) result).data;
+                        ScanBatchReportData open = null;
+                        if (lst != null) {
+                            for (ScanBatchReportData item : lst) {
+                                if (item != null && item.getScan_batch_status() == 0) {
+                                    open = item;
+                                    break;
+                                }
+                            }
+                        }
+                        if (open != null) {
+                            resourceMgr.getDeliveryinfoMgr().updateScanBatchInfo(open.getScan_batch_id(), open.getScan_batch_status());
+                            pushBatchFields();
+                            resourceMgr.getMainHandler().post(() -> callback.onResult(true));
+                        } else {
+                            resourceMgr.getMainHandler().post(() -> callback.onResult(false));
+                        }
+                    }
+
+                    @Override
+                    public void onFail(Exception e) {
+                        resourceMgr.getMainHandler().post(() -> callback.onError(e));
+                    }
+                });
+    }
+
+    public void createScanBatchForSubmit(@NonNull OpenBatchCallback callback) {
+        Integer driverId = resourceMgr.getLoginInfo() != null ? resourceMgr.getLoginInfo().loginId : null;
+        if (driverId == null || driverId <= 0) {
+            callback.onResult(false);
+            return;
+        }
+        resourceMgr.getCourierService().createScanBatch(driverId, 0, 0,
+                new IResponseCallBack<ScanBatchCreateData>() {
+                    @Override
+                    public void onComplete(Result<ScanBatchCreateData> result) {
+                        if (result instanceof Result.Success) {
+                            ScanBatchCreateData data = ((Result.Success<ScanBatchCreateData>) result).data;
+                            long batchId = data == null ? 0 : data.getScan_batch_id();
+                            if (batchId > 0) {
+                                resourceMgr.getDeliveryinfoMgr().updateScanBatchInfo(batchId, 0);
+                                pushBatchFields();
+                                resourceMgr.getMainHandler().post(() -> callback.onResult(true));
+                                return;
+                            }
+                        }
+                        resourceMgr.getMainHandler().post(() -> callback.onResult(false));
+                    }
+
+                    @Override
+                    public void onFail(Exception e) {
+                        resourceMgr.getMainHandler().post(() -> callback.onError(e));
+                    }
+                });
     }
 
     private String getString(int resId, Object... args) {
