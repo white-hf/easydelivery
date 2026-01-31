@@ -129,6 +129,10 @@
     <string name="scan_report_confirm_title">Generate scan report</string>
     <string name="scan_report_confirm_message">Scanned: %1$d\nUnscanned: %2$d\nGenerate scan report?</string>
     <string name="scan_report_confirm_positive">Generate</string>
+    <string name="scan_confirm_submit_title">Pending offline scans</string>
+    <string name="scan_confirm_submit_message_format">There are %1$d offline scans not submitted yet. Continue?</string>
+    <string name="scan_query_offline_failed">Failed to check offline scans.</string>
+    <string name="scan_report_closed_title">Scan report closed</string>
     <string name="scan_camera_permission_required">Camera permission is required</string>
     <string name="scan_report_closed_or_invalid">Scan report is closed or batch is invalid.</string>
     <string name="scan_data_loading">Data is loading. Please rescan later.</string>
