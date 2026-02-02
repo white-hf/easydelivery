@@ -73,6 +73,7 @@ import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
 import com.hf.easydelivery.common.Utils;
+import com.hf.easydelivery.core.LargeParcelStore;
 import com.hf.easydelivery.core.facade.LocationControls;
 import com.hf.easydelivery.core.facade.LocationFacade;
 import com.hf.easydelivery.core.facade.LocationSnapshot;
@@ -159,6 +160,7 @@ public class MapInnerFragment extends Fragment
     private TextView pillRouteText;
     private TextView pillAddressText;
     private TextView pillRecipientText;
+    private TextView pillLargeBadge;
     private MaterialButton btnPillShowList;
     private Marker myLocationMarker;
     private BitmapDescriptor myLocationIcon;
@@ -410,6 +412,7 @@ public class MapInnerFragment extends Fragment
         pillRouteText = view.findViewById(R.id.pill_route);
         pillAddressText = view.findViewById(R.id.pill_address);
         pillRecipientText = view.findViewById(R.id.pill_recipient);
+        pillLargeBadge = view.findViewById(R.id.pill_large_badge);
         btnPillShowList = view.findViewById(R.id.btn_pill_show_list);
         ImageButton pillCloseButton = view.findViewById(R.id.btn_pill_close);
         btnResumeFollow = view.findViewById(R.id.btn_resume_follow);
@@ -1073,6 +1076,10 @@ public class MapInnerFragment extends Fragment
                     + getString(R.string.map_parcel_summary_format, parcelSummary);
         }
         pillRecipientText.setText(recipientLine);
+        if (pillLargeBadge != null) {
+            boolean isLarge = LargeParcelStore.isLarge(requireContext(), info);
+            pillLargeBadge.setVisibility(isLarge ? View.VISIBLE : View.GONE);
+        }
         infoPill.setVisibility(View.VISIBLE);
         updateCollapsedHint();
     }
