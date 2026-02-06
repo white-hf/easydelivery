@@ -207,6 +207,9 @@ public class CameraActivity extends AppCompatActivity
     private boolean mismatchDialogShowing = false;
     private String lastMismatchCode = null;
     private long lastBarcodeAnalysisMillis = 0L;
+    private boolean autoCaptureInProgress = false;
+    private long lastAutoCaptureMillis = 0L;
+    private static final long AUTO_CAPTURE_COOLDOWN_MS = 1500L;
 
     // Executor for background image processing
     private final ExecutorService cameraExecutor = Executors.newSingleThreadExecutor();
@@ -1027,7 +1030,37 @@ public class CameraActivity extends AppCompatActivity
         }
         lastBarcodeHitMillis = SystemClock.elapsedRealtime();
         lastMismatchCode = null;
+        runOnUiThread(this::maybeAutoCaptureWaybill);
         return true;
+    }
+
+    private void maybeAutoCaptureWaybill() {
+        ensureCaptureSequenceSynced();
+        if (captureStage != CaptureIntent.WAYBILL) {
+            return;
+        }
+        if (autoCaptureInProgress) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastAutoCaptureMillis < AUTO_CAPTURE_COOLDOWN_MS) {
+            return;
+        }
+        if (mismatchDialogShowing) {
+            return;
+        }
+        if (imageCapture == null) {
+            return;
+        }
+        if (!mImageFiles.isEmpty() && mImageFiles.get(0) != null) {
+            return;
+        }
+        if (captureSequenceIndex > 0) {
+            return;
+        }
+        autoCaptureInProgress = true;
+        lastAutoCaptureMillis = now;
+        takePicture();
     }
 
     private String getCurrentOrderTracking() {
@@ -1485,10 +1518,16 @@ public class CameraActivity extends AppCompatActivity
         }
         if (full) {
             Toast.makeText(this, getString(R.string.take_picture_full), Toast.LENGTH_SHORT).show();
+            if (autoCaptureInProgress) {
+                autoCaptureInProgress = false;
+            }
             return;
         }
         if (imageCapture == null) {
             Toast.makeText(this, R.string.camera_not_ready, Toast.LENGTH_SHORT).show();
+            if (autoCaptureInProgress) {
+                autoCaptureInProgress = false;
+            }
             return;
         }
 
@@ -1582,6 +1621,9 @@ public class CameraActivity extends AppCompatActivity
                                 if (intentForShot == CaptureIntent.BUILDING) {
                                     handleBuildingPhotoCaptured(imageFile);
                                 }
+                                if (autoCaptureInProgress) {
+                                    autoCaptureInProgress = false;
+                                }
                             } else {
                                 // fallback: insert real thumbnail into first available slot
                                 addThumbnail(imageFile, true);
@@ -1591,6 +1633,9 @@ public class CameraActivity extends AppCompatActivity
                                 if (intentForShot == CaptureIntent.BUILDING) {
                                     handleBuildingPhotoCaptured(imageFile);
                                 }
+                                if (autoCaptureInProgress) {
+                                    autoCaptureInProgress = false;
+                                }
                             }
                         });
                     } catch (Exception e) {
@@ -1598,6 +1643,9 @@ public class CameraActivity extends AppCompatActivity
                         runOnUiThread(() -> Toast
                                 .makeText(CameraActivity.this, R.string.picture_save_failed, Toast.LENGTH_SHORT)
                                 .show());
+                        if (autoCaptureInProgress) {
+                            autoCaptureInProgress = false;
+                        }
                     } finally {
                         image.close();
                     }
@@ -1609,6 +1657,9 @@ public class CameraActivity extends AppCompatActivity
                 runOnUiThread(() -> Toast
                         .makeText(CameraActivity.this, getString(R.string.camera_capture_failed_format, exception.getMessage()), Toast.LENGTH_SHORT)
                         .show());
+                if (autoCaptureInProgress) {
+                    autoCaptureInProgress = false;
+                }
             }
         });
     }

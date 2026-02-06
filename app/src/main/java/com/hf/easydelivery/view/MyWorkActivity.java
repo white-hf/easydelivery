@@ -61,8 +61,14 @@ public class MyWorkActivity extends AppCompatActivity implements WorkStatsAdapte
     private void renderSummary(MonthSummary summary) {
         if (summary == null) return;
         tvSelectedMonth.setText(formatMonth(summary.year, summary.month));
-        adapter.submitList(summary.dayStats);
-        tvEmptyState.setVisibility(summary.dayStats.isEmpty() ? View.VISIBLE : View.GONE);
+        java.util.List<WorkStatsRepository.WorkDayStat> filteredStats = new java.util.ArrayList<>();
+        for (WorkStatsRepository.WorkDayStat stat : summary.dayStats) {
+            if (stat != null && stat.deliveredPackages > 0) {
+                filteredStats.add(stat);
+            }
+        }
+        adapter.submitList(filteredStats);
+        tvEmptyState.setVisibility(filteredStats.isEmpty() ? View.VISIBLE : View.GONE);
         tvSummary.setText(getString(R.string.my_work_summary_template,
                 summary.workingDays,
                 summary.totalParcels,
