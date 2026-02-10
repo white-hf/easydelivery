@@ -509,19 +509,75 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
     }
 
     private void confirmGenerateReport() {
-        scanViewModel.loadPendingOfflineCount(new ScanViewModel.PendingCountCallback() {
+        scanViewModel.fetchScanBatchStatus(new ScanViewModel.BatchStatusCallback() {
             @Override
-            public void onResult(int count) {
-                if (count > 0) {
+            public void onResult(@NonNull ScanViewModel.BatchStatus status) {
+                if (status == ScanViewModel.BatchStatus.OPEN) {
+                    scanViewModel.loadPendingOfflineCount(new ScanViewModel.PendingCountCallback() {
+                        @Override
+                        public void onResult(int count) {
+                            if (count > 0) {
+                                new AlertDialog.Builder(requireContext())
+                                        .setTitle(R.string.scan_confirm_submit_title)
+                                        .setMessage(getString(R.string.scan_confirm_submit_message_format, count))
+                                        .setPositiveButton(R.string.action_yes, (dialog, which) -> showGenerateReportConfirmDialog())
+                                        .setNegativeButton(R.string.action_cancel, null)
+                                        .show();
+                            } else {
+                                showGenerateReportConfirmDialog();
+                            }
+                        }
+
+                        @Override
+                        public void onError(Exception e) {
+                            Toast.makeText(getContext(), R.string.scan_query_offline_failed, Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                    return;
+                }
+                if (status == ScanViewModel.BatchStatus.CLOSED) {
                     new AlertDialog.Builder(requireContext())
-                            .setTitle(R.string.scan_confirm_submit_title)
-                            .setMessage(getString(R.string.scan_confirm_submit_message_format, count))
-                            .setPositiveButton(R.string.action_yes, (dialog, which) -> showGenerateReportConfirmDialog())
+                            .setTitle(R.string.scan_report_closed_title)
+                            .setMessage(R.string.scan_report_closed_or_invalid)
+                            .setPositiveButton(R.string.action_yes, (dialog, which) ->
+                                    scanViewModel.createScanBatchForSubmit(new ScanViewModel.OpenBatchCallback() {
+                                        @Override
+                                        public void onResult(boolean created) {
+                                            if (created) {
+                                                showGenerateReportConfirmDialog();
+                                            }
+                                        }
+
+                                        @Override
+                                        public void onError(Exception e) {
+                                            Toast.makeText(getContext(), R.string.scan_create_batch_failed, Toast.LENGTH_SHORT).show();
+                                        }
+                                    })
+                            )
                             .setNegativeButton(R.string.action_cancel, null)
                             .show();
-                } else {
-                    showGenerateReportConfirmDialog();
+                    return;
                 }
+                new AlertDialog.Builder(requireContext())
+                        .setTitle(R.string.scan_report_closed_title)
+                        .setMessage(R.string.scan_report_closed_or_invalid)
+                        .setPositiveButton(R.string.action_yes, (dialog, which) ->
+                                scanViewModel.createScanBatchForSubmit(new ScanViewModel.OpenBatchCallback() {
+                                    @Override
+                                    public void onResult(boolean created) {
+                                        if (created) {
+                                            showGenerateReportConfirmDialog();
+                                        }
+                                    }
+
+                                    @Override
+                                    public void onError(Exception e) {
+                                        Toast.makeText(getContext(), R.string.scan_create_batch_failed, Toast.LENGTH_SHORT).show();
+                                    }
+                                })
+                        )
+                        .setNegativeButton(R.string.action_cancel, null)
+                        .show();
             }
 
             @Override
@@ -551,11 +607,34 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
     }
 
     private void submitOfflineWithPrecheck() {
-        scanViewModel.fetchOpenScanBatch(new ScanViewModel.OpenBatchCallback() {
+        scanViewModel.fetchScanBatchStatus(new ScanViewModel.BatchStatusCallback() {
             @Override
-            public void onResult(boolean hasOpen) {
-                if (hasOpen) {
+            public void onResult(@NonNull ScanViewModel.BatchStatus status) {
+                if (status == ScanViewModel.BatchStatus.OPEN) {
                     scanViewModel.submitOfflineScans();
+                    return;
+                }
+                if (status == ScanViewModel.BatchStatus.CLOSED) {
+                    new AlertDialog.Builder(requireContext())
+                            .setTitle(R.string.scan_report_closed_title)
+                            .setMessage(R.string.scan_report_closed_or_invalid)
+                            .setPositiveButton(R.string.action_yes, (dialog, which) ->
+                                    scanViewModel.createScanBatchForSubmit(new ScanViewModel.OpenBatchCallback() {
+                                        @Override
+                                        public void onResult(boolean created) {
+                                            if (created) {
+                                                scanViewModel.submitOfflineScans();
+                                            }
+                                        }
+
+                                        @Override
+                                        public void onError(Exception e) {
+                                            Toast.makeText(getContext(), R.string.scan_create_batch_failed, Toast.LENGTH_SHORT).show();
+                                        }
+                                    })
+                            )
+                            .setNegativeButton(R.string.action_cancel, null)
+                            .show();
                     return;
                 }
                 new AlertDialog.Builder(requireContext())
