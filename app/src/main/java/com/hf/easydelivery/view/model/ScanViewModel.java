@@ -60,6 +60,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
 
     private static final String TAG = "ScanViewModel";
     private static final String REVIEW_STATUS = "REVIEW";
+    private static final String REOPEN_STATUS = "REOPEN";
 
     public interface PendingCountCallback {
         void onResult(int count);
@@ -68,6 +69,13 @@ public class ScanViewModel extends ViewModel implements Subscriber {
 
     public interface OpenBatchCallback {
         void onResult(boolean hasOpen);
+        void onError(Exception e);
+    }
+
+    public enum BatchStatus { OPEN, CLOSED, NONE }
+
+    public interface BatchStatusCallback {
+        void onResult(@NonNull BatchStatus status);
         void onError(Exception e);
     }
 
@@ -427,6 +435,32 @@ public class ScanViewModel extends ViewModel implements Subscriber {
                 });
     }
 
+    public void reopenScanBatch(@NonNull OpenBatchCallback callback) {
+        Long batchId = scanBatchIdLive.getValue();
+        if (batchId == null || batchId < 1) {
+            callback.onResult(false);
+            return;
+        }
+        resourceMgr.getCourierService().submitScanBatchReview(batchId, REOPEN_STATUS,
+                new IResponseCallBack<ScanBatchReviewData>() {
+                    @Override
+                    public void onComplete(Result<ScanBatchReviewData> result) {
+                        if (result instanceof Result.Success) {
+                            resourceMgr.getDeliveryinfoMgr().updateScanBatchInfo(batchId, 0);
+                            pushBatchFields();
+                            resourceMgr.getMainHandler().post(() -> callback.onResult(true));
+                        } else {
+                            resourceMgr.getMainHandler().post(() -> callback.onResult(false));
+                        }
+                    }
+
+                    @Override
+                    public void onFail(Exception e) {
+                        resourceMgr.getMainHandler().post(() -> callback.onError(e));
+                    }
+                });
+    }
+
     /**
      * 新增：内部方法，执行批量提交
      */
@@ -583,31 +617,53 @@ public class ScanViewModel extends ViewModel implements Subscriber {
     }
 
     public void fetchOpenScanBatch(@NonNull OpenBatchCallback callback) {
+        fetchScanBatchStatus(new BatchStatusCallback() {
+            @Override
+            public void onResult(@NonNull BatchStatus status) {
+                callback.onResult(status == BatchStatus.OPEN);
+            }
+
+            @Override
+            public void onError(Exception e) {
+                callback.onError(e);
+            }
+        });
+    }
+
+    public void fetchScanBatchStatus(@NonNull BatchStatusCallback callback) {
         ResourceMgr.LoginInfo loginInfo = resourceMgr.getLoginInfo();
         resourceMgr.getCourierService().fetchDriverReport(loginInfo.warehouseId, loginInfo.loginId, Utils.getCurrentDate(),
                 new IResponseCallBack<List<ScanBatchReportData>>() {
                     @Override
                     public void onComplete(Result<List<ScanBatchReportData>> result) {
                         if (!(result instanceof Result.Success)) {
-                            resourceMgr.getMainHandler().post(() -> callback.onResult(false));
+                            resourceMgr.getMainHandler().post(() -> callback.onResult(BatchStatus.NONE));
                             return;
                         }
                         List<ScanBatchReportData> lst = ((Result.Success<List<ScanBatchReportData>>) result).data;
                         ScanBatchReportData open = null;
+                        ScanBatchReportData closed = null;
                         if (lst != null) {
                             for (ScanBatchReportData item : lst) {
                                 if (item != null && item.getScan_batch_status() == 0) {
                                     open = item;
                                     break;
                                 }
+                                if (item != null && closed == null) {
+                                    closed = item;
+                                }
                             }
                         }
                         if (open != null) {
                             resourceMgr.getDeliveryinfoMgr().updateScanBatchInfo(open.getScan_batch_id(), open.getScan_batch_status());
                             pushBatchFields();
-                            resourceMgr.getMainHandler().post(() -> callback.onResult(true));
+                            resourceMgr.getMainHandler().post(() -> callback.onResult(BatchStatus.OPEN));
+                        } else if (closed != null) {
+                            resourceMgr.getDeliveryinfoMgr().updateScanBatchInfo(closed.getScan_batch_id(), closed.getScan_batch_status());
+                            pushBatchFields();
+                            resourceMgr.getMainHandler().post(() -> callback.onResult(BatchStatus.CLOSED));
                         } else {
-                            resourceMgr.getMainHandler().post(() -> callback.onResult(false));
+                            resourceMgr.getMainHandler().post(() -> callback.onResult(BatchStatus.NONE));
                         }
                     }
 
