@@ -62,17 +62,23 @@ public class LocationForegroundService extends Service {
     };
     private final LocationFacadeProvider locationFacadeProvider =
             DefaultLocationFacadeProvider.getInstance();
+    @Nullable
+    private SmartLocationManager smartLocationManager;
 
     @Override
     public void onCreate() {
         super.onCreate();
         SmartLocationManager manager = SmartLocationManager.getInstance(this);
+        smartLocationManager = manager;
         if (manager != null && manager.getFusedLocationClient() != null) {
             locationSource = new ForegroundServiceLocationSource(manager.getFusedLocationClient());
             FileLog.getInstance().debug(TAG, "onCreate: reuse fusedLocationClient from SmartLocationManager");
         } else {
             locationSource = new ForegroundServiceLocationSource(this);
             FileLog.getInstance().warning(TAG, "onCreate: fallback to new fusedLocationClient");
+        }
+        if (smartLocationManager != null) {
+            smartLocationManager.onForegroundServiceStateChanged(true);
         }
         createNotificationChannel();
         destroyed = false;
@@ -84,8 +90,12 @@ public class LocationForegroundService extends Service {
         FileLog.getInstance().debug(TAG, "onStartCommand: action=" + action + ", startId=" + startId + ", flags=" + flags + ", restarted=" + (intent == null));
         if (ACTION_STOP.equals(action)) {
             stopForegroundTracking();
+            if (smartLocationManager != null) {
+                smartLocationManager.onForegroundServiceStateChanged(false);
+            }
             stopForeground(true);
-            stopSelf();
+            // Avoid stopping a newer START command that may already be queued.
+            stopSelfResult(startId);
             return START_NOT_STICKY;
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -102,6 +112,9 @@ public class LocationForegroundService extends Service {
     public void onDestroy() {
         FileLog.getInstance().debug(TAG, "onDestroy: callbackActive=" + (locationCallback != null) + ", thread=" + Thread.currentThread().getName());
         stopForegroundTracking();
+        if (smartLocationManager != null) {
+            smartLocationManager.onForegroundServiceStateChanged(false);
+        }
         stopForeground(true);
         destroyed = true;
         super.onDestroy();

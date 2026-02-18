@@ -109,7 +109,7 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- 2. Camera preview -->
+    <!--  Camera preview -->
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="0dp"

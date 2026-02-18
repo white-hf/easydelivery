@@ -35,6 +35,8 @@
     <string name="driver_id">司机号</string>
     <string name="transfer_package_id">单号分配</string>
     <string name="operation_completion">操作完成</string>
+    <string name="log_level_title">日志级别</string>
+    <string name="log_level_summary">修改后请重启应用（DEBUG/INFO/WARNING/ERROR/NONE）</string>
 
     <!-- Sync Preferences -->
     <string name="sync_title">自动保存</string>
@@ -122,14 +124,18 @@
     <string name="action_no">否</string>
     <string name="scan_report_confirm_title">生成扫描报告</string>
     <string name="scan_report_confirm_message">已扫描：%1$d\n未扫描：%2$d\n确认生成扫描报告？</string>
+    <string name="scan_confirm_submit_title">确认提交</string>
     <string name="scan_report_confirm_positive">生成</string>
     <string name="scan_camera_permission_required">需要相机权限</string>
     <string name="scan_report_closed_or_invalid">扫描报告已关闭或批次无效。</string>
+    <string name="scan_batch_reopen_required_message">当前扫描批次未开启，是否先重新打开该批次？</string>
+    <string name="scan_batch_create_required_message">当前没有可用扫描批次，是否新建一个批次？</string>
     <string name="scan_data_loading">数据加载中，请稍后重扫</string>
     <string name="scan_not_your_parcel">不是您的包裹</string>
     <string name="scan_no_parcels_to_scan">您没有包裹需要扫描</string>
     <string name="scan_query_unscanned_failed">查询待分拣包裹失败</string>
     <string name="scan_create_batch_failed">创建扫描批次失败</string>
+    <string name="scan_reopen_batch_failed">重新打开扫描批次失败</string>
     <string name="scan_report_closed_cannot_submit">扫描报告已关闭，无法提交。</string>
     <string name="scan_no_scanned_to_submit">您没有需要提交的已扫包裹数据</string>
     <string name="scan_batch_invalid">扫描批次无效</string>

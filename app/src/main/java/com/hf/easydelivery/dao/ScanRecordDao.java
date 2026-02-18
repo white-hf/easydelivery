@@ -25,4 +25,10 @@ public interface ScanRecordDao {
      */
     @Query("UPDATE scan_records SET bUploaded = 1 WHERE trackingNo = :trackingNo")
     void markUploadedByTrackingNo(String trackingNo);
+
+    /**
+     * 删除指定批次和司机的扫描记录
+     */
+    @Query("DELETE FROM scan_records WHERE scanBatchId = :batchId AND driverId = :driverId")
+    void deleteByBatchId(long batchId, int driverId);
 }

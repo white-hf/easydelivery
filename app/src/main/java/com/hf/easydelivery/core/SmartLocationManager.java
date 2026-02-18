@@ -159,6 +159,9 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
     private long lastEmergencyBoostUptimeMs = 0L;
     private long singleFixBackoffMs = BurstConfig.getSingleFixBackoffBaseMs();
     private volatile boolean foregroundTrackingActive = false;
+    private volatile long foregroundServiceHeartbeatUptimeMs = 0L;
+    private volatile long lastForegroundLocationUptimeMs = 0L;
+    private static final long FG_TRACKING_HEARTBEAT_TIMEOUT_MS = 20_000L;
 
     public interface WeakSignalListener extends LocationUpdateListener {
         void onWeakSignal();
@@ -521,8 +524,21 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
             return;
         }
         if (foregroundTrackingActive) {
-            FileLog.getInstance().debug(TAG, "startLocationUpdates skipped: foreground tracking active");
-            return;
+            long nowUptime = SystemClock.elapsedRealtime();
+            boolean heartbeatStale = foregroundServiceHeartbeatUptimeMs > 0
+                    && nowUptime - foregroundServiceHeartbeatUptimeMs > FG_TRACKING_HEARTBEAT_TIMEOUT_MS;
+            boolean locationStale = lastForegroundLocationUptimeMs > 0
+                    && nowUptime - lastForegroundLocationUptimeMs > FG_TRACKING_HEARTBEAT_TIMEOUT_MS;
+            if (heartbeatStale && locationStale) {
+                FileLog.getInstance().warning(TAG,
+                        "foreground tracking stale -> self-heal to normal updates, hbAgeMs="
+                                + (nowUptime - foregroundServiceHeartbeatUptimeMs)
+                                + " locAgeMs=" + (nowUptime - lastForegroundLocationUptimeMs));
+                foregroundTrackingActive = false;
+            } else {
+                FileLog.getInstance().debug(TAG, "startLocationUpdates skipped: foreground tracking active");
+                return;
+            }
         }
         lastMovingTimeMs = System.currentTimeMillis();
         lastGoodFixTime = 0L;
@@ -1030,6 +1046,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
             return;
         }
         foregroundTrackingActive = true;
+        foregroundServiceHeartbeatUptimeMs = SystemClock.elapsedRealtime();
         stopLocationUpdates();
         try {
             Intent intent = new Intent(context, com.hf.easydelivery.service.LocationForegroundService.class);
@@ -1057,6 +1074,8 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
             return;
         }
         foregroundTrackingActive = false;
+        foregroundServiceHeartbeatUptimeMs = 0L;
+        lastForegroundLocationUptimeMs = 0L;
         try {
             Intent intent = new Intent(context, com.hf.easydelivery.service.LocationForegroundService.class);
             intent.setAction(com.hf.easydelivery.service.LocationForegroundService.ACTION_STOP);
@@ -1075,7 +1094,26 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
     }
 
     public void onForegroundLocation(@NonNull Location location) {
+        foregroundServiceHeartbeatUptimeMs = SystemClock.elapsedRealtime();
+        lastForegroundLocationUptimeMs = foregroundServiceHeartbeatUptimeMs;
         updateLocation(location);
+    }
+
+    public void onForegroundServiceStateChanged(boolean active) {
+        long nowUptime = SystemClock.elapsedRealtime();
+        if (active) {
+            foregroundTrackingActive = true;
+            foregroundServiceHeartbeatUptimeMs = nowUptime;
+            return;
+        }
+        boolean wasActive = foregroundTrackingActive;
+        foregroundTrackingActive = false;
+        foregroundServiceHeartbeatUptimeMs = 0L;
+        lastForegroundLocationUptimeMs = 0L;
+        if (wasActive && uiFollowActive) {
+            FileLog.getInstance().warning(TAG, "foreground service stopped -> resume normal fused updates");
+            startLocationUpdates();
+        }
     }
 
     public MovementState getCurrentState() {
@@ -1236,5 +1274,3 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
 
 
 }
-
-

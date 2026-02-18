@@ -13,16 +13,16 @@ public final class StrategyConfig {
 
     private static final long POWERSAVE_COOLDOWN_MIN_MS = 20_000L;
     private static final long POWERSAVE_COOLDOWN_MAX_MS = 60_000L;
-    private static final long POWERSAVE_MOVING_INTERVAL_MIN_MS = 8_000L;
-    private static final long POWERSAVE_MOVING_INTERVAL_MAX_MS = 20_000L;
-    private static final long POWERSAVE_STATIONARY_INTERVAL_MIN_MS = 12_000L;
-    private static final long POWERSAVE_STATIONARY_INTERVAL_MAX_MS = 30_000L;
-    private static final long POWERSAVE_MIN_INTERVAL_MIN_MS = 6_000L;
-    private static final long POWERSAVE_MIN_INTERVAL_MAX_MS = 20_000L;
-    private static final float POWERSAVE_MIN_DISTANCE_MOVING_MIN_M = 2.0f;
-    private static final float POWERSAVE_MIN_DISTANCE_MOVING_MAX_M = 8.0f;
-    private static final float POWERSAVE_MIN_DISTANCE_STATIONARY_MIN_M = 4.0f;
-    private static final float POWERSAVE_MIN_DISTANCE_STATIONARY_MAX_M = 12.0f;
+    private static final long POWERSAVE_MOVING_INTERVAL_MIN_MS = 5_000L;
+    private static final long POWERSAVE_MOVING_INTERVAL_MAX_MS = 12_000L;
+    private static final long POWERSAVE_STATIONARY_INTERVAL_MIN_MS = 5_000L;
+    private static final long POWERSAVE_STATIONARY_INTERVAL_MAX_MS = 15_000L;
+    private static final long POWERSAVE_MIN_INTERVAL_MIN_MS = 3_000L;
+    private static final long POWERSAVE_MIN_INTERVAL_MAX_MS = 10_000L;
+    private static final float POWERSAVE_MIN_DISTANCE_MOVING_MIN_M = 1.0f;
+    private static final float POWERSAVE_MIN_DISTANCE_MOVING_MAX_M = 4.0f;
+    private static final float POWERSAVE_MIN_DISTANCE_STATIONARY_MIN_M = 1.5f;
+    private static final float POWERSAVE_MIN_DISTANCE_STATIONARY_MAX_M = 6.0f;
     private static final long BURST_DURATION_MIN_MS = 8_000L;
     private static final long BURST_DURATION_MAX_MS = 15_000L;
 
@@ -55,11 +55,11 @@ public final class StrategyConfig {
     private static volatile long burstMaxDelayMs = 800L;
 
     private static volatile long powerSaveCooldownMs = 30_000L;
-    private static volatile long powerSaveIntervalMovingMs = 10_000L;
-    private static volatile long powerSaveIntervalStationaryMs = 15_000L;
-    private static volatile long powerSaveMinIntervalMs = 8_000L;
-    private static volatile float powerSaveMinDistanceMovingM = 3.0f;
-    private static volatile float powerSaveMinDistanceStationaryM = 6.0f;
+    private static volatile long powerSaveIntervalMovingMs = 5_000L;
+    private static volatile long powerSaveIntervalStationaryMs = 5_000L;
+    private static volatile long powerSaveMinIntervalMs = 3_000L;
+    private static volatile float powerSaveMinDistanceMovingM = 1.0f;
+    private static volatile float powerSaveMinDistanceStationaryM = 2.0f;
     private static volatile long fgPowerSaveIntervalMs = powerSaveIntervalMovingMs;
     private static volatile long fgPowerSaveMinIntervalMs = powerSaveMinIntervalMs;
     private static volatile float fgPowerSaveMinDistanceM = powerSaveMinDistanceMovingM;
@@ -161,7 +161,7 @@ public final class StrategyConfig {
     }
 
     public static void setPowerSaveIntervalMovingMs(long value) {
-        powerSaveIntervalMovingMs = Math.max(5_000L, value);
+        powerSaveIntervalMovingMs = Math.max(3_000L, value);
     }
 
     public static long getPowerSaveIntervalStationaryMs() {
@@ -169,7 +169,7 @@ public final class StrategyConfig {
     }
 
     public static void setPowerSaveIntervalStationaryMs(long value) {
-        powerSaveIntervalStationaryMs = Math.max(8_000L, value);
+        powerSaveIntervalStationaryMs = Math.max(3_000L, value);
     }
 
     public static long getPowerSaveMinIntervalMs() {
@@ -201,7 +201,7 @@ public final class StrategyConfig {
     }
 
     public static void setFgPowerSaveIntervalMs(long value) {
-        fgPowerSaveIntervalMs = Math.max(5_000L, value);
+        fgPowerSaveIntervalMs = Math.max(3_000L, value);
     }
 
     public static long getFgPowerSaveMinIntervalMs() {

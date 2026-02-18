@@ -6,6 +6,8 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Build;
 import android.os.LocaleList;
+import androidx.preference.PreferenceManager;
+import com.hf.courierservice.apihelper.FileLog;
 
 import java.util.Locale;
 
@@ -33,6 +35,11 @@ public class MyApplication extends Application {
         setLocale(ctx);
 
         boolean debuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        String defaultLogLevel = "INFO";
+        String configuredLogLevel = PreferenceManager.getDefaultSharedPreferences(ctx)
+                .getString("log_level", defaultLogLevel);
+        FileLog.getInstance().setMinLogLevel(configuredLogLevel);
+
         TelemetryConfig telemetryConfig = debuggable
                 ? TelemetryConfig.debugDefaults()
                 : TelemetryConfig.disabled();

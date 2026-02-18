@@ -81,6 +81,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
 
     // --- 新增：用于提交状态的枚举 ---
     public enum SubmissionState { IDLE, SUBMITTING, COMPLETE, FAILED }
+    public enum AutoSubmitUiState { IDLE, SYNCING, OK, FAILED }
 
     // --- 数据仓库与助手类 ---
     private final ResourceMgr resourceMgr = ResourceMgr.getInstance();
@@ -111,8 +112,11 @@ public class ScanViewModel extends ViewModel implements Subscriber {
     // --- 新增：用于驱动提交流程 UI 的 LiveData ---
     private final MutableLiveData<SubmissionState> submissionState = new MutableLiveData<>(SubmissionState.IDLE);
     private final MutableLiveData<Pair<Integer, Integer>> submissionProgress = new MutableLiveData<>(); // <已完成, 总数>
+    private final MutableLiveData<AutoSubmitUiState> autoSubmitUiState = new MutableLiveData<>(AutoSubmitUiState.IDLE);
 
     private final MutableLiveData<Event<Boolean>> showCameraPromptEvent = new MutableLiveData<>();
+    private long lastAutoSubmitAttemptMs = 0L;
+    private volatile boolean submittingInternal = false;
 
     // --- 首次进入标记（供 Fragment 控制首次 UI 行为，如：开相机提示） ---
     private boolean firstEnter = true;
@@ -145,6 +149,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
     public LiveData<Event<Pair<String, String>>> getDuplicateScanEvent() { return duplicateScanEvent; }
     public LiveData<SubmissionState> getSubmissionState() { return submissionState; }
     public LiveData<Pair<Integer, Integer>> getSubmissionProgress() { return submissionProgress; }
+    public LiveData<AutoSubmitUiState> getAutoSubmitUiState() { return autoSubmitUiState; }
     // endregion
 
     // region ★ 业务逻辑处理 ★
@@ -358,14 +363,27 @@ public class ScanViewModel extends ViewModel implements Subscriber {
         // 存入数据库
         saveScanRecord(waybillNo, packageNo, scanBatchIdLive.getValue());
         scanSuccessEvent.postValue(new Event<>(Boolean.TRUE));
+        tryAutoSubmitOfflineScans();
     }
 
     /**
      * 新增：提交所有未上传的扫描记录
      */
     public void submitOfflineScans() {
-        if (scanBatchIdLive.getValue() == null || scanBatchIdLive.getValue() < 1 || scanBatchStatusLive.getValue() != 0) {
-            toastMessage.postValue(new Event<>(getString(R.string.scan_report_closed_cannot_submit)));
+        submitOfflineScansInternal(true, true, true, true);
+    }
+
+    private void submitOfflineScansInternal(boolean showClosedToast,
+                                            boolean showNoDataToast,
+                                            boolean notifyResultToast,
+                                            boolean publishUiState) {
+        if (submittingInternal) {
+            return;
+        }
+        if (!hasOpenBatch()) {
+            if (showClosedToast) {
+                toastMessage.postValue(new Event<>(getString(R.string.scan_report_closed_cannot_submit)));
+            }
             return;
         }
 
@@ -376,11 +394,76 @@ public class ScanViewModel extends ViewModel implements Subscriber {
             List<ScanRecord> list = resourceMgr.getmMydb().getScanRecordDao().loadByDate(strToday, false, driverId);
 
             if (list.isEmpty()) {
-                toastMessage.postValue(new Event<>(getString(R.string.scan_no_scanned_to_submit)));
+                if (showNoDataToast) {
+                    toastMessage.postValue(new Event<>(getString(R.string.scan_no_scanned_to_submit)));
+                }
+                if (!publishUiState) {
+                    autoSubmitUiState.postValue(AutoSubmitUiState.IDLE);
+                }
                 return;
             }
             // 回到主线程（或任何有 Looper 的线程）启动提交
-            new Handler(resourceMgr.getDbHandler().getLooper()).post(() -> batchSubmit(list));
+            new Handler(resourceMgr.getDbHandler().getLooper())
+                    .post(() -> batchSubmit(list, notifyResultToast, publishUiState));
+        });
+    }
+
+    public void tryAutoSubmitOfflineScans() {
+        if (submittingInternal) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastAutoSubmitAttemptMs < 3_000L) {
+            return;
+        }
+        lastAutoSubmitAttemptMs = now;
+        autoSubmitUiState.postValue(AutoSubmitUiState.SYNCING);
+
+        fetchScanBatchStatus(new BatchStatusCallback() {
+            @Override
+            public void onResult(@NonNull BatchStatus status) {
+                if (status == BatchStatus.OPEN) {
+                    submitOfflineScansInternal(false, false, false, false);
+                    return;
+                }
+                if (status == BatchStatus.CLOSED) {
+                    reopenScanBatch(new OpenBatchCallback() {
+                        @Override
+                        public void onResult(boolean reopened) {
+                            if (reopened) {
+                                submitOfflineScansInternal(false, false, false, false);
+                            }
+                        }
+
+                        @Override
+                        public void onError(Exception e) {
+                            FileLog.getInstance().warning(TAG, "auto submit reopen failed: " + e.getMessage());
+                            autoSubmitUiState.postValue(AutoSubmitUiState.FAILED);
+                        }
+                    });
+                    return;
+                }
+                createScanBatchForSubmit(new OpenBatchCallback() {
+                    @Override
+                    public void onResult(boolean created) {
+                        if (created) {
+                            submitOfflineScansInternal(false, false, false, false);
+                        }
+                    }
+
+                    @Override
+                    public void onError(Exception e) {
+                        FileLog.getInstance().warning(TAG, "auto submit create batch failed: " + e.getMessage());
+                        autoSubmitUiState.postValue(AutoSubmitUiState.FAILED);
+                    }
+                });
+            }
+
+            @Override
+            public void onError(Exception e) {
+                FileLog.getInstance().warning(TAG, "auto submit fetch status failed: " + e.getMessage());
+                autoSubmitUiState.postValue(AutoSubmitUiState.FAILED);
+            }
         });
     }
 
@@ -403,6 +486,7 @@ public class ScanViewModel extends ViewModel implements Subscriber {
                             pushBatchFields();
                             toastMessage.postValue(new Event<>(getString(R.string.scan_report_generated)));
                             submitScanBatchReview(batchId);
+                            clearLocalScanRecords(batchId);
                         } else if (result instanceof Result.Error) {
                             toastMessage.postValue(new Event<>(getString(R.string.scan_report_generate_failed)));
                         }
@@ -464,14 +548,19 @@ public class ScanViewModel extends ViewModel implements Subscriber {
     /**
      * 新增：内部方法，执行批量提交
      */
-    private void batchSubmit(List<ScanRecord> list) {
-        submissionState.postValue(SubmissionState.SUBMITTING);
-        submissionProgress.postValue(new Pair<>(0, list.size()));
+    private void batchSubmit(List<ScanRecord> list, boolean notifyResultToast, boolean publishUiState) {
+        submittingInternal = true;
+        if (publishUiState) {
+            submissionState.postValue(SubmissionState.SUBMITTING);
+            submissionProgress.postValue(new Pair<>(0, list.size()));
+        }
 
         submitHelper.submit(list, new BatchSubmitCallback() {
             @Override
             public void onProgress(int done, int total, int success, int fail) {
-                submissionProgress.postValue(new Pair<>(done, total));
+                if (publishUiState) {
+                    submissionProgress.postValue(new Pair<>(done, total));
+                }
             }
 
             @Override
@@ -488,15 +577,32 @@ public class ScanViewModel extends ViewModel implements Subscriber {
 
             @Override
             public void onComplete(int successCount, int failCount) {
-                toastMessage.postValue(new Event<>(
-                        getString(R.string.scan_submit_complete, successCount, failCount)));
-                submissionState.postValue(SubmissionState.COMPLETE);
+                submittingInternal = false;
+                if (!publishUiState) {
+                    autoSubmitUiState.postValue(failCount > 0 ? AutoSubmitUiState.FAILED : AutoSubmitUiState.OK);
+                }
+                if (notifyResultToast) {
+                    toastMessage.postValue(new Event<>(
+                            getString(R.string.scan_submit_complete, successCount, failCount)));
+                }
+                if (publishUiState) {
+                    submissionState.postValue(SubmissionState.COMPLETE);
+                }
             }
 
             @Override
             public void onFail(Exception e) {
-                toastMessage.postValue(new Event<>(getString(R.string.scan_login_expired)));
-                submissionState.postValue(SubmissionState.FAILED);
+                submittingInternal = false;
+                if (!publishUiState) {
+                    FileLog.getInstance().warning(TAG, "auto submit failed: " + e.getMessage());
+                    autoSubmitUiState.postValue(AutoSubmitUiState.FAILED);
+                }
+                if (notifyResultToast) {
+                    toastMessage.postValue(new Event<>(getString(R.string.scan_login_expired)));
+                }
+                if (publishUiState) {
+                    submissionState.postValue(SubmissionState.FAILED);
+                }
             }
         });
     }
@@ -663,7 +769,12 @@ public class ScanViewModel extends ViewModel implements Subscriber {
                             pushBatchFields();
                             resourceMgr.getMainHandler().post(() -> callback.onResult(BatchStatus.CLOSED));
                         } else {
-                            resourceMgr.getMainHandler().post(() -> callback.onResult(BatchStatus.NONE));
+                            // Fallback: backend list may briefly lag. Keep local OPEN to avoid false "closed/none" prompt.
+                            if (hasOpenBatch()) {
+                                resourceMgr.getMainHandler().post(() -> callback.onResult(BatchStatus.OPEN));
+                            } else {
+                                resourceMgr.getMainHandler().post(() -> callback.onResult(BatchStatus.NONE));
+                            }
                         }
                     }
 
@@ -719,6 +830,32 @@ public class ScanViewModel extends ViewModel implements Subscriber {
             return true;
         }
         return false;
+    }
+
+    public boolean hasValidBatchId() {
+        Long batchId = scanBatchIdLive.getValue();
+        return batchId != null && batchId > 0;
+    }
+
+    public boolean hasOpenBatch() {
+        Integer status = scanBatchStatusLive.getValue();
+        return hasValidBatchId() && status != null && status == 0;
+    }
+
+    private void clearLocalScanRecords(long batchId) {
+        Integer driverId = resourceMgr.getLoginInfo() != null ? resourceMgr.getLoginInfo().loginId : null;
+        if (driverId == null || driverId <= 0) {
+            return;
+        }
+        resourceMgr.getDbHandler().post(() -> {
+            resourceMgr.getmMydb().getScanRecordDao().deleteByBatchId(batchId, driverId);
+            FileLog.i(TAG, "clearLocalScanRecords: batchId=" + batchId);
+        });
+
+        scannedListLive.postValue(new ArrayList<>());
+        scannedWaybillsLive.postValue(new HashSet<>());
+        scannedCountLive.postValue(0);
+        recomputeFiltered();
     }
 
     @Override

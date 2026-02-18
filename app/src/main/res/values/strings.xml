@@ -40,6 +40,8 @@
     <string name="driver_id">Driver ID</string>
     <string name="transfer_package_id">Assign order ID</string>
     <string name="operation_completion">Operation completed</string>
+    <string name="log_level_title">Log level</string>
+    <string name="log_level_summary">Restart app after changing (DEBUG/INFO/WARNING/ERROR/NONE)</string>
 
     <!-- Sync Preferences -->
     <string name="sync_title">Auto save</string>
@@ -135,11 +137,14 @@
     <string name="scan_report_closed_title">Scan report closed</string>
     <string name="scan_camera_permission_required">Camera permission is required</string>
     <string name="scan_report_closed_or_invalid">Scan report is closed or batch is invalid.</string>
+    <string name="scan_batch_reopen_required_message">Current scan batch is not open. Reopen this batch to continue?</string>
+    <string name="scan_batch_create_required_message">No available scan batch. Create a new batch to continue?</string>
     <string name="scan_data_loading">Data is loading. Please rescan later.</string>
     <string name="scan_not_your_parcel">This is not your parcel.</string>
     <string name="scan_no_parcels_to_scan">You have no parcels to scan</string>
     <string name="scan_query_unscanned_failed">Failed to query unscanned parcels</string>
     <string name="scan_create_batch_failed">Failed to create scan batch</string>
+    <string name="scan_reopen_batch_failed">Failed to reopen scan batch</string>
     <string name="scan_report_closed_cannot_submit">Scan report is closed and cannot be submitted.</string>
     <string name="scan_no_scanned_to_submit">No scanned parcels to submit.</string>
     <string name="scan_batch_invalid">Scan batch is invalid</string>
@@ -147,6 +152,9 @@
     <string name="scan_report_generate_failed">Failed to generate scan report</string>
     <string name="scan_submit_complete">Submission complete. Success: %1$d, Failed: %2$d</string>
     <string name="scan_login_expired">Login expired. Please log in again.</string>
+    <string name="scan_auto_submit_syncing">Auto submit syncing...</string>
+    <string name="scan_auto_submit_ok">Auto submit synced</string>
+    <string name="scan_auto_submit_failed">Auto submit failed, will retry</string>
 
     <string name="map_menu_preview">Parcel preview</string>
     <string name="map_menu_search">Parcel search</string>

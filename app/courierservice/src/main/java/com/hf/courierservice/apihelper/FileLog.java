@@ -38,6 +38,7 @@ public class FileLog {
     public final static String LOG_DISPLAY_NAME = "easydelivery.log"; // filename shown in Downloads
     private static final String PREFS_NAME = "filelog_prefs";
     private static final String PREF_KEY_URI = "downloads_log_uri";
+    private static final String PREF_KEY_MIN_LEVEL = "min_log_level";
     private static final long MAX_LOG_BYTES = 10 * 1024 * 1024L; // 10 MB
 
     private static final String DEFAULT_TAG = "FileLog";
@@ -57,6 +58,13 @@ public class FileLog {
 
     // 是否同步输出到终端（Logcat），默认开启
     private boolean logToConsole = true;
+    private volatile int minLogLevel = LEVEL_DEBUG;
+
+    public static final int LEVEL_DEBUG = 10;
+    public static final int LEVEL_INFO = 20;
+    public static final int LEVEL_WARNING = 30;
+    public static final int LEVEL_ERROR = 40;
+    public static final int LEVEL_NONE = 100;
 
     /**
      * 设置是否同步输出到 Logcat。
@@ -89,6 +97,7 @@ public class FileLog {
      */
     public boolean init(Context context) {
         appCtx = context.getApplicationContext();
+        restoreMinLogLevel();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 // Try MediaStore Downloads first
@@ -122,6 +131,87 @@ public class FileLog {
             Log.e("FileLog", "Failed to init log file", e);
             return false;
         }
+    }
+
+    private void restoreMinLogLevel() {
+        if (appCtx == null) {
+            return;
+        }
+        SharedPreferences sp = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String configured = sp.getString(PREF_KEY_MIN_LEVEL, null);
+        if (configured == null || configured.trim().isEmpty()) {
+            minLogLevel = LEVEL_INFO;
+            return;
+        }
+        minLogLevel = parseLevel(configured, LEVEL_INFO);
+    }
+
+    public void setMinLogLevel(int level) {
+        minLogLevel = normalizeLevel(level);
+        persistMinLogLevel();
+    }
+
+    public void setMinLogLevel(String levelName) {
+        minLogLevel = parseLevel(levelName, minLogLevel);
+        persistMinLogLevel();
+    }
+
+    public int getMinLogLevel() {
+        return minLogLevel;
+    }
+
+    private int normalizeLevel(int level) {
+        if (level <= LEVEL_DEBUG) return LEVEL_DEBUG;
+        if (level <= LEVEL_INFO) return LEVEL_INFO;
+        if (level <= LEVEL_WARNING) return LEVEL_WARNING;
+        if (level <= LEVEL_ERROR) return LEVEL_ERROR;
+        return LEVEL_NONE;
+    }
+
+    private int parseLevel(String levelName, int fallback) {
+        if (levelName == null) {
+            return fallback;
+        }
+        String normalized = levelName.trim().toUpperCase();
+        switch (normalized) {
+            case "DEBUG":
+                return LEVEL_DEBUG;
+            case "INFO":
+                return LEVEL_INFO;
+            case "WARN":
+            case "WARNING":
+                return LEVEL_WARNING;
+            case "ERROR":
+                return LEVEL_ERROR;
+            case "NONE":
+            case "OFF":
+                return LEVEL_NONE;
+            default:
+                return fallback;
+        }
+    }
+
+    private void persistMinLogLevel() {
+        if (appCtx == null) {
+            return;
+        }
+        try {
+            SharedPreferences sp = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            sp.edit().putString(PREF_KEY_MIN_LEVEL, levelToName(minLogLevel)).apply();
+        } catch (Exception ignore) {
+        }
+    }
+
+    private String levelToName(int level) {
+        if (level <= LEVEL_DEBUG) return "DEBUG";
+        if (level <= LEVEL_INFO) return "INFO";
+        if (level <= LEVEL_WARNING) return "WARNING";
+        if (level <= LEVEL_ERROR) return "ERROR";
+        return "NONE";
+    }
+
+    private boolean shouldLog(int level) {
+        return level >= minLogLevel;
     }
 
     private Uri restoreOrCreateDownloadsUri(Context ctx) {
@@ -258,6 +348,7 @@ public class FileLog {
      * @param msg 日志内容
      */
     public void info(String tag, String msg) {
+        if (!shouldLog(LEVEL_INFO)) return;
         writeLogToFile("INFO", tag, msg);
         if (logToConsole)
             Log.i(tag, msg);
@@ -301,6 +392,7 @@ public class FileLog {
      * @param msg 日志内容
      */
     public void debug(String tag, String msg) {
+        if (!shouldLog(LEVEL_DEBUG)) return;
         writeLogToFile("DEBUG", tag, msg);
         if (logToConsole)
             Log.d(tag, msg);
@@ -344,6 +436,7 @@ public class FileLog {
      * @param msg 日志内容
      */
     public void warning(String tag, String msg) {
+        if (!shouldLog(LEVEL_WARNING)) return;
         writeLogToFile("WARNING", tag, msg);
         if (logToConsole)
             Log.w(tag, msg);
@@ -387,6 +480,7 @@ public class FileLog {
      * @param msg 日志内容
      */
     public void error(String tag, String msg) {
+        if (!shouldLog(LEVEL_ERROR)) return;
         writeLogToFile("ERROR", tag, msg);
         if (logToConsole)
             Log.e(tag, msg);

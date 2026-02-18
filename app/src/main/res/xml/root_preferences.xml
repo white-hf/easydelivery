@@ -24,6 +24,15 @@
             app:title="@string/driver_id"
             app:useSimpleSummaryProvider="true"/>
 
+        <ListPreference
+            app:key="log_level"
+            app:title="@string/log_level_title"
+            app:summary="@string/log_level_summary"
+            app:entries="@array/log_level_entries"
+            app:entryValues="@array/log_level_values"
+            app:defaultValue="INFO"
+            app:useSimpleSummaryProvider="true" />
+
 
     </PreferenceCategory>
 

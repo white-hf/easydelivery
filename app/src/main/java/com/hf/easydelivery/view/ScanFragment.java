@@ -9,6 +9,7 @@ import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Pair;
@@ -83,7 +84,7 @@ public class ScanFragment extends Fragment implements Subscriber {
 
     // --- 视图和适配器 ---
     private PreviewView previewView;
-    private TextView tvProgress, tvPackageNumber, tvSubmitting;
+    private TextView tvProgress, tvPackageNumber, tvSubmitting, tvAutoSubmitState;
     private RecyclerView rvRecentScans;
     private RecentScansAdapter adapter;
     private final List<ScanItem> recentScans = new ArrayList<>(); // 始终作为适配器的数据源
@@ -106,10 +107,17 @@ public class ScanFragment extends Fragment implements Subscriber {
     // --- 其他 ---
     private Vibrator vibrator;
     private TokenRefresher tokenRefresher;
-private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
+    private TokenRefresher autoSubmitRefresher;
+    private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
+    private static final long AUTO_SUBMIT_INTERVAL = 30 * 1000L;
     // 仅在第一次进入页面拉取数据 / 仅在首次且有未扫时提示是否开启相机
     private boolean hasLoadedOnce = false;
     private boolean firstPrompt = true;
+    private boolean manualSubmitInProgress = false;
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private final Runnable hideAutoSubmitHintRunnable = () -> {
+        if (tvAutoSubmitState != null) tvAutoSubmitState.setVisibility(View.GONE);
+    };
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -143,6 +151,9 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         // Token 刷新器，现在调用 ViewModel 的方法
         tokenRefresher = new TokenRefresher(REFRESH_INTERVAL);
         tokenRefresher.start(() -> scanViewModel.refreshBatchId());
+        // 自动提交离线扫描：扫描过程中周期执行，不依赖手工菜单点击
+        autoSubmitRefresher = new TokenRefresher(AUTO_SUBMIT_INTERVAL);
+        autoSubmitRefresher.start(() -> scanViewModel.tryAutoSubmitOfflineScans());
 
         return view;
     }
@@ -158,6 +169,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         flProgressOverlay = view.findViewById(R.id.flProgressOverlay);
         pbSubmitting = view.findViewById(R.id.pbSubmitting);
         tvSubmitting = view.findViewById(R.id.tvSubmitting);
+        tvAutoSubmitState = view.findViewById(R.id.tvAutoSubmitState);
 
         renderScanResult(null);
 
@@ -246,7 +258,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                         Toast.makeText(getContext(), R.string.scan_query_unscanned_toast, Toast.LENGTH_SHORT).show();
                         return true;
                     } else if (id == R.id.action_submit_offline) {
-                        submitOfflineWithPrecheck();
+                        submitOfflineWithPrecheck(true);
                         return true;
                     } else if (id == R.id.action_generate_report) {
                         confirmGenerateReport();
@@ -280,7 +292,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                     Toast.makeText(getContext(), R.string.scan_query_unscanned_toast, Toast.LENGTH_SHORT).show();
                     return true;
                 } else if (id == R.id.action_submit_offline) {
-                    submitOfflineWithPrecheck();
+                    submitOfflineWithPrecheck(true);
                     return true;
                 } else if (id == R.id.action_generate_report) {
                     confirmGenerateReport();
@@ -362,12 +374,21 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         scanViewModel.getSubmissionState().observe(getViewLifecycleOwner(), state -> {
             switch (state) {
                 case SUBMITTING:
-                    flProgressOverlay.setVisibility(View.VISIBLE);
+                    if (manualSubmitInProgress) {
+                        flProgressOverlay.bringToFront();
+                        ViewCompat.setElevation(flProgressOverlay, 32f);
+                        flProgressOverlay.setClickable(true);
+                        flProgressOverlay.setFocusable(true);
+                        flProgressOverlay.setVisibility(View.VISIBLE);
+                    } else {
+                        flProgressOverlay.setVisibility(View.GONE);
+                    }
                     break;
                 case IDLE:
                 case COMPLETE:
                 case FAILED:
                     flProgressOverlay.setVisibility(View.GONE);
+                    manualSubmitInProgress = false;
                     break;
             }
         });
@@ -380,6 +401,37 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
             pbSubmitting.setProgress(done);
             tvSubmitting.setText(getString(R.string.scan_submitting_format, done, total));
         });
+
+        scanViewModel.getAutoSubmitUiState().observe(getViewLifecycleOwner(), this::renderAutoSubmitHint);
+    }
+
+    private void renderAutoSubmitHint(ScanViewModel.AutoSubmitUiState state) {
+        if (tvAutoSubmitState == null || state == null) return;
+        uiHandler.removeCallbacks(hideAutoSubmitHintRunnable);
+        switch (state) {
+            case IDLE:
+                tvAutoSubmitState.setVisibility(View.GONE);
+                break;
+            case SYNCING:
+                tvAutoSubmitState.setText(R.string.scan_auto_submit_syncing);
+                tvAutoSubmitState.setBackgroundColor(0xCC2B2B2B);
+                tvAutoSubmitState.setTextColor(0xFFDDDDDD);
+                tvAutoSubmitState.setVisibility(View.VISIBLE);
+                break;
+            case OK:
+                tvAutoSubmitState.setText(R.string.scan_auto_submit_ok);
+                tvAutoSubmitState.setBackgroundColor(0xCC1B5E20);
+                tvAutoSubmitState.setTextColor(0xFFE8F5E9);
+                tvAutoSubmitState.setVisibility(View.VISIBLE);
+                uiHandler.postDelayed(hideAutoSubmitHintRunnable, 1500L);
+                break;
+            case FAILED:
+                tvAutoSubmitState.setText(R.string.scan_auto_submit_failed);
+                tvAutoSubmitState.setBackgroundColor(0xCCB71C1C);
+                tvAutoSubmitState.setTextColor(0xFFFFEBEE);
+                tvAutoSubmitState.setVisibility(View.VISIBLE);
+                break;
+        }
     }
 
     /**
@@ -538,19 +590,19 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                 if (status == ScanViewModel.BatchStatus.CLOSED) {
                     new AlertDialog.Builder(requireContext())
                             .setTitle(R.string.scan_report_closed_title)
-                            .setMessage(R.string.scan_report_closed_or_invalid)
+                            .setMessage(R.string.scan_batch_reopen_required_message)
                             .setPositiveButton(R.string.action_yes, (dialog, which) ->
-                                    scanViewModel.createScanBatchForSubmit(new ScanViewModel.OpenBatchCallback() {
+                                    scanViewModel.reopenScanBatch(new ScanViewModel.OpenBatchCallback() {
                                         @Override
-                                        public void onResult(boolean created) {
-                                            if (created) {
+                                        public void onResult(boolean reopened) {
+                                            if (reopened) {
                                                 showGenerateReportConfirmDialog();
                                             }
                                         }
 
                                         @Override
                                         public void onError(Exception e) {
-                                            Toast.makeText(getContext(), R.string.scan_create_batch_failed, Toast.LENGTH_SHORT).show();
+                                            Toast.makeText(getContext(), R.string.scan_reopen_batch_failed, Toast.LENGTH_SHORT).show();
                                         }
                                     })
                             )
@@ -560,7 +612,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                 }
                 new AlertDialog.Builder(requireContext())
                         .setTitle(R.string.scan_report_closed_title)
-                        .setMessage(R.string.scan_report_closed_or_invalid)
+                        .setMessage(R.string.scan_batch_create_required_message)
                         .setPositiveButton(R.string.action_yes, (dialog, which) ->
                                 scanViewModel.createScanBatchForSubmit(new ScanViewModel.OpenBatchCallback() {
                                     @Override
@@ -606,45 +658,48 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
                 .show();
     }
 
-    private void submitOfflineWithPrecheck() {
+    private void submitOfflineWithPrecheck(boolean manualSubmit) {
         scanViewModel.fetchScanBatchStatus(new ScanViewModel.BatchStatusCallback() {
             @Override
             public void onResult(@NonNull ScanViewModel.BatchStatus status) {
                 if (status == ScanViewModel.BatchStatus.OPEN) {
+                    manualSubmitInProgress = manualSubmit;
                     scanViewModel.submitOfflineScans();
                     return;
                 }
                 if (status == ScanViewModel.BatchStatus.CLOSED) {
                     new AlertDialog.Builder(requireContext())
                             .setTitle(R.string.scan_report_closed_title)
-                            .setMessage(R.string.scan_report_closed_or_invalid)
+                            .setMessage(R.string.scan_batch_reopen_required_message)
                             .setPositiveButton(R.string.action_yes, (dialog, which) ->
-                                    scanViewModel.createScanBatchForSubmit(new ScanViewModel.OpenBatchCallback() {
+                                    scanViewModel.reopenScanBatch(new ScanViewModel.OpenBatchCallback() {
                                         @Override
-                                        public void onResult(boolean created) {
-                                            if (created) {
+                                        public void onResult(boolean reopened) {
+                                            if (reopened) {
+                                                manualSubmitInProgress = manualSubmit;
                                                 scanViewModel.submitOfflineScans();
                                             }
                                         }
 
                                         @Override
                                         public void onError(Exception e) {
-                                            Toast.makeText(getContext(), R.string.scan_create_batch_failed, Toast.LENGTH_SHORT).show();
+                                            Toast.makeText(getContext(), R.string.scan_reopen_batch_failed, Toast.LENGTH_SHORT).show();
                                         }
-                                    })
-                            )
-                            .setNegativeButton(R.string.action_cancel, null)
-                            .show();
+                                })
+                    )
+                    .setNegativeButton(R.string.action_cancel, null)
+                    .show();
                     return;
                 }
                 new AlertDialog.Builder(requireContext())
                         .setTitle(R.string.scan_report_closed_title)
-                        .setMessage(R.string.scan_report_closed_or_invalid)
+                        .setMessage(R.string.scan_batch_create_required_message)
                         .setPositiveButton(R.string.action_yes, (dialog, which) ->
                                 scanViewModel.createScanBatchForSubmit(new ScanViewModel.OpenBatchCallback() {
                                     @Override
                                     public void onResult(boolean created) {
                                         if (created) {
+                                            manualSubmitInProgress = manualSubmit;
                                             scanViewModel.submitOfflineScans();
                                         }
                                     }
@@ -732,6 +787,7 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
         if (cameraWasBound) {
             bindCameraNow();
         }
+        scanViewModel.tryAutoSubmitOfflineScans();
     }
 
     @Override
@@ -747,7 +803,9 @@ private static final long REFRESH_INTERVAL = 5 * 60 * 1000L;
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        uiHandler.removeCallbacks(hideAutoSubmitHintRunnable);
         if (tokenRefresher != null) tokenRefresher.stop();
+        if (autoSubmitRefresher != null) autoSubmitRefresher.stop();
         if (cameraExecutor != null && !cameraExecutor.isShutdown()) cameraExecutor.shutdown();
         if (barcodeScanner != null) barcodeScanner.close();
 
