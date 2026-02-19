@@ -302,6 +302,11 @@ public class MapInnerFragment extends Fragment
 
     private static final long FG_MIN_ON_MS = 120_000L;
     private static final long FG_STOP_GRACE_MS = 120_000L;
+    // UI tick pacing: keep driving/nav smooth, reduce idle CPU wakeups.
+    private static final long UI_TICK_WALKING_MS = 400L;
+    private static final long UI_TICK_STATIONARY_MS = 650L;
+    private static final long UI_TICK_INTERACTING_MS = 800L;
+    private static final long UI_TICK_NO_LOCATION_MS = 1000L;
 
     private static final float FAR_DISTANCE_SAMPLE_THRESHOLD_M = 1500f;
     private static final long FAR_SAMPLE_MIN_INTERVAL_MS = 2500L;
@@ -1524,19 +1529,39 @@ public class MapInnerFragment extends Fragment
         }
 
         pendingCameraContext = cameraContext;
+        updateUiTickInterval();
         cameraUpdateHandler.removeCallbacks(cameraUpdateRunnable);
         cameraUpdateHandler.postDelayed(cameraUpdateRunnable, uiTickIntervalMs);
     }
 
     private void updateUiTickInterval() {
-        if (cameraController != null) {
-            uiTickIntervalMs = Math.max(200L, cameraController.getUiTickMs());
-        } else {
-            uiTickIntervalMs = 250L;
+        long baseTick = cameraController != null ? Math.max(200L, cameraController.getUiTickMs()) : 250L;
+
+        if (navigationModeEnabled) {
+            uiTickIntervalMs = baseTick;
+            return;
         }
+
+        boolean driving = lastMovementState == MovementState.SLOW_DRIVING
+                || lastMovementState == MovementState.NORMAL_DRIVING;
+        if (driving) {
+            uiTickIntervalMs = baseTick;
+            return;
+        }
+
+        boolean noLocation = (mLastEffectiveUiLocation == null && mLastLocation == null);
+        long target = noLocation ? Math.max(baseTick, UI_TICK_NO_LOCATION_MS)
+                : (lastMovementState == MovementState.WALKING ? Math.max(baseTick, UI_TICK_WALKING_MS)
+                        : Math.max(baseTick, UI_TICK_STATIONARY_MS));
+
+        if (isUserInteracting || autoFollowPausedByGesture) {
+            target = Math.max(target, UI_TICK_INTERACTING_MS);
+        }
+        uiTickIntervalMs = target;
     }
 
     private void scheduleUiTick() {
+        updateUiTickInterval();
         cameraUpdateHandler.removeCallbacks(uiTickRunnable);
         cameraUpdateHandler.postDelayed(uiTickRunnable, uiTickIntervalMs);
     }
@@ -2466,4 +2491,3 @@ public class MapInnerFragment extends Fragment
         }
     }
 }
-
