@@ -15,6 +15,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
@@ -25,18 +26,25 @@ import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.Priority;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.R;
-import com.hf.easydelivery.core.source.ForegroundServiceLocationSource;
-import com.hf.easydelivery.core.source.LocationSource;
-import com.hf.easydelivery.core.strategy.StrategyConfig;
 import com.hf.easydelivery.core.SmartLocationManager;
 import com.hf.easydelivery.core.facade.DefaultLocationFacadeProvider;
 import com.hf.easydelivery.core.facade.ForegroundLocationConsumer;
 import com.hf.easydelivery.core.facade.LocationFacadeProvider;
+import com.hf.easydelivery.core.source.ForegroundServiceLocationSource;
+import com.hf.easydelivery.core.source.LocationSource;
+import com.hf.easydelivery.core.strategy.StrategyConfig;
 import com.hf.easydelivery.map.config.ProfileManager;
 
 public class LocationForegroundService extends Service {
     public static final String ACTION_START = "com.hf.easydelivery.action.FG_LOC_START";
     public static final String ACTION_STOP = "com.hf.easydelivery.action.FG_LOC_STOP";
+    public static final String EXTRA_POWER_SAVE = "extra_power_save";
+    public static final String EXTRA_INTERVAL_MS = "extra_interval_ms";
+    public static final String EXTRA_MIN_INTERVAL_MS = "extra_min_interval_ms";
+    public static final String EXTRA_MIN_DISTANCE_M = "extra_min_distance_m";
+    public static final String EXTRA_PRIORITY = "extra_priority";
+    public static final String EXTRA_MAX_DELAY_MS = "extra_max_delay_ms";
+
     private static final String CHANNEL_ID = "fg_location_channel";
     private static final int NOTIFICATION_ID = 4102;
     private static final String TAG = "LocationFgService";
@@ -49,6 +57,12 @@ public class LocationForegroundService extends Service {
     private long lastElapsedMs = -1L;
     private boolean destroyed = false;
     private int retryAttempts = 0;
+
+    @NonNull
+    private TrackingConfig requestedConfig = defaultConfig(false);
+    @Nullable
+    private TrackingConfig activeConfig;
+
     private final Handler retryHandler = new Handler(Looper.getMainLooper());
     private final Runnable retryRunnable = new Runnable() {
         @Override
@@ -57,13 +71,58 @@ public class LocationForegroundService extends Service {
                 return;
             }
             FileLog.getInstance().warning(TAG, "retry startForegroundTracking after failure, attempt=" + retryAttempts);
-            startForegroundTracking();
+            startForegroundTracking(requestedConfig, false);
         }
     };
     private final LocationFacadeProvider locationFacadeProvider =
             DefaultLocationFacadeProvider.getInstance();
     @Nullable
     private SmartLocationManager smartLocationManager;
+
+    private static final class TrackingConfig {
+        final boolean powerSave;
+        final long intervalMs;
+        final long minIntervalMs;
+        final float minDistanceM;
+        final int priority;
+        final long maxDelayMs;
+
+        TrackingConfig(boolean powerSave,
+                       long intervalMs,
+                       long minIntervalMs,
+                       float minDistanceM,
+                       int priority,
+                       long maxDelayMs) {
+            this.powerSave = powerSave;
+            this.intervalMs = intervalMs;
+            this.minIntervalMs = minIntervalMs;
+            this.minDistanceM = minDistanceM;
+            this.priority = priority;
+            this.maxDelayMs = maxDelayMs;
+        }
+
+        boolean sameAs(@Nullable TrackingConfig other) {
+            if (other == null) {
+                return false;
+            }
+            return powerSave == other.powerSave
+                    && intervalMs == other.intervalMs
+                    && minIntervalMs == other.minIntervalMs
+                    && Float.compare(minDistanceM, other.minDistanceM) == 0
+                    && priority == other.priority
+                    && maxDelayMs == other.maxDelayMs;
+        }
+
+        @NonNull
+        String asLogString() {
+            return "powerSave=" + powerSave
+                    + " intervalMs=" + intervalMs
+                    + " minIntervalMs=" + minIntervalMs
+                    + " minDistanceM=" + minDistanceM
+                    + " maxDelayMs=" + maxDelayMs
+                    + " priority=" + priority;
+        }
+    }
 
     @Override
     public void onCreate() {
@@ -87,30 +146,36 @@ public class LocationForegroundService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
-        FileLog.getInstance().debug(TAG, "onStartCommand: action=" + action + ", startId=" + startId + ", flags=" + flags + ", restarted=" + (intent == null));
+        FileLog.getInstance().debug(TAG,
+                "onStartCommand: action=" + action + ", startId=" + startId + ", flags=" + flags
+                        + ", restarted=" + (intent == null));
+
         if (ACTION_STOP.equals(action)) {
             stopForegroundTracking();
             if (smartLocationManager != null) {
                 smartLocationManager.onForegroundServiceStateChanged(false);
             }
             stopForeground(true);
-            // Avoid stopping a newer START command that may already be queued.
             stopSelfResult(startId);
             return START_NOT_STICKY;
         }
+
+        requestedConfig = resolveTrackingConfig(intent);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
         } else {
             startForeground(NOTIFICATION_ID, buildNotification());
         }
-        FileLog.getInstance().debug(TAG, "startForeground completed, sdkInt=" + Build.VERSION.SDK_INT);
-        startForegroundTracking();
+
+        startForegroundTracking(requestedConfig, false);
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
-        FileLog.getInstance().debug(TAG, "onDestroy: callbackActive=" + (locationCallback != null) + ", thread=" + Thread.currentThread().getName());
+        FileLog.getInstance().debug(TAG,
+                "onDestroy: callbackActive=" + (locationCallback != null)
+                        + ", thread=" + Thread.currentThread().getName());
         stopForegroundTracking();
         if (smartLocationManager != null) {
             smartLocationManager.onForegroundServiceStateChanged(false);
@@ -126,27 +191,36 @@ public class LocationForegroundService extends Service {
         return null;
     }
 
-    private void startForegroundTracking() {
-        if (locationCallback != null) {
+    private void startForegroundTracking(@NonNull TrackingConfig config, boolean forceRestart) {
+        if (locationCallback != null && !forceRestart && config.sameAs(activeConfig)) {
+            FileLog.getInstance().debug(TAG, "startForegroundTracking skipped: unchanged config " + config.asLogString());
             return;
         }
+
+        if (locationCallback != null) {
+            locationSource.removeLocationUpdates(locationCallback);
+            locationCallback = null;
+            FileLog.getInstance().debug(TAG, "startForegroundTracking: apply new config -> restart callbacks");
+        }
+
         if (ActivityCompat.checkSelfPermission(this,
                 android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             FileLog.getInstance().warning(TAG, "startForegroundTracking skipped: location permission missing");
             return;
         }
+
         locationCallback = new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult locationResult) {
-                if (locationResult == null) {
+                if (locationResult == null || locationResult.getLocations().isEmpty()) {
                     return;
                 }
                 int batchSize = locationResult.getLocations().size();
-                if (locationResult.getLocations().isEmpty()) {
+                Location last = locationResult.getLastLocation();
+                if (last == null) {
                     return;
                 }
-                Location last = locationResult.getLastLocation();
-                String provider = last != null ? last.getProvider() : "unknown";
+                String provider = last.getProvider();
                 long nowUptime = android.os.SystemClock.uptimeMillis();
                 long deltaMs = lastCallbackUptimeMs == 0L ? -1L : (nowUptime - lastCallbackUptimeMs);
                 lastCallbackUptimeMs = nowUptime;
@@ -156,9 +230,8 @@ public class LocationForegroundService extends Service {
                 } catch (Throwable ignore) {
                 }
                 long ageMs = elapsedMs > 0 ? (android.os.SystemClock.elapsedRealtime() - elapsedMs) : -1L;
-                float dLast = -1f;
                 if (lastElapsedMs > 0 && elapsedMs > 0 && lastElapsedMs != elapsedMs) {
-                    dLast = 0f;
+                    // keep lightweight lineage marker for debug consistency
                 }
                 lastElapsedMs = elapsedMs;
                 FileLog.getInstance().debug(TAG,
@@ -181,35 +254,23 @@ public class LocationForegroundService extends Service {
             }
         };
 
-        ProfileManager profileManager = ProfileManager.get(this);
-        boolean powerSave = profileManager.isPowerSaver();
-        long intervalMs = powerSave ? StrategyConfig.getFgPowerSaveIntervalMs()
-                                    : StrategyConfig.getFgRealtimeIntervalMs();
-        long minIntervalMs = powerSave ? StrategyConfig.getFgPowerSaveMinIntervalMs()
-                                       : StrategyConfig.getFgRealtimeMinIntervalMs();
-        float minDistanceM = powerSave ? StrategyConfig.getFgPowerSaveMinDistanceM()
-                                       : StrategyConfig.getFgRealtimeMinDistanceM();
-        long maxDelayMs = 0L;
-        FileLog.getInstance().debug(TAG, "startForegroundTracking: powerSave=" + powerSave
-                + " intervalMs=" + intervalMs
-                + " minIntervalMs=" + minIntervalMs
-                + " minDistanceM=" + minDistanceM
-                + " maxDelayMs=" + maxDelayMs
-                + " priority=HIGH_ACCURACY");
+        FileLog.getInstance().debug(TAG, "startForegroundTracking: " + config.asLogString());
 
-        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
-                .setMinUpdateIntervalMillis(minIntervalMs)
-                .setMinUpdateDistanceMeters(minDistanceM)
-                .setMaxUpdateDelayMillis(maxDelayMs)
+        LocationRequest locationRequest = new LocationRequest.Builder(config.priority, config.intervalMs)
+                .setMinUpdateIntervalMillis(config.minIntervalMs)
+                .setMinUpdateDistanceMeters(config.minDistanceM)
+                .setMaxUpdateDelayMillis(config.maxDelayMs)
                 .setGranularity(GRANULARITY_FINE)
                 .setWaitForAccurateLocation(false)
                 .build();
 
+        TrackingConfig startConfig = config;
         locationSource.requestLocationUpdates(locationRequest,
-                locationCallback,
-                Looper.getMainLooper())
+                        locationCallback,
+                        Looper.getMainLooper())
                 .addOnSuccessListener(unused -> {
                     retryAttempts = 0;
+                    activeConfig = startConfig;
                     FileLog.getInstance().debug(TAG, "requestLocationUpdates success");
                 })
                 .addOnFailureListener(e -> {
@@ -227,6 +288,7 @@ public class LocationForegroundService extends Service {
         }
         retryHandler.removeCallbacks(retryRunnable);
         locationCallback = null;
+        activeConfig = null;
         if (hadCallback) {
             FileLog.getInstance().debug(TAG, "stopForegroundTracking completed");
         }
@@ -240,6 +302,42 @@ public class LocationForegroundService extends Service {
         long delayMs = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * retryAttempts);
         retryHandler.removeCallbacks(retryRunnable);
         retryHandler.postDelayed(retryRunnable, delayMs);
+    }
+
+    @NonNull
+    private TrackingConfig resolveTrackingConfig(@Nullable Intent intent) {
+        if (intent == null) {
+            ProfileManager profileManager = ProfileManager.get(this);
+            return defaultConfig(profileManager.isPowerSaver());
+        }
+
+        boolean hasInterval = intent.hasExtra(EXTRA_INTERVAL_MS);
+        boolean hasMinInterval = intent.hasExtra(EXTRA_MIN_INTERVAL_MS);
+        boolean hasMinDistance = intent.hasExtra(EXTRA_MIN_DISTANCE_M);
+        boolean hasPriority = intent.hasExtra(EXTRA_PRIORITY);
+        boolean hasMaxDelay = intent.hasExtra(EXTRA_MAX_DELAY_MS);
+        boolean powerSave = intent.getBooleanExtra(EXTRA_POWER_SAVE, false);
+
+        TrackingConfig fallback = defaultConfig(powerSave);
+        if (!hasInterval || !hasMinInterval || !hasMinDistance) {
+            return fallback;
+        }
+
+        long intervalMs = Math.max(500L, intent.getLongExtra(EXTRA_INTERVAL_MS, fallback.intervalMs));
+        long minIntervalMs = Math.max(250L, intent.getLongExtra(EXTRA_MIN_INTERVAL_MS, fallback.minIntervalMs));
+        float minDistanceM = Math.max(0f, intent.getFloatExtra(EXTRA_MIN_DISTANCE_M, fallback.minDistanceM));
+        int priority = hasPriority ? intent.getIntExtra(EXTRA_PRIORITY, fallback.priority) : fallback.priority;
+        long maxDelayMs = hasMaxDelay ? Math.max(0L, intent.getLongExtra(EXTRA_MAX_DELAY_MS, fallback.maxDelayMs)) : fallback.maxDelayMs;
+        return new TrackingConfig(powerSave, intervalMs, minIntervalMs, minDistanceM, priority, maxDelayMs);
+    }
+
+    @NonNull
+    private static TrackingConfig defaultConfig(boolean powerSave) {
+        long intervalMs = powerSave ? StrategyConfig.getFgPowerSaveIntervalMs() : StrategyConfig.getFgRealtimeIntervalMs();
+        long minIntervalMs = powerSave ? StrategyConfig.getFgPowerSaveMinIntervalMs() : StrategyConfig.getFgRealtimeMinIntervalMs();
+        float minDistanceM = powerSave ? StrategyConfig.getFgPowerSaveMinDistanceM() : StrategyConfig.getFgRealtimeMinDistanceM();
+        int priority = powerSave ? Priority.PRIORITY_BALANCED_POWER_ACCURACY : Priority.PRIORITY_HIGH_ACCURACY;
+        return new TrackingConfig(powerSave, intervalMs, minIntervalMs, minDistanceM, priority, 0L);
     }
 
     private Notification buildNotification() {

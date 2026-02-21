@@ -1,6 +1,5 @@
 package com.hf.easydelivery.core.strategy;
 
-import android.content.Context;
 import android.location.Location;
 import android.os.SystemClock;
 
@@ -9,13 +8,14 @@ import androidx.annotation.NonNull;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.core.SmartLocationManager;
 import com.hf.easydelivery.core.policy.LocationRequestParams;
-import com.hf.easydelivery.map.config.ProfileManager;
+import com.hf.easydelivery.core.profile.LocationProfileSource;
 
-public final class StrategyManager implements ProfileManager.Listener {
+public final class StrategyManager implements LocationProfileSource.Listener {
     private static final String TAG = "StrategyManager";
 
     private final SmartLocationManager smartLocationManager;
-    private final ProfileManager profileManager;
+    @NonNull
+    private LocationProfileSource locationProfileSource;
     private final LocationStrategy realtimeStrategy = new RealTimeStrategy();
     private final LocationStrategy powerSaveStrategy = new PowerSaveStrategy();
 
@@ -24,19 +24,30 @@ public final class StrategyManager implements ProfileManager.Listener {
     private volatile Location lastDispatchLocation;
     private volatile long lastRequestUptimeMs = 0L;
 
-    public StrategyManager(@NonNull Context context, @NonNull SmartLocationManager smartLocationManager) {
+    public StrategyManager(@NonNull SmartLocationManager smartLocationManager,
+                           @NonNull LocationProfileSource profileSource) {
         this.smartLocationManager = smartLocationManager;
-        this.profileManager = ProfileManager.get(context);
-        switchMode(profileManager.isPowerSaver() ? StrategyMode.POWERSAVE : StrategyMode.REALTIME);
-        profileManager.addListener(this);
+        this.locationProfileSource = profileSource;
+        switchMode(locationProfileSource.isPowerSaver() ? StrategyMode.POWERSAVE : StrategyMode.REALTIME);
+        locationProfileSource.addListener(this);
     }
 
     @Override
-    public void onProfileChanged(@NonNull ProfileManager.AppProfile newProfile) {
-        StrategyMode mode = newProfile == ProfileManager.AppProfile.POWERSAVER
+    public void onPowerSaverChanged(boolean powerSaver) {
+        StrategyMode mode = powerSaver
                 ? StrategyMode.POWERSAVE
                 : StrategyMode.REALTIME;
         switchMode(mode);
+    }
+
+    public void setLocationProfileSource(@NonNull LocationProfileSource profileSource) {
+        locationProfileSource.removeListener(this);
+        locationProfileSource = profileSource;
+        locationProfileSource.addListener(this);
+        StrategyMode nextMode = locationProfileSource.isPowerSaver()
+                ? StrategyMode.POWERSAVE
+                : StrategyMode.REALTIME;
+        switchMode(nextMode);
     }
 
     public void switchMode(@NonNull StrategyMode mode) {

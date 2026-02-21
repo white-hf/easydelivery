@@ -30,6 +30,7 @@ import com.hf.easydelivery.core.policy.LocationPolicyContextProvider;
 import com.hf.easydelivery.core.policy.LocationRequestParams;
 import com.hf.easydelivery.core.policy.PolicyContextStateProvider;
 import com.hf.easydelivery.core.policy.RealtimeLocationPolicy;
+import com.hf.easydelivery.core.profile.LocationProfileSource;
 import com.hf.easydelivery.core.engine.RequestScheduler;
 import com.hf.easydelivery.core.strategy.BoostReason;
 import com.hf.easydelivery.core.strategy.StrategyConfig;
@@ -153,6 +154,8 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
     private final LocationPolicyContextProvider policyContextProvider;
     private StrategyManager strategyManager;
     private final LocationEventBus eventBus = new LocationEventBus();
+    @NonNull
+    private volatile LocationProfileSource locationProfileSource = LocationProfileSource.NONE;
 
     private boolean singleUpdateInFlight = false;
     private long lastSingleFixUptimeMs = 0L;
@@ -342,7 +345,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
         requestScheduler = new RequestScheduler(this.context,
                 new FusedLocationSource(fusedLocationClient),
                 handler);
-        strategyManager = new StrategyManager(this.context, this);
+        strategyManager = new StrategyManager(this, locationProfileSource);
         locationDispatcher = new LocationDispatcher(listeners, strategyManager, eventBus);
         burstController = new BurstController(handler, new BurstController.Listener() {
             @Override
@@ -1041,26 +1044,46 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
         burstController.forceExit(true);
     }
 
+    @Override
     public void startForegroundTracking() {
-        if (foregroundTrackingActive) {
-            return;
-        }
+        boolean wasActive = foregroundTrackingActive;
         foregroundTrackingActive = true;
         foregroundServiceHeartbeatUptimeMs = SystemClock.elapsedRealtime();
-        stopLocationUpdates();
+        if (!wasActive) {
+            stopLocationUpdates();
+        }
         try {
-            Intent intent = new Intent(context, com.hf.easydelivery.service.LocationForegroundService.class);
-            intent.setAction(com.hf.easydelivery.service.LocationForegroundService.ACTION_START);
+            Intent intent = buildForegroundServiceIntent(
+                    com.hf.easydelivery.service.LocationForegroundService.ACTION_START);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent);
             } else {
                 context.startService(intent);
             }
-            FileLog.getInstance().debug(TAG, "startForegroundTracking requested");
+            FileLog.getInstance().debug(TAG, "startForegroundTracking requested, wasActive=" + wasActive);
         } catch (Throwable t) {
             foregroundTrackingActive = false;
             startLocationUpdates();
             FileLog.getInstance().error(TAG, "startForegroundTracking failed", t);
+        }
+    }
+
+    @Override
+    public void refreshForegroundTrackingConfigIfActive() {
+        if (!foregroundTrackingActive) {
+            return;
+        }
+        try {
+            Intent intent = buildForegroundServiceIntent(
+                    com.hf.easydelivery.service.LocationForegroundService.ACTION_START);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent);
+            } else {
+                context.startService(intent);
+            }
+            FileLog.getInstance().debug(TAG, "refreshForegroundTrackingConfigIfActive requested");
+        } catch (Throwable t) {
+            FileLog.getInstance().error(TAG, "refreshForegroundTrackingConfigIfActive failed", t);
         }
     }
 
@@ -1069,6 +1092,7 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
         stopForegroundTracking(false);
     }
 
+    @Override
     public void stopForegroundTracking(boolean resumeNormal) {
         if (!foregroundTrackingActive) {
             return;
@@ -1091,6 +1115,39 @@ public class SmartLocationManager implements LocationFacade, LocationControls, F
 
     public boolean isForegroundTrackingActive() {
         return foregroundTrackingActive;
+    }
+
+    @Override
+    public void setLocationProfileSource(@Nullable LocationProfileSource source) {
+        LocationProfileSource next = source != null ? source : LocationProfileSource.NONE;
+        locationProfileSource = next;
+        if (strategyManager != null) {
+            strategyManager.setLocationProfileSource(next);
+        }
+    }
+
+    @NonNull
+    private Intent buildForegroundServiceIntent(@NonNull String action) {
+        boolean powerSave = locationProfileSource.isPowerSaver();
+        long intervalMs = powerSave ? StrategyConfig.getFgPowerSaveIntervalMs()
+                : StrategyConfig.getFgRealtimeIntervalMs();
+        long minIntervalMs = powerSave ? StrategyConfig.getFgPowerSaveMinIntervalMs()
+                : StrategyConfig.getFgRealtimeMinIntervalMs();
+        float minDistanceM = powerSave ? StrategyConfig.getFgPowerSaveMinDistanceM()
+                : StrategyConfig.getFgRealtimeMinDistanceM();
+        int priority = powerSave
+                ? Priority.PRIORITY_BALANCED_POWER_ACCURACY
+                : Priority.PRIORITY_HIGH_ACCURACY;
+
+        Intent intent = new Intent(context, com.hf.easydelivery.service.LocationForegroundService.class);
+        intent.setAction(action);
+        intent.putExtra(com.hf.easydelivery.service.LocationForegroundService.EXTRA_POWER_SAVE, powerSave);
+        intent.putExtra(com.hf.easydelivery.service.LocationForegroundService.EXTRA_INTERVAL_MS, intervalMs);
+        intent.putExtra(com.hf.easydelivery.service.LocationForegroundService.EXTRA_MIN_INTERVAL_MS, minIntervalMs);
+        intent.putExtra(com.hf.easydelivery.service.LocationForegroundService.EXTRA_MIN_DISTANCE_M, minDistanceM);
+        intent.putExtra(com.hf.easydelivery.service.LocationForegroundService.EXTRA_PRIORITY, priority);
+        intent.putExtra(com.hf.easydelivery.service.LocationForegroundService.EXTRA_MAX_DELAY_MS, 0L);
+        return intent;
     }
 
     public void onForegroundLocation(@NonNull Location location) {

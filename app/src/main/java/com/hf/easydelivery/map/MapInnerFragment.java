@@ -89,6 +89,7 @@ import com.hf.easydelivery.view.DeliveredPackagesFragment;
 import com.hf.easydelivery.view.model.MapViewModel;
 import com.hf.easydelivery.view.model.ScanViewModel;
 import com.hf.easydelivery.map.config.ProfileManager;
+import com.hf.easydelivery.map.config.ProfileManagerLocationProfileSource;
 import com.hf.easydelivery.view.DeveloperPanelBottomSheet;
 import com.hf.easydelivery.service.FocusState;
 import com.hf.easydelivery.service.FocusStateRepository;
@@ -202,6 +203,12 @@ public class MapInnerFragment extends Fragment
             }
             try {
                 applyPerfBalance(profileManager != null ? profileManager.getPerfBalance() : 0f);
+            } catch (Throwable ignore) {
+            }
+            try {
+                if (locationControls != null) {
+                    locationControls.refreshForegroundTrackingConfigIfActive();
+                }
             } catch (Throwable ignore) {
             }
         }
@@ -1263,6 +1270,10 @@ public class MapInnerFragment extends Fragment
     private void getLocation() {
         locationFacade = locationFacadeProvider.getLocationFacade(requireContext());
         locationControls = locationFacadeProvider.getLocationControls(requireContext());
+        if (locationControls != null) {
+            locationControls.setLocationProfileSource(
+                    ProfileManagerLocationProfileSource.get(requireContext()));
+        }
         if (locationFacade != null) {
             applyPerfBalance(profileManager != null ? profileManager.getPerfBalance() : 0f);
             if (!locationListenerRegistered) {
@@ -2213,8 +2224,8 @@ public class MapInnerFragment extends Fragment
         if (locationControls == null || profileManager == null) {
             return;
         }
-        boolean realtime = profileManager.getCurrent() != ProfileManager.AppProfile.POWERSAVER;
-        boolean shouldEnable = isResumed() && realtime;
+        boolean powerSave = profileManager.getCurrent() == ProfileManager.AppProfile.POWERSAVER;
+        boolean shouldEnable = isResumed();
         boolean isActive = locationControls.isForegroundTrackingActive();
         long now = SystemClock.elapsedRealtime();
         if (isActive && fgLastStartMs == 0L) {
@@ -2224,7 +2235,7 @@ public class MapInnerFragment extends Fragment
             fgStopPendingSinceMs = 0L;
             foregroundTrackingHandler.removeCallbacks(foregroundTrackingRunnable);
             if (!isActive) {
-                logInstance("fg start: shouldEnable=true realtime=" + realtime + " resumed=" + isResumed());
+                logInstance("fg start: shouldEnable=true powerSave=" + powerSave + " resumed=" + isResumed());
                 locationControls.startForegroundTracking();
                 fgLastStartMs = now;
             }
@@ -2238,7 +2249,7 @@ public class MapInnerFragment extends Fragment
         if (fgStopPendingSinceMs == 0L) {
             fgStopPendingSinceMs = now;
             foregroundTrackingHandler.removeCallbacks(foregroundTrackingRunnable);
-            logInstance("fg stop pending: shouldEnable=false realtime=" + realtime + " resumed=" + isResumed());
+            logInstance("fg stop pending: shouldEnable=false powerSave=" + powerSave + " resumed=" + isResumed());
             foregroundTrackingHandler.postDelayed(foregroundTrackingRunnable, FG_STOP_GRACE_MS);
             return;
         }

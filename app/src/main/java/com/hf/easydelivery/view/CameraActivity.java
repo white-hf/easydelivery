@@ -199,6 +199,7 @@ public class CameraActivity extends AppCompatActivity
     private CaptureIntent lastResolvedIntent = CaptureIntent.WAYBILL;
     private long captureOrderId = -1L;
     private int captureSequenceIndex = 0;
+    private long captureSessionToken = 0L;
     private float lastAppliedZoomRatio = DEFAULT_ZOOM_RATIO;
     private long lastZoomAdjustMillis = 0L;
     private static final long ZOOM_COMMAND_INTERVAL_MS = 120L;
@@ -1125,6 +1126,19 @@ public class CameraActivity extends AppCompatActivity
         updateOkButtonState();
     }
 
+    private void bumpCaptureSession() {
+        captureSessionToken = SystemClock.elapsedRealtimeNanos();
+    }
+
+    private boolean isCaptureSessionValid(long tokenSnapshot, @Nullable Long orderIdSnapshot) {
+        if (tokenSnapshot != captureSessionToken) {
+            return false;
+        }
+        long currentOrder = mOrderId != null ? mOrderId : -1L;
+        long snapshotOrder = orderIdSnapshot != null ? orderIdSnapshot : -1L;
+        return currentOrder == snapshotOrder;
+    }
+
     private boolean switchToNextPackage() {
         // TODO: batch parcel switch
         return false;
@@ -1506,6 +1520,8 @@ public class CameraActivity extends AppCompatActivity
     private void takePicture() {        applyProximityZoom(true);
         applyDynamicFlashMode();
         final CaptureIntent intentForShot = lastResolvedIntent;
+        final long sessionTokenSnapshot = captureSessionToken;
+        final Long orderIdSnapshot = mOrderId;
 
         // --- Play capture feedback ---
         playShutterFeedback();
@@ -1597,6 +1613,27 @@ public class CameraActivity extends AppCompatActivity
                         saveImage(bytes, imageFile, rotationDegrees);
                         // On UI thread, replace the temp thumbnail with the real one
                         runOnUiThread(() -> {
+                            if (!isCaptureSessionValid(sessionTokenSnapshot, orderIdSnapshot)) {
+                                try {
+                                    if (placeholderIndex >= 0) {
+                                        File old = mImageFiles.get(placeholderIndex);
+                                        if (old != null && tempFileForReplace != null && old.equals(tempFileForReplace)) {
+                                            mImageFiles.set(placeholderIndex, null);
+                                        }
+                                    }
+                                    if (tempFileForReplace != null && tempFileForReplace.exists()) {
+                                        tempFileForReplace.delete();
+                                    }
+                                    if (imageFile.exists()) {
+                                        imageFile.delete();
+                                    }
+                                } catch (Throwable ignore) {
+                                }
+                                if (autoCaptureInProgress) {
+                                    autoCaptureInProgress = false;
+                                }
+                                return;
+                            }
                             if (placeholderIndex >= 0) {
                                 // Remove temp file
                                 File old = mImageFiles.get(placeholderIndex);
@@ -1885,6 +1922,7 @@ public class CameraActivity extends AppCompatActivity
     }
 
     private void resetForNewPackage(DeliveryInfo newInfo) {
+        bumpCaptureSession();
         clearThumbnails();
         updateInfoBar(newInfo);
         ensureCaptureSequenceSynced();
