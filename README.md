@@ -14,27 +14,124 @@ During my work developing applications for package delivery drivers, I encounter
 
 **EasyDelivery** addresses these issues by offering a more streamlined, efficient, and reliable solution for package delivery.
 
+## Product Design
+
+### Product Goals
+
+1. **Business Continuity First**: Keep delivery operations running even under no network, weak network, or backend service outages, with reliable local-first execution and deferred synchronization.
+2. **Delivery Efficiency First**: Optimize for parcel-navigation workflows with real-time follow, automatic next-stop guidance, camera automation, auto-switch to the next parcel, and smart recommendation of nearby N parcels.
+3. **Error Prevention First**: Reduce wrong-drop and wrong-package risks through parcel-bound workflows, location-aware validation, and guarded operational steps.
+
+### Core Product Capabilities
+
+1. **Parcel Navigation Map**: Show driver position and pending parcels in one workflow, with continuous map follow for parcel-delivery navigation scenarios.
+2. **Proximity-based Info Card and Next-stop Handoff**: Surface parcel information only in the last-mile zone, then automatically recommend and hand off to the next nearby parcel after completion.
+3. **Adaptive Auto Zoom for Delivery Context**: Dynamically zoom in for final-approach street-level detail and zoom out for longer driving segments.
+4. **Smart Camera Delivery Workflow**: Support waybill/drop-off/building capture stages with camera assistance and fast context switching for same-location multi-parcel continuous capture.
+5. **Offline-first Execution with Deferred Sync**: Continue scanning/capture/submission without connectivity and automatically upload with retry when network returns.
+6. **Lockscreen Delivery Focus**: Show only the currently actionable parcel information while the device is locked.
+7. **Low-interruption Driver Flow**: Reduce unnecessary page switching and disruptive prompts in core delivery operations.
+
+### Supporting Driver Utilities
+
+These capabilities are designed to address real-world needs beyond the core dispatch loop.
+
+1. **My Work**: Visualizes the driver’s daily and monthly workload to support review and self-management.
+2. **My Large Parcels**: Pre-marks special parcels to reduce on-site misses and repeated communication.
+
 ## Technologies Applied
 
-- **Modular Design**:  
-  The app is built using a modular architecture, making it easy to extend and maintain. This design allows EasyDelivery to support multiple courier services seamlessly.
+- **Modular Architecture**:  
+  Clear module boundaries across view, domain logic, infrastructure, and external integrations for maintainability and incremental evolution.
 
-- **Room Database**:  
-  Offline data storage is managed using the Room database, enabling the app to function without an active network connection. Before starting a delivery, the app retrieves all necessary information and stores it locally, eliminating the need for backend API calls during delivery.
+- **SPI-based Backend Integration**:  
+  Pluggable courier integration via `ICourierService` and factory/adapter patterns, enabling backend replacement without changing core app flows.
 
-- **Log-Structured File System Inspired Design**:  
-  The app's design is inspired by log-structured file systems. During delivery, all data related to delivered tasks are first stored in the local database. Separate threads handle the uploading of this data to the backend server, employing a retry strategy to ensure successful uploads even in the face of network issues.
+- **Policy/Strategy/Pipeline-driven Location Engine**:  
+  A composable location architecture (policy + strategy + processing pipeline + state machine) to dynamically apply quality gating, realtime vs power-save behavior, and adaptive boost control.
 
-- **Multi-threading**:  
-  The app utilizes multiple threads to manage tasks efficiently, ensuring a smooth user experience even when handling complex operations such as data synchronization and uploads.
+- **Local Persistence and DAO Abstraction**:  
+  Local-first persistence through database abstraction (`MyDb`) and DAO layer for structured offline read/write and query isolation.
 
-- **Data Synchronization Strategy**:  
-  To handle potential network issues, the app implements a strategy that retries data uploads until they succeed, ensuring data consistency and reliability.
+- **Queue-based Deferred Synchronization**:  
+  Asynchronous upload queue with retry/backoff and state transitions to guarantee eventual consistency under unstable network conditions.
 
-- **Data Security and Consistency Considerations**:
-  - **Data Security**: Once a package is delivered and its data is successfully uploaded, the app deletes the local data to mitigate security risks.
-  - **Data Consistency**: There is a risk that key information might be modified during delivery, potentially affecting delivery accuracy. To reduce this risk, a lightweight data synchronization API is used to ensure data integrity.
-![](https://github.com/white-hf/blog/blob/main/img/easydelivery.jpg)
+- **Concurrency Model for Mobile Reliability**:  
+  Dedicated execution paths for UI, DB operations, upload workers, and background service tasks to reduce blocking and improve runtime stability.
+
+- **Observability and Runtime Diagnostics**:  
+  Configurable logging levels, telemetry instrumentation, and runtime diagnostics hooks for issue investigation and production tuning.
+
+## Top-level Architecture
+
+```mermaid
+graph TB
+    Driver["Driver / Courier"] --> App["EasyDelivery App (Android)"]
+
+    App <--> API["Courier Backend API\n(tasks, scan batches, upload, sync)"]
+    App <--> DB["Local Database\n(Offline + Cache + Queue)"]
+
+    App --> SPI["Courier SPI Layer\n(ICourierService)"]
+    SPI --> C1["Courier Adapter A"]
+    SPI --> C2["Courier Adapter B"]
+    SPI --> C3["Courier Adapter N"]
+
+    C1 <--> API
+    C2 <--> API
+    C3 <--> API
+
+    App -. depends on .-> Libs["3rd-party Libraries\nGoogle Maps / Fused Location / CameraX / ML Kit"]
+```
+
+## Layered Module Architecture
+
+```mermaid
+flowchart TB
+  RQ["Request / User Action"]
+
+  subgraph L1["L1 · View Layer"]
+    direction LR
+    L1A["Main View"] --- L1B["Delivery Map View"] --- L1C["Scan View"] --- L1D["Profile View"] --- L1E["Camera View"] --- L1S[" "]
+  end
+
+  subgraph L2["L2 · Business Logic Layer"]
+    direction LR
+    L2A["Map Follow Engine"] --- L2B["Nearby Parcel Recommendation Engine"] --- L2C["Intelligent Location Engine"] --- L2D["Parcel Data Cache Manager"] --- L2E["Upload Queue Manager"] --- L2F["Lockscreen Parcel Notification Service"]
+  end
+
+  subgraph L3["L3 · Technical Component Layer"]
+    direction LR
+    L3A["App Runtime Registry"] --- L3B["Application Event Bus"] --- L3C["Data Access Layer"] --- L3D["Courier API Adapter Layer"] --- L3E["Application Logging Layer"] --- L3F["Application Telemetry Layer"]
+  end
+
+  subgraph L4["L4 · External Dependency Layer"]
+    direction LR
+    L4A["Courier Backend Systems"] --- L4B["Google Maps SDK"] --- L4C["Fused Location Provider"] --- L4D["Android System Services"] --- L4E["CameraX / ML Kit"] --- L4S[" "]
+  end
+
+  RQ --> L1
+  L1 --> L2
+  L2 --> L3
+  L3 --> L4
+
+  style L1 fill:#EAF4FF,stroke:#2F6DB5,stroke-width:2px,stroke-dasharray: 6 4
+  style L2 fill:#EFFFF4,stroke:#2E8B57,stroke-width:2px,stroke-dasharray: 6 4
+  style L3 fill:#FFF7E8,stroke:#C9852B,stroke-width:2px,stroke-dasharray: 6 4
+  style L4 fill:#F3F4F6,stroke:#6B7280,stroke-width:2px,stroke-dasharray: 6 4
+
+  classDef p fill:#CFE8FF,stroke:#2F6DB5,stroke-width:1.5px,color:#0B2B4A;
+  classDef b fill:#CCF3DD,stroke:#2E8B57,stroke-width:1.5px,color:#0A3A22;
+  classDef t fill:#FFE7BF,stroke:#C9852B,stroke-width:1.5px,color:#4A2A00;
+  classDef e fill:#E5E7EB,stroke:#6B7280,stroke-width:1.5px,color:#111827;
+  classDef spacer fill:transparent,stroke:transparent,color:transparent;
+
+  class L1A,L1B,L1C,L1D,L1E p;
+  class L2A,L2B,L2C,L2D,L2E,L2F b;
+  class L3A,L3B,L3C,L3D,L3E,L3F t;
+  class L4A,L4B,L4C,L4D,L4E e;
+  class L1S,L4S spacer;
+```
+
 ## How to Install and Run the Project
 
 1. **Clone the repository from GitHub**:
