@@ -114,14 +114,16 @@ public class MapHostFragment extends Fragment {
                     .commitNow();
         }
 
-        fabSwitchView.setOnClickListener(v -> {
-            // 仅仅负责视图切换，不涉及数据加载
-            if (mapFrag.isVisible()) {
-                switchToListView();
-            } else {
-                switchToMapView();
-            }
-        });
+        if (fabSwitchView != null) {
+            fabSwitchView.setOnClickListener(v -> {
+                // 旧入口保留（当前已在地图右侧工具栏提供主入口）
+                if (mapFrag != null && mapFrag.isVisible()) {
+                    switchToListView();
+                } else {
+                    switchToMapView();
+                }
+            });
+        }
 
         return root;
     }
@@ -135,7 +137,9 @@ public class MapHostFragment extends Fragment {
                     .hide(listFrag)
                     .show(mapFrag)
                     .commit();
-            fabSwitchView.setSelected(false);
+            if (fabSwitchView != null) {
+                fabSwitchView.setSelected(false);
+            }
         }
     }
 

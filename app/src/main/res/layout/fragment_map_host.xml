@@ -10,25 +10,14 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- 右下角按钮组 -->
-    <LinearLayout
+    <!-- map/list 按钮已移动到 MapInner 的右侧迷你工具栏底部 -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabSwitchView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_marginEnd="24dp"
-        android:layout_marginBottom="96dp"
-        android:orientation="vertical"
-        android:gravity="end">
-
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
-            android:id="@+id/fabSwitchView"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:contentDescription="@string/switch_view"
-            app:useCompatPadding="true"
-            app:srcCompat="@drawable/ic_switch_map_list"  />
-
-    </LinearLayout>
+        android:visibility="gone"
+        android:contentDescription="@string/switch_view"
+        app:useCompatPadding="true"
+        app:srcCompat="@drawable/ic_switch_map_list" />
 
 </FrameLayout>

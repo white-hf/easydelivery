@@ -46,6 +46,22 @@
         android:layout_width="1dp"
         android:layout_height="8dp" />
 
+    <!-- 地图/列表切换（放在右侧工具栏底部） -->
+    <ImageButton
+        android:id="@+id/btn_switch_view"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:padding="8dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/switch_view"
+        android:src="@drawable/ic_switch_map_list"
+        android:tint="@android:color/white" />
+
+    <!-- 间隔 -->
+    <Space
+        android:layout_width="1dp"
+        android:layout_height="8dp" />
+
     <!-- 全屏模式切换 -->
     <ImageButton
         android:id="@+id/btn_fullscreen"

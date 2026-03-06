@@ -138,6 +138,8 @@ public class CameraActivity extends AppCompatActivity
     private final List<File> mImageFiles = new ArrayList<>();
     private final List<ImageView> mImageViews = new ArrayList<>();
     private final List<CardView> mCardViews = new ArrayList<>();
+    private final boolean[] pendingImageSlots = new boolean[MAX_PHOTOS];
+    private int pendingCaptureCount = 0;
 
     private ImageButton captureButton, galleryButton, retakeButton;
 
@@ -296,6 +298,8 @@ public class CameraActivity extends AppCompatActivity
         mImageFiles.clear();
         mImageViews.clear();
         mCardViews.clear();
+        Arrays.fill(pendingImageSlots, false);
+        pendingCaptureCount = 0;
         for (int i = 0; i < MAX_PHOTOS; i++) {
             CardView cardView = createThumbnailCardView(i);
             thumbnailContainer.addView(cardView);
@@ -752,9 +756,36 @@ public class CameraActivity extends AppCompatActivity
     private void updateOkButtonState() {
         int count = (int) mImageFiles.stream().filter(Objects::nonNull).count();
         if (okButton != null) {
-            boolean enabled = count >= IMAGE_COUNT;
+            boolean enabled = count >= IMAGE_COUNT && !hasPendingImageProcessing();
             okButton.setEnabled(enabled);
             okButton.setAlpha(enabled ? 1f : 0.4f);
+        }
+    }
+
+    private boolean hasPendingImageProcessing() {
+        return pendingCaptureCount > 0;
+    }
+
+    private int findFirstAvailablePhotoSlot() {
+        for (int i = 0; i < MAX_PHOTOS; i++) {
+            if (mImageFiles.get(i) == null && !pendingImageSlots[i]) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void setPendingPhotoSlot(int index, boolean pending) {
+        if (index < 0 || index >= pendingImageSlots.length) {
+            return;
+        }
+        if (pendingImageSlots[index] == pending) {
+            return;
+        }
+        pendingImageSlots[index] = pending;
+        pendingCaptureCount += pending ? 1 : -1;
+        if (pendingCaptureCount < 0) {
+            pendingCaptureCount = 0;
         }
     }
 
@@ -1243,7 +1274,7 @@ public class CameraActivity extends AppCompatActivity
 
     private void addThumbnail(final File imageFile, boolean withAnim) {
         for (int i = 0; i < MAX_PHOTOS; i++) {
-            if (mImageFiles.get(i) == null) {
+            if (mImageFiles.get(i) == null && !pendingImageSlots[i]) {
                 mImageFiles.set(i, imageFile);
                 int tw = getResources().getDimensionPixelSize(R.dimen.thumbnail_width);
                 int th = getResources().getDimensionPixelSize(R.dimen.thumbnail_height);
@@ -1293,6 +1324,7 @@ public class CameraActivity extends AppCompatActivity
             }
         }
         mImageFiles.set(index, null);
+        setPendingPhotoSlot(index, false);
         if (deleteFile && f != null && f.exists())
             f.delete();
 
@@ -1438,6 +1470,9 @@ public class CameraActivity extends AppCompatActivity
     }
 
     private void submitPackage(int deliveryResult, @Nullable Integer failReasonCode, String status) {
+        if (!isImageSetReadyForSubmit()) {
+            return;
+        }
         DeliveryInfo infoSnapshot = deliveryInfo;
         if (infoSnapshot == null && mOrderId != null) {
             infoSnapshot = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
@@ -1478,8 +1513,30 @@ public class CameraActivity extends AppCompatActivity
     private String serializeImagePaths() {
         return Arrays.toString(mImageFiles.stream()
                 .filter(Objects::nonNull)
+                .filter(file -> file.exists() && file.isFile() && file.length() > 0)
                 .map(File::getAbsolutePath)
                 .toArray(String[]::new));
+    }
+
+    private boolean isImageSetReadyForSubmit() {
+        if (hasPendingImageProcessing()) {
+            Toast.makeText(this, R.string.camera_photo_saving_in_progress, Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        List<File> readyFiles = mImageFiles.stream().filter(Objects::nonNull).collect(Collectors.toList());
+        if (readyFiles.size() < IMAGE_COUNT) {
+            Toast.makeText(this, getString(R.string.take_picture), Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        for (File file : readyFiles) {
+            if (file == null || !file.exists() || !file.isFile() || file.length() <= 0) {
+                FileLog.getInstance().error(TAG, "submit blocked: invalid image file " +
+                        (file == null ? "<null>" : file.getAbsolutePath()));
+                Toast.makeText(this, R.string.camera_photo_saving_in_progress, Toast.LENGTH_SHORT).show();
+                return false;
+            }
+        }
+        return true;
     }
 
     // ---------- Capture feedback ----------
@@ -1517,22 +1574,16 @@ public class CameraActivity extends AppCompatActivity
     }
 
     // ---------- Capture (via CameraService) ----------
-    private void takePicture() {        applyProximityZoom(true);
+    private void takePicture() {
+        applyProximityZoom(true);
         applyDynamicFlashMode();
         final CaptureIntent intentForShot = lastResolvedIntent;
         final long sessionTokenSnapshot = captureSessionToken;
         final Long orderIdSnapshot = mOrderId;
 
-        // --- Play capture feedback ---
         playShutterFeedback();
-        boolean full = true;
-        for (File imageFile : mImageFiles) {
-            if (imageFile == null) {
-                full = false;
-                break;
-            }
-        }
-        if (full) {
+        final int placeholderIndex = findFirstAvailablePhotoSlot();
+        if (placeholderIndex < 0) {
             Toast.makeText(this, getString(R.string.take_picture_full), Toast.LENGTH_SHORT).show();
             if (autoCaptureInProgress) {
                 autoCaptureInProgress = false;
@@ -1547,139 +1598,90 @@ public class CameraActivity extends AppCompatActivity
             return;
         }
 
-        // 1. Show instant thumbnail using previewView.getBitmap()
         Bitmap previewBitmap = previewView.getBitmap();
-        File tempFile = null;
-        int tempIndex = -1;
         if (previewBitmap != null) {
-            // Scale down preview bitmap to avoid memory issues
             int tw = getResources().getDimensionPixelSize(R.dimen.thumbnail_width);
             int th = getResources().getDimensionPixelSize(R.dimen.thumbnail_height);
-            if (tw <= 0)
-                tw = (int) (64 * getResources().getDisplayMetrics().density);
-            if (th <= 0)
-                th = (int) (64 * getResources().getDisplayMetrics().density);
+            if (tw <= 0) tw = (int) (64 * getResources().getDisplayMetrics().density);
+            if (th <= 0) th = (int) (64 * getResources().getDisplayMetrics().density);
             Bitmap scaledPreview = Bitmap.createScaledBitmap(previewBitmap, tw, th, true);
-            try {
-                tempFile = createImageFile();
-                FileOutputStream fos = new FileOutputStream(tempFile);
-                scaledPreview.compress(Bitmap.CompressFormat.JPEG, 60, fos);
-                fos.close();
-                // Find first available index and insert temp file
-                for (int i = 0; i < MAX_PHOTOS; i++) {
-                    if (mImageFiles.get(i) == null) {
-                        tempIndex = i;
-                        break;
-                    }
-                }
-                final File tempFileFinal = tempFile;
-                final int tempIndexFinal = tempIndex;
-                runOnUiThread(() -> {
-                    if (tempIndexFinal >= 0) {
-                        mImageFiles.set(tempIndexFinal, tempFileFinal);
-                        ImageView iv = mImageViews.get(tempIndexFinal);
-                        iv.setImageBitmap(scaledPreview);
-                        iv.setScaleX(0.7f);
-                        iv.setScaleY(0.7f);
-                        iv.setAlpha(0f);
-                        iv.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(200).start();
-                        updateOkButtonState();
-                    }
-                });
-            } catch (IOException e) {
-                FileLog.getInstance().error(TAG, "Temp thumbnail failed", e);
-            }
+            runOnUiThread(() -> {
+                setPendingPhotoSlot(placeholderIndex, true);
+                ImageView iv = mImageViews.get(placeholderIndex);
+                iv.setImageBitmap(scaledPreview);
+                iv.setScaleX(0.7f);
+                iv.setScaleY(0.7f);
+                iv.setAlpha(0f);
+                iv.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(200).start();
+                updateOkButtonState();
+            });
+        } else {
+            setPendingPhotoSlot(placeholderIndex, true);
+            updateOkButtonState();
         }
 
-        // 2. Offload actual image saving to background thread
-        File imageFile;
+        final File imageFile;
         try {
             imageFile = createImageFile();
         } catch (IOException e) {
+            setPendingPhotoSlot(placeholderIndex, false);
+            updateOkButtonState();
             throw new RuntimeException(e);
         }
-        final int placeholderIndex = tempIndex;
-        final File tempFileForReplace = tempFile;
+
         imageCapture.takePicture(ContextCompat.getMainExecutor(this), new ImageCapture.OnImageCapturedCallback() {
             @Override
             public void onCaptureSuccess(@NonNull ImageProxy image) {
                 cameraExecutor.execute(() -> {
                     try {
-                        // Convert ImageProxy to byte[]
                         ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                         byte[] bytes = new byte[buffer.remaining()];
                         buffer.get(bytes);
                         int rotationDegrees = image.getImageInfo().getRotationDegrees();
                         saveImage(bytes, imageFile, rotationDegrees);
-                        // On UI thread, replace the temp thumbnail with the real one
                         runOnUiThread(() -> {
                             if (!isCaptureSessionValid(sessionTokenSnapshot, orderIdSnapshot)) {
                                 try {
-                                    if (placeholderIndex >= 0) {
-                                        File old = mImageFiles.get(placeholderIndex);
-                                        if (old != null && tempFileForReplace != null && old.equals(tempFileForReplace)) {
-                                            mImageFiles.set(placeholderIndex, null);
-                                        }
-                                    }
-                                    if (tempFileForReplace != null && tempFileForReplace.exists()) {
-                                        tempFileForReplace.delete();
-                                    }
                                     if (imageFile.exists()) {
                                         imageFile.delete();
                                     }
                                 } catch (Throwable ignore) {
                                 }
+                                setPendingPhotoSlot(placeholderIndex, false);
+                                removeThumbnail(placeholderIndex, false);
                                 if (autoCaptureInProgress) {
                                     autoCaptureInProgress = false;
                                 }
                                 return;
                             }
-                            if (placeholderIndex >= 0) {
-                                // Remove temp file
-                                File old = mImageFiles.get(placeholderIndex);
-                                if (old != null && old.exists() && tempFileForReplace != null
-                                        && old.equals(tempFileForReplace)) {
-                                    old.delete();
-                                }
-                                mImageFiles.set(placeholderIndex, imageFile);
-                                int tw = getResources().getDimensionPixelSize(R.dimen.thumbnail_width);
-                                int th = getResources().getDimensionPixelSize(R.dimen.thumbnail_height);
-                                if (tw <= 0)
-                                    tw = (int) (64 * getResources().getDisplayMetrics().density);
-                                if (th <= 0)
-                                    th = (int) (64 * getResources().getDisplayMetrics().density);
-                                Bitmap thumb = BitmapUtils.decodeSampledBitmapFromFile(imageFile.getAbsolutePath(), tw,
-                                        th);
-                                ImageView iv = mImageViews.get(placeholderIndex);
-                                iv.setImageBitmap(thumb);
-                                updateOkButtonState();
-                                markCaptureCommitted(intentForShot);
-                                advanceStageForPreview(intentForShot);
-                                if (intentForShot == CaptureIntent.BUILDING) {
-                                    handleBuildingPhotoCaptured(imageFile);
-                                }
-                                if (autoCaptureInProgress) {
-                                    autoCaptureInProgress = false;
-                                }
-                            } else {
-                                // fallback: insert real thumbnail into first available slot
-                                addThumbnail(imageFile, true);
-                                updateOkButtonState();
-                                markCaptureCommitted(intentForShot);
-                                advanceStageForPreview(intentForShot);
-                                if (intentForShot == CaptureIntent.BUILDING) {
-                                    handleBuildingPhotoCaptured(imageFile);
-                                }
-                                if (autoCaptureInProgress) {
-                                    autoCaptureInProgress = false;
-                                }
+
+                            mImageFiles.set(placeholderIndex, imageFile);
+                            setPendingPhotoSlot(placeholderIndex, false);
+
+                            int tw = getResources().getDimensionPixelSize(R.dimen.thumbnail_width);
+                            int th = getResources().getDimensionPixelSize(R.dimen.thumbnail_height);
+                            if (tw <= 0) tw = (int) (64 * getResources().getDisplayMetrics().density);
+                            if (th <= 0) th = (int) (64 * getResources().getDisplayMetrics().density);
+                            Bitmap thumb = BitmapUtils.decodeSampledBitmapFromFile(imageFile.getAbsolutePath(), tw, th);
+                            ImageView iv = mImageViews.get(placeholderIndex);
+                            iv.setImageBitmap(thumb);
+                            updateOkButtonState();
+                            markCaptureCommitted(intentForShot);
+                            advanceStageForPreview(intentForShot);
+                            if (intentForShot == CaptureIntent.BUILDING) {
+                                handleBuildingPhotoCaptured(imageFile);
+                            }
+                            if (autoCaptureInProgress) {
+                                autoCaptureInProgress = false;
                             }
                         });
                     } catch (Exception e) {
                         FileLog.getInstance().error(TAG, "post-save compress failed", e);
-                        runOnUiThread(() -> Toast
-                                .makeText(CameraActivity.this, R.string.picture_save_failed, Toast.LENGTH_SHORT)
-                                .show());
+                        runOnUiThread(() -> {
+                            setPendingPhotoSlot(placeholderIndex, false);
+                            removeThumbnail(placeholderIndex, false);
+                            Toast.makeText(CameraActivity.this, R.string.picture_save_failed, Toast.LENGTH_SHORT).show();
+                        });
                         if (autoCaptureInProgress) {
                             autoCaptureInProgress = false;
                         }
@@ -1691,9 +1693,13 @@ public class CameraActivity extends AppCompatActivity
 
             @Override
             public void onError(@NonNull ImageCaptureException exception) {
-                runOnUiThread(() -> Toast
-                        .makeText(CameraActivity.this, getString(R.string.camera_capture_failed_format, exception.getMessage()), Toast.LENGTH_SHORT)
-                        .show());
+                runOnUiThread(() -> {
+                    setPendingPhotoSlot(placeholderIndex, false);
+                    removeThumbnail(placeholderIndex, false);
+                    Toast.makeText(CameraActivity.this,
+                            getString(R.string.camera_capture_failed_format, exception.getMessage()),
+                            Toast.LENGTH_SHORT).show();
+                });
                 if (autoCaptureInProgress) {
                     autoCaptureInProgress = false;
                 }

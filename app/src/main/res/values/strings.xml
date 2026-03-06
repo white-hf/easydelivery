@@ -376,6 +376,12 @@
     <string name="delivered_packages_reupload_title">Re-upload package</string>
     <string name="delivered_packages_reupload_message">Re-upload this package?</string>
     <string name="delivered_packages_reupload_queued">Package queued for upload</string>
+    <string name="delivered_packages_date_format">Date: %1$s</string>
+    <string name="delivered_packages_filter_label">Status</string>
+    <string name="delivered_packages_filter_all">All</string>
+    <string name="delivered_packages_filter_pending">Waiting upload</string>
+    <string name="delivered_packages_filter_uploaded">Uploaded</string>
+    <string name="delivered_packages_filter_failed">Failed</string>
     <string name="full_image_load_failed_format">Failed to load image: %1$s</string>
     <string name="full_image_invalid_path">Image path is invalid</string>
     <string name="pending_save_failed">Failed to save package data. Please try again later.</string>
@@ -407,5 +413,6 @@
     <string name="camera_retry_success">Retry success</string>
     <string name="camera_retry_failed_format">Retry failed: %1$s</string>
     <string name="camera_capture_failed_format">Capture failed: %1$s</string>
+    <string name="camera_photo_saving_in_progress">Photo is still saving, please wait a moment</string>
     <string name="map_collapsed_hint_format">%1$s - %2$s</string>
 </resources>

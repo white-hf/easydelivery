@@ -299,23 +299,27 @@ public class PendingPackagesMgr implements Subscriber {
     }
 
     private boolean isUploadSuccess(PackageEntity deliveryInfo) {
-        // Guard: if all image files are missing (possibly cleaned after a prior
-        // success), avoid sending an invalid request
+        // Guard: every image path recorded for this package must exist before upload.
+        // This avoids transient 400 errors when capture/save and upload overlap.
         if (deliveryInfo.imagePath != null && !deliveryInfo.imagePath.trim().isEmpty()) {
             List<String> paths = parseImagePathList(deliveryInfo.imagePath);
-            boolean anyExists = false;
+            if (paths.isEmpty()) {
+                FileLog.getInstance().info("[PendingMgr] skip upload: empty image path list for tracking=" + deliveryInfo.trackingId);
+                return false;
+            }
+            boolean allExists = true;
             for (String p : paths) {
                 if (p == null || p.isEmpty())
                     continue;
                 File f = p.startsWith("file://") ? new File(p.substring("file://".length())) : new File(p);
-                if (f.exists() && f.isFile() && f.length() > 0) {
-                    anyExists = true;
-                    break;
+                if (!f.exists() || !f.isFile() || f.length() <= 0) {
+                    allExists = false;
+                    FileLog.getInstance().warning(
+                            "[PendingMgr] wait upload: image not ready tracking=" + deliveryInfo.trackingId + ", path=" + p);
                 }
             }
-            if (!anyExists) {
-                FileLog.getInstance().info(
-                        "[PendingMgr] skip upload: no existing image files for tracking=" + deliveryInfo.trackingId);
+            if (!allExists) {
+                FileLog.getInstance().info("[PendingMgr] skip upload: image set not ready for tracking=" + deliveryInfo.trackingId);
                 return false;
             }
         }

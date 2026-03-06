@@ -495,10 +495,18 @@ public class MapInnerFragment extends Fragment
         if (mini != null) {
             ImageButton btnMyLoc = mini.findViewById(R.id.btn_my_loc);
             ImageButton btnMapType = mini.findViewById(R.id.btn_map_type);
+            ImageButton btnSwitchView = mini.findViewById(R.id.btn_switch_view);
             if (btnMyLoc != null)
                 btnMyLoc.setOnClickListener(v -> centerOnMyLocation(false));
             if (btnMapType != null)
                 btnMapType.setOnClickListener(v -> toggleMapType(btnMapType));
+            if (btnSwitchView != null) {
+                btnSwitchView.setOnClickListener(v -> {
+                    if (getParentFragment() instanceof MapHostFragment) {
+                        ((MapHostFragment) getParentFragment()).switchToListView();
+                    }
+                });
+            }
         }
 
         btnFullscreen = mini.findViewById(R.id.btn_fullscreen);

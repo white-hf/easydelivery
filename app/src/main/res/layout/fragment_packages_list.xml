@@ -55,18 +55,39 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fab_back_to_map"
+    <LinearLayout
+        android:id="@+id/list_side_bar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:contentDescription="@string/scan_back_to_map"
-        app:srcCompat="@android:drawable/ic_menu_mapmode"
-        app:tint="@android:color/white"
-        app:backgroundTint="?attr/colorPrimary"
-        app:layout_constraintBottom_toBottomOf="parent"
+        android:orientation="vertical"
+        android:padding="6dp"
+        android:background="@drawable/bg_minibar_panel"
+        android:alpha="0.95"
+        android:elevation="6dp"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginEnd="20dp"
-        android:layout_marginBottom="20dp"/>
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:layout_marginEnd="8dp">
+
+        <Space
+            android:layout_width="1dp"
+            android:layout_height="8dp" />
+
+        <ImageButton
+            android:id="@+id/btn_back_to_map_side"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/scan_back_to_map"
+            android:src="@android:drawable/ic_menu_mapmode"
+            android:tint="@android:color/white" />
+
+        <Space
+            android:layout_width="1dp"
+            android:layout_height="8dp" />
+
+    </LinearLayout>
 
     <View
         android:id="@+id/bottom_spacer"

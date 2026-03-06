@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -25,7 +26,6 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.map.MapHostFragment;
@@ -83,7 +83,7 @@ public class PackageListFragment extends Fragment {
     private ProgressBar progressBar;
     private TextView emptyView;
     private SearchView searchView;
-    private FloatingActionButton fabBackToMap;
+    private ImageButton btnBackToMapSide;
 
     private ParcelListAdapter adapter;
     private MapViewModel mapViewModel;
@@ -110,7 +110,7 @@ public class PackageListFragment extends Fragment {
         progressBar = view.findViewById(R.id.progress_bar);
         emptyView = view.findViewById(R.id.empty_view);
         searchView = view.findViewById(R.id.search_view);
-        fabBackToMap = view.findViewById(R.id.fab_back_to_map);
+        btnBackToMapSide = view.findViewById(R.id.btn_back_to_map_side);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         adapter = new ParcelListAdapter(requireContext(), this::onItemClicked);
@@ -148,9 +148,9 @@ public class PackageListFragment extends Fragment {
             });
         }
 
-        // 右下角返回地图
-        if (fabBackToMap != null) {
-            fabBackToMap.setOnClickListener(v -> {
+        // 右侧栏返回地图
+        if (btnBackToMapSide != null) {
+            btnBackToMapSide.setOnClickListener(v -> {
                 if (getParentFragment() instanceof MapHostFragment) {
                     ((MapHostFragment) getParentFragment()).switchToMap();
                 }
@@ -173,15 +173,7 @@ public class PackageListFragment extends Fragment {
             // 获取系统导航栏的高度
             int sysBottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
 
-            // 获取您应用底部 FAB 的总高度（高度 + 底部外边距）
-            int navExtra = 0;
-            View fab = requireActivity().findViewById(R.id.fab_back_to_map);
-            if (fab != null) {
-                navExtra = fab.getHeight() + ((ViewGroup.MarginLayoutParams) fab.getLayoutParams()).bottomMargin;
-            }
-
-            // 最终的底部内边距取系统导航栏和 FAB 区域的最大值
-            int desiredBottom = Math.max(sysBottom, navExtra);
+            int desiredBottom = sysBottom;
 
             // 设置所有方向的内边距，这里为列表内容左右和顶部留出 8dp 间距
             v.setPadding(dp2px(8), dp2px(8), dp2px(8), desiredBottom);
