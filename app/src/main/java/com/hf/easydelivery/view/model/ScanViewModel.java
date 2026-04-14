@@ -29,6 +29,7 @@ import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.dao.ScanRecord;
 import com.hf.easydelivery.dao.ScanRecordDao;
 import com.hf.easydelivery.common.Utils;
+import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -599,6 +600,9 @@ public class ScanViewModel extends ViewModel implements Subscriber {
                 }
                 if (notifyResultToast) {
                     toastMessage.postValue(new Event<>(getString(R.string.scan_login_expired)));
+                }
+                if (e instanceof UnAuthorizedException) {
+                    resourceMgr.requestLoginRedirect();
                 }
                 if (publishUiState) {
                     submissionState.postValue(SubmissionState.FAILED);
