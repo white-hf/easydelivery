@@ -1,0 +1,16 @@
+.gradle/
+build/
+out/
+local.properties
+
+.idea/workspace.xml
+.idea/shelf/
+.idea/AndroidProjectSystem.xml
+.idea/assetWizardSettings.xml
+.idea/intellij-javadocs-4.0.1.xml
+.idea/runConfigurations.xml
+
+app/uniuniservice/build/
+app/log0112.txt
+
+.DS_Store
