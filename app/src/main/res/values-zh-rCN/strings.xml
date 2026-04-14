@@ -72,7 +72,7 @@
     <string name="txt_delivered_packages">已派送包裹</string>
     <string name="txt_company">      由 3324959 NS LTD. 开发。</string>
     <string name="txt_slogan">易派送，快乐派送在哈利法克斯</string>
-    <string name="login_copyright">3324959 NS LTD. 版权所有。v2.6.9</string>
+    <string name="login_copyright">3324959 NS LTD. 版权所有。v2.8</string>
     <string name="str_courierservice_failure">CourierService 创建失败</string>
     <string name="str_package_id">包裹号：—</string>
     <string name="str_scan_status">已扫描 0 / 0</string>
@@ -360,6 +360,7 @@
     <string name="no_map_app_found">未找到可用的地图应用</string>
     <string name="fail_reason_title">请选择失败原因</string>
     <string name="fail_reason_require_photo">请先拍摄至少两张照片再提交失败原因</string>
+    <string name="camera_fail_reason_require_photo_format">请先拍摄至少 %1$d 张照片再提交失败原因</string>
     <string name="fail_submit_success">失败记录已保存并排队上传</string>
     <string name="my_work_title">我的工作</string>
     <string name="my_work_month_default">--</string>
@@ -431,5 +432,10 @@
     <string name="camera_retry_success">重试成功</string>
     <string name="camera_retry_failed_format">重试失败：%1$s</string>
     <string name="camera_capture_failed_format">拍摄失败：%1$s</string>
+    <string name="camera_take_picture_min_format">请至少拍摄 %1$d 张照片。</string>
+    <string name="camera_auto_done_countdown">%1$d 秒后自动完成，点击停止</string>
+    <string name="camera_auto_done_title">即将自动完成</string>
+    <string name="camera_auto_done_title_with_seconds">%1$d 秒后自动完成</string>
+    <string name="camera_auto_done_subtitle">点击这里继续手动处理</string>
     <string name="map_collapsed_hint_format">%1$s - %2$s</string>
 </resources>

@@ -78,7 +78,7 @@
     <string name="txt_delivered_packages">Delivered Packages</string>
     <string name="txt_company">      Developed by 3324959 NS LTD.</string>
     <string name="txt_slogan">Easy delivery, happy working in Halifax</string>
-    <string name="login_copyright">Copyright 3324959 NS LTD. All rights reserved. v2.6.9</string>
+    <string name="login_copyright">Copyright 3324959 NS LTD. All rights reserved. v2.8</string>
     <string name="str_courierservice_failure">CourierService creation failed</string>
     <string name="str_package_id">Package ID: —</string>
     <string name="str_scan_status">Scanned 0 / 0</string>
@@ -336,6 +336,7 @@
     <string name="no_map_app_found">No map app found</string>
     <string name="fail_reason_title">Select failure reason</string>
     <string name="fail_reason_require_photo">Please take at least two photos before submitting a failure reason</string>
+    <string name="camera_fail_reason_require_photo_format">Please take at least %1$d photos before submitting a failure reason</string>
     <string name="fail_submit_success">Failure record saved and queued for upload</string>
     <string name="my_work_title">My work</string>
     <string name="my_work_month_default">--</string>
@@ -414,5 +415,10 @@
     <string name="camera_retry_failed_format">Retry failed: %1$s</string>
     <string name="camera_capture_failed_format">Capture failed: %1$s</string>
     <string name="camera_photo_saving_in_progress">Photo is still saving, please wait a moment</string>
+    <string name="camera_take_picture_min_format">Take at least %1$d photos.</string>
+    <string name="camera_auto_done_countdown">Auto done in %1$ds · Tap to stop</string>
+    <string name="camera_auto_done_title">Auto completing delivery</string>
+    <string name="camera_auto_done_title_with_seconds">Auto completing in %1$ds</string>
+    <string name="camera_auto_done_subtitle">Tap here to keep editing manually</string>
     <string name="map_collapsed_hint_format">%1$s - %2$s</string>
 </resources>

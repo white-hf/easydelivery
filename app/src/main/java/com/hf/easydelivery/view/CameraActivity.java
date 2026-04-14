@@ -11,7 +11,9 @@ import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.location.Location;
+import android.os.Looper;
 import android.os.SystemClock;
 
 import androidx.camera.core.Camera;
@@ -129,10 +131,15 @@ public class CameraActivity extends AppCompatActivity
     public static final int IMAGE_COUNT = 2;
     private static final int MAX_PHOTOS = 3;
     private static final int REQUEST_CODE_PICK_IMAGE = 2001;
+    private static final long AUTO_DONE_DELAY_MS = 5000L;
+    private static final long AUTO_DONE_DELAY_MULTI_PACKAGE_MS = 1000L;
+    private static final long AUTO_DONE_TICK_MS = 250L;
 
     // ----------- UI -----------
     private CardView infoBar;
     private TextView tvRouteNumber, tvOrderSn, tvCustomerName, tvUnitNumber, tvAddress;
+    private CardView autoDoneBanner;
+    private TextView autoDoneCountView, autoDoneTitleView, autoDoneSubtitleView;
 
     private LinearLayout thumbnailContainer;
     private final List<File> mImageFiles = new ArrayList<>();
@@ -144,6 +151,32 @@ public class CameraActivity extends AppCompatActivity
     private ImageButton captureButton, galleryButton, retakeButton;
 
     private MaterialButton smsButton, phoneButton, failButton, okButton;
+    private final Handler autoDoneHandler = new Handler(Looper.getMainLooper());
+    private boolean autoDoneCountdownActive = false;
+    private long autoDoneDeadlineMillis = 0L;
+    private boolean autoDoneDismissedByUser = false;
+    private final Runnable autoDoneRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!autoDoneCountdownActive) {
+                return;
+            }
+            if (!isReadyForCompletion()) {
+                stopAutoDoneCountdown(false);
+                return;
+            }
+            long remainingMs = autoDoneDeadlineMillis - SystemClock.elapsedRealtime();
+            if (remainingMs <= 0L) {
+                autoDoneCountdownActive = false;
+                autoDoneDeadlineMillis = 0L;
+                updateOkButtonState();
+                performDoneSubmission();
+                return;
+            }
+            updateAutoDoneButtonLabel(remainingMs);
+            autoDoneHandler.postDelayed(this, AUTO_DONE_TICK_MS);
+        }
+    };
 
     private FrameLayout cameraPreviewLayout;
     private PreviewView previewView;
@@ -247,6 +280,16 @@ public class CameraActivity extends AppCompatActivity
         tvCustomerName = findViewById(R.id.tv_customer_name);
         tvUnitNumber = findViewById(R.id.tv_unit_number);
         tvAddress = findViewById(R.id.tv_address);
+        autoDoneBanner = findViewById(R.id.auto_done_banner);
+        autoDoneCountView = findViewById(R.id.auto_done_count);
+        autoDoneTitleView = findViewById(R.id.auto_done_title);
+        autoDoneSubtitleView = findViewById(R.id.auto_done_subtitle);
+        if (autoDoneBanner != null) {
+            autoDoneBanner.setOnClickListener(v -> {
+                stopAutoDoneCountdown(true);
+                updateOkButtonState();
+            });
+        }
 
         deliveryInfo = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
         if (deliveryInfo != null) {
@@ -314,9 +357,18 @@ public class CameraActivity extends AppCompatActivity
         galleryButton = findViewById(R.id.gallery_button);
         retakeButton = findViewById(R.id.retake_button);
 
-        captureButton.setOnClickListener(v -> takePicture());
-        galleryButton.setOnClickListener(v -> openGallery());
-        retakeButton.setOnClickListener(v -> removeLastThumbnail());
+        captureButton.setOnClickListener(v -> {
+            dismissAutoDoneForManualInteraction();
+            takePicture();
+        });
+        galleryButton.setOnClickListener(v -> {
+            dismissAutoDoneForManualInteraction();
+            openGallery();
+        });
+        retakeButton.setOnClickListener(v -> {
+            dismissAutoDoneForManualInteraction();
+            removeLastThumbnail();
+        });
 
         // 5) Bottom action bar
         smsButton = findViewById(R.id.sms_button);
@@ -324,15 +376,20 @@ public class CameraActivity extends AppCompatActivity
         failButton = findViewById(R.id.fail_button);
         okButton = findViewById(R.id.ok_button);
 
-        smsButton.setOnClickListener(v -> showSmsBottomSheet());
-        phoneButton.setOnClickListener(v -> makeCall());
-        failButton.setOnClickListener(v -> showFailOptionsDialog());
+        smsButton.setOnClickListener(v -> {
+            dismissAutoDoneForManualInteraction();
+            showSmsBottomSheet();
+        });
+        phoneButton.setOnClickListener(v -> {
+            dismissAutoDoneForManualInteraction();
+            makeCall();
+        });
+        failButton.setOnClickListener(v -> {
+            dismissAutoDoneForManualInteraction();
+            showFailOptionsDialog();
+        });
         okButton.setOnClickListener(v -> {
-            if (!hasEnoughPhotos(null)) {
-                return;
-            }
-            warnIfFarFromTarget();
-            submitPackage(0, null);
+            performDoneSubmission();
         });
         updateOkButtonState();
 
@@ -385,7 +442,10 @@ public class CameraActivity extends AppCompatActivity
             }
         }
         if (closeButton != null) {
-            closeButton.setOnClickListener(v -> finish());
+                    closeButton.setOnClickListener(v -> {
+                        dismissAutoDoneForManualInteraction();
+                        finish();
+                    });
         } else {        }
 
         // 9) Optional cancel button handling
@@ -556,6 +616,7 @@ public class CameraActivity extends AppCompatActivity
     protected void onPause() {
         exitImmersiveFullscreen();
         showHostChrome();
+        stopAutoDoneCountdown(false);
 
         super.onPause();
         if (sensorManager != null)
@@ -582,6 +643,7 @@ public class CameraActivity extends AppCompatActivity
 
     @Override
     protected void onDestroy() {        showHostChrome();
+        stopAutoDoneCountdown(false);
         stopLocationTracking();
         if (!cameraExecutor.isShutdown()) {
             cameraExecutor.shutdown();
@@ -754,11 +816,22 @@ public class CameraActivity extends AppCompatActivity
     }
 
     private void updateOkButtonState() {
-        int count = (int) mImageFiles.stream().filter(Objects::nonNull).count();
+        int count = getCapturedPhotoCount();
+        boolean enabled = count >= getRequiredPhotoCount() && !hasPendingImageProcessing();
         if (okButton != null) {
-            boolean enabled = count >= IMAGE_COUNT && !hasPendingImageProcessing();
             okButton.setEnabled(enabled);
             okButton.setAlpha(enabled ? 1f : 0.4f);
+            okButton.setText(R.string.ok_button);
+        }
+
+        if (enabled) {
+            if (!autoDoneDismissedByUser && !autoDoneCountdownActive) {
+                startAutoDoneCountdown();
+            } else if (autoDoneCountdownActive) {
+                updateAutoDoneButtonLabel(autoDoneDeadlineMillis - SystemClock.elapsedRealtime());
+            }
+        } else {
+            stopAutoDoneCountdown(false);
         }
     }
 
@@ -1116,6 +1189,7 @@ public class CameraActivity extends AppCompatActivity
             Uri uri = data.getData();
             if (uri != null) {
                 try {
+                    resetAutoDoneForPhotoSetChange();
                     File file = createImageFile();
                     Bitmap bitmap = BitmapFactory.decodeStream(getContentResolver().openInputStream(uri));
                     bitmap = BitmapUtils.compressBitmapToTarget(bitmap, 120 * 1024);
@@ -1135,6 +1209,7 @@ public class CameraActivity extends AppCompatActivity
     private void removeLastThumbnail() {
         for (int i = MAX_PHOTOS - 1; i >= 0; i--) {
             if (mImageFiles.get(i) != null) {
+                resetAutoDoneForPhotoSetChange();
                 final int index = i;
                 ImageView iv = mImageViews.get(i);
                 iv.animate().scaleX(0.7f).scaleY(0.7f).alpha(0f).setDuration(200).withEndAction(() -> {
@@ -1150,6 +1225,7 @@ public class CameraActivity extends AppCompatActivity
     }
 
     private void clearThumbnails() {
+        resetAutoDoneForPhotoSetChange();
         for (int i = 0; i < MAX_PHOTOS; i++)
             removeThumbnail(i, false);
         apartmentAutoFilePaths.clear();
@@ -1225,7 +1301,10 @@ public class CameraActivity extends AppCompatActivity
         imageView.setBackgroundResource(R.drawable.bg_thumb_image_rounded);
         imageView.setClipToOutline(true);
         imageView.setTag(index);
-        imageView.setOnClickListener(v -> showFullImage((int) v.getTag()));
+        imageView.setOnClickListener(v -> {
+            dismissAutoDoneForManualInteraction();
+            showFullImage((int) v.getTag());
+        });
 
         cardView.addView(imageView);
         mImageViews.add(imageView);
@@ -1273,6 +1352,7 @@ public class CameraActivity extends AppCompatActivity
     }
 
     private void addThumbnail(final File imageFile, boolean withAnim) {
+        resetAutoDoneForPhotoSetChange();
         for (int i = 0; i < MAX_PHOTOS; i++) {
             if (mImageFiles.get(i) == null && !pendingImageSlots[i]) {
                 mImageFiles.set(i, imageFile);
@@ -1456,10 +1536,11 @@ public class CameraActivity extends AppCompatActivity
     }
 
     private boolean hasEnoughPhotos(@Nullable Integer overrideMessageRes) {
-        int count = (int) mImageFiles.stream().filter(Objects::nonNull).count();
-        if (count < IMAGE_COUNT) {
-            int messageRes = overrideMessageRes != null ? overrideMessageRes : R.string.take_picture;
-            Toast.makeText(this, getString(messageRes), Toast.LENGTH_SHORT).show();
+        int count = getCapturedPhotoCount();
+        int required = getRequiredPhotoCount();
+        if (count < required) {
+            Toast.makeText(this, buildInsufficientPhotoMessage(overrideMessageRes, required), Toast.LENGTH_SHORT)
+                    .show();
             return false;
         }
         return true;
@@ -1524,8 +1605,9 @@ public class CameraActivity extends AppCompatActivity
             return false;
         }
         List<File> readyFiles = mImageFiles.stream().filter(Objects::nonNull).collect(Collectors.toList());
-        if (readyFiles.size() < IMAGE_COUNT) {
-            Toast.makeText(this, getString(R.string.take_picture), Toast.LENGTH_SHORT).show();
+        if (readyFiles.size() < getRequiredPhotoCount()) {
+            Toast.makeText(this, buildInsufficientPhotoMessage(null, getRequiredPhotoCount()), Toast.LENGTH_SHORT)
+                    .show();
             return false;
         }
         for (File file : readyFiles) {
@@ -1818,25 +1900,7 @@ public class CameraActivity extends AppCompatActivity
 
     private void findAndShowNextPackages(DeliveryInfo currentInfo) {
         // Use PowerSaverSelector: same-address first + distance padding (+3), triggered after delivery
-        if (currentInfo == null) {
-            finish();
-            return;
-        }
-        DeliveryinfoMgr mgr = ResourceMgr.getInstance().getDeliveryinfoMgr();
-        if (mgr == null) {
-            finish();
-            return;
-        }
-        PowerSaverSelector.Params params = new PowerSaverSelector.Params();
-        params.extraNearCount = 3; // "same-address count + 3"
-        params.nearRadiusMeters = 150f; // Soft radius for non-same-address items; <= 0 disables
-
-        Location ref = buildLocationFromPackage(currentInfo);
-        if (ref == null) {
-            ref = lastKnownLocation;
-        }
-
-        List<DeliveryInfo> next = new PowerSaverSelector().selectNext(currentInfo, ref, mgr, params);
+        List<DeliveryInfo> next = computeNextPackageCandidates(currentInfo);
         int count = next == null ? 0 : next.size();
         if (count == 0) {
             try {            } catch (Throwable ignore) {
@@ -1985,6 +2049,7 @@ public class CameraActivity extends AppCompatActivity
         File file = match.file;
         if (file == null || !file.exists())
             return;
+        resetAutoDoneForPhotoSetChange();
         activeAutoApartmentMatch = match;
         apartmentAutoFilePaths.add(file.getAbsolutePath());
 
@@ -2041,6 +2106,126 @@ public class CameraActivity extends AppCompatActivity
                 ? apartmentPhotoService.suggestManualBase(deliveryInfo.getAddress())
                 : "";
         showApartmentConfirmDialog(imageFile, suggested, null, true);
+    }
+
+    private int getCapturedPhotoCount() {
+        return (int) mImageFiles.stream().filter(Objects::nonNull).count();
+    }
+
+    private int getRequiredPhotoCount() {
+        return isApartmentPhotoFlow() ? MAX_PHOTOS : IMAGE_COUNT;
+    }
+
+    private boolean isApartmentPhotoFlow() {
+        return apartmentKeyData != null && apartmentKeyData.isApartment;
+    }
+
+    private boolean isReadyForCompletion() {
+        return !hasPendingImageProcessing() && getCapturedPhotoCount() >= getRequiredPhotoCount();
+    }
+
+    private CharSequence buildInsufficientPhotoMessage(@Nullable Integer overrideMessageRes, int requiredCount) {
+        if (overrideMessageRes != null && overrideMessageRes == R.string.fail_reason_require_photo) {
+            return getString(R.string.camera_fail_reason_require_photo_format, requiredCount);
+        }
+        return getString(R.string.camera_take_picture_min_format, requiredCount);
+    }
+
+    private void performDoneSubmission() {
+        stopAutoDoneCountdown(false);
+        if (!hasEnoughPhotos(null)) {
+            return;
+        }
+        warnIfFarFromTarget();
+        submitPackage(0, null);
+    }
+
+    private void startAutoDoneCountdown() {
+        if (!isReadyForCompletion() || autoDoneDismissedByUser) {
+            return;
+        }
+        long delayMs = getAutoDoneDelayMs();
+        autoDoneHandler.removeCallbacks(autoDoneRunnable);
+        autoDoneCountdownActive = true;
+        autoDoneDeadlineMillis = SystemClock.elapsedRealtime() + delayMs;
+        updateAutoDoneButtonLabel(delayMs);
+        autoDoneHandler.post(autoDoneRunnable);
+    }
+
+    private void stopAutoDoneCountdown(boolean dismissedByUser) {
+        autoDoneHandler.removeCallbacks(autoDoneRunnable);
+        autoDoneCountdownActive = false;
+        autoDoneDeadlineMillis = 0L;
+        if (dismissedByUser) {
+            autoDoneDismissedByUser = true;
+        }
+        if (autoDoneBanner != null) {
+            autoDoneBanner.setVisibility(View.GONE);
+        }
+    }
+
+    private void dismissAutoDoneForManualInteraction() {
+        if (autoDoneCountdownActive) {
+            stopAutoDoneCountdown(true);
+            updateOkButtonState();
+        }
+    }
+
+    private void resetAutoDoneForPhotoSetChange() {
+        autoDoneHandler.removeCallbacks(autoDoneRunnable);
+        autoDoneCountdownActive = false;
+        autoDoneDeadlineMillis = 0L;
+        autoDoneDismissedByUser = false;
+        if (autoDoneBanner != null) {
+            autoDoneBanner.setVisibility(View.GONE);
+        }
+    }
+
+    private void updateAutoDoneButtonLabel(long remainingMs) {
+        if (autoDoneBanner == null || autoDoneCountView == null || autoDoneTitleView == null || autoDoneSubtitleView == null) {
+            return;
+        }
+        long safeRemainingMs = Math.max(0L, remainingMs);
+        long seconds = (safeRemainingMs + 999L) / 1000L;
+        autoDoneBanner.setVisibility(View.VISIBLE);
+        autoDoneCountView.setText(String.valueOf(seconds));
+        autoDoneTitleView.setText(getString(R.string.camera_auto_done_title_with_seconds, seconds));
+        autoDoneSubtitleView.setText(R.string.camera_auto_done_subtitle);
+    }
+
+    private long getAutoDoneDelayMs() {
+        DeliveryInfo currentInfo = deliveryInfo;
+        if (currentInfo == null && mOrderId != null) {
+            currentInfo = ResourceMgr.getInstance().getDeliveryinfoMgr().get(mOrderId);
+            deliveryInfo = currentInfo;
+        }
+        return hasNextPackageCandidates(currentInfo)
+                ? AUTO_DONE_DELAY_MULTI_PACKAGE_MS
+                : AUTO_DONE_DELAY_MS;
+    }
+
+    private boolean hasNextPackageCandidates(@Nullable DeliveryInfo currentInfo) {
+        return !computeNextPackageCandidates(currentInfo).isEmpty();
+    }
+
+    @NonNull
+    private List<DeliveryInfo> computeNextPackageCandidates(@Nullable DeliveryInfo currentInfo) {
+        if (currentInfo == null) {
+            return Collections.emptyList();
+        }
+        DeliveryinfoMgr mgr = ResourceMgr.getInstance().getDeliveryinfoMgr();
+        if (mgr == null) {
+            return Collections.emptyList();
+        }
+        PowerSaverSelector.Params params = new PowerSaverSelector.Params();
+        params.extraNearCount = 3;
+        params.nearRadiusMeters = 150f;
+
+        Location ref = buildLocationFromPackage(currentInfo);
+        if (ref == null) {
+            ref = lastKnownLocation;
+        }
+        return new PowerSaverSelector().selectNext(currentInfo, ref, mgr, params);
     }
 
     private void showApartmentConfirmDialog(File imageFile,
