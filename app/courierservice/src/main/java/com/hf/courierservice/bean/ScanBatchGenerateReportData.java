@@ -12,7 +12,7 @@ public class ScanBatchGenerateReportData {
     private int unscanned_parcels_count;
     private List<ParcelInfo> unscanned_parcels;
     private int returned_parcels_count;
-    private List<ParcelInfo> returned_parcels;
+    private List<String> returned_parcels;
 
     public String getScan_time() {
         return scan_time;
@@ -56,10 +56,10 @@ public class ScanBatchGenerateReportData {
         this.returned_parcels_count = returned_parcels_count;
     }
 
-    public List<ParcelInfo> getReturned_parcels() {
+    public List<String> getReturned_parcels() {
         return returned_parcels;
     }
-    public void setReturned_parcels(List<ParcelInfo> returned_parcels) {
+    public void setReturned_parcels(List<String> returned_parcels) {
         this.returned_parcels = returned_parcels;
     }
 

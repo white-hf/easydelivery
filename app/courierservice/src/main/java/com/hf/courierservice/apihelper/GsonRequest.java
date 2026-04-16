@@ -16,6 +16,7 @@ import java.io.UnsupportedEncodingException;
 
 
 public class GsonRequest<T> extends JsonRequest<T> {
+    private static final String TAG = "GsonRequest";
 
     private final Response.Listener<T> mListener;
 
@@ -59,6 +60,7 @@ public class GsonRequest<T> extends JsonRequest<T> {
                 return Response.success(r, entry);
             }catch (JsonSyntaxException e)
             {
+                FileLog.e(TAG, "JSON parse failed for response: " + jsonString, e);
                 Exception je = new Exception(jsonString);
                 ErrResponse er = new ErrResponse(je);
                 return Response.error(er);
