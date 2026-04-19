@@ -1,6 +1,9 @@
 package com.hf.easydelivery;
 
 import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 
@@ -25,27 +28,31 @@ public class ExampleUnitTest {
     @Test
     public void testUtils()
     {
-        String address1 = "1001-67 Kings Wharf Pl, Dartmouth, NS B2Y 4R9";
-        String address2 = "67 Kings Wharf Pl, Dartmouth, NS B2Y 4R9";
-        String address3 = "42 blr lake road, darmt, NS B3A 3Y1";
-        String address4 = "117 Richmond St 409 DARTMOUTH NS";
-        String address5 = "301 - 101 Ochterloney Street Dartmouth NS";
-        String address6 = "9B3B 2J7"; // Example where apartment number is invalid due to letter following it
+        Utils.AddressInfo apartmentHyphen = extractApartmentAndStreetNumber("1001-67 Kings Wharf Pl, Dartmouth, NS B2Y 4R9");
+        Utils.AddressInfo plainHouse = extractApartmentAndStreetNumber("98 King St, Dartmouth, NS, CA, B2Y 2S1");
+        Utils.AddressInfo trailingUnit = extractApartmentAndStreetNumber("117 Richmond St 409 DARTMOUTH NS");
+        Utils.AddressInfo spacedPostalHouse = extractApartmentAndStreetNumber("10 TRINAH COURT, HALIFAX, NS, CA, B2W 6J7");
+        Utils.AddressInfo malformedHyphenHouse = extractApartmentAndStreetNumber("Street - 49 Loggen Rd Middle Sackville NS");
 
-        Utils.AddressInfo addressInfo1 = extractApartmentAndStreetNumber(address1);
-        Utils.AddressInfo addressInfo2 = extractApartmentAndStreetNumber(address2);
-        Utils.AddressInfo addressInfo3 = extractApartmentAndStreetNumber(address3);
-        Utils.AddressInfo addressInfo4 = extractApartmentAndStreetNumber(address4);
-        Utils.AddressInfo addressInfo5 = extractApartmentAndStreetNumber(address5);
-        Utils.AddressInfo addressInfo6 = extractApartmentAndStreetNumber(address6);
+        assertEquals("1001", apartmentHyphen.getApartmentNumber());
+        assertEquals("67", apartmentHyphen.getStreetNumber());
+        assertTrue(apartmentHyphen.hasConfidentUnit());
 
-        System.out.println("Address 1 - 公寓单元号: " + addressInfo1.getApartmentNumber() + ", 街道号: " + addressInfo1.getStreetNumber());
-        System.out.println("Address 2 - 公寓单元号: " + addressInfo2.getApartmentNumber() + ", 街道号: " + addressInfo2.getStreetNumber());
-        System.out.println("Address 3 - 公寓单元号: " + addressInfo3.getApartmentNumber() + ", 街道号: " + addressInfo3.getStreetNumber());
-        System.out.println("Address 4 - 公寓单元号: " + addressInfo4.getApartmentNumber() + ", 街道号: " + addressInfo4.getStreetNumber());
-        System.out.println("Address 5 - 公寓单元号: " + addressInfo5.getApartmentNumber() + ", 街道号: " + addressInfo5.getStreetNumber());
-        System.out.println("Address 6 - 公寓单元号: " + addressInfo6.getApartmentNumber() + ", 街道号: " + addressInfo6.getStreetNumber());
+        assertEquals("", plainHouse.getApartmentNumber());
+        assertEquals("98", plainHouse.getStreetNumber());
+        assertFalse(plainHouse.hasConfidentUnit());
 
+        assertEquals("409", trailingUnit.getApartmentNumber());
+        assertEquals("117", trailingUnit.getStreetNumber());
+        assertTrue(trailingUnit.hasConfidentUnit());
+
+        assertEquals("", spacedPostalHouse.getApartmentNumber());
+        assertEquals("10", spacedPostalHouse.getStreetNumber());
+        assertFalse(spacedPostalHouse.hasConfidentUnit());
+
+        assertEquals("", malformedHyphenHouse.getApartmentNumber());
+        assertEquals("49", malformedHyphenHouse.getStreetNumber());
+        assertFalse(malformedHyphenHouse.hasConfidentUnit());
     }
     private Utils.AddressInfo extractApartmentAndStreetNumber(String address) {
         return Utils.extractApartmentAndStreetNumber(address);

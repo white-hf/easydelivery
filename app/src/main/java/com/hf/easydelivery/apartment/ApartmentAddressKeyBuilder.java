@@ -37,7 +37,7 @@ public final class ApartmentAddressKeyBuilder {
         }
         String address = info.getAddress();
         Utils.AddressInfo parsed = Utils.extractApartmentAndStreetNumber(address);
-        String unit = safe(parsed.getApartmentNumber());
+        String unit = parsed.hasConfidentUnit() ? safe(parsed.getApartmentNumber()) : "";
         if (TextUtils.isEmpty(unit)) {
             unit = safe(info.getUnitNumber());
         }

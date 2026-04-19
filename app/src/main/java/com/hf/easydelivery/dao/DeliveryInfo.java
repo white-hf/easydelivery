@@ -170,7 +170,7 @@ public class DeliveryInfo implements com.google.maps.android.clustering.ClusterI
         }
 
         String extractedUnit = addressInfo.getApartmentNumber();
-        if (extractedUnit != null && !extractedUnit.trim().isEmpty()) {
+        if (addressInfo.hasConfidentUnit() && extractedUnit != null && !extractedUnit.trim().isEmpty()) {
             unitNumber = extractedUnit;
         }
 

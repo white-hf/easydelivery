@@ -101,3 +101,19 @@ This file tracks product requirement changes that affect app behavior across ver
   - Keep the scan page focused on three layers only: active scan area, most recent scan result, and scanned/unscanned counts with list access.
   - Reduce the visual weight of the counts row and list section so the camera area stays dominant.
   - Enlarge the visible scan area and widen the effective candidate region so drivers do not need to pin the barcode to the exact center.
+
+### Address parsing reliability for house vs apartment
+
+- Status: Android implemented. iOS implemented in `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Utils/AddressUtils.swift`.
+- Scope:
+  - `app/src/main/java/com/hf/easydelivery/common/Utils.java`
+  - `app/src/main/java/com/hf/easydelivery/apartment/ApartmentAddressKeyBuilder.java`
+  - `app/src/main/java/com/hf/easydelivery/dao/DeliveryInfo.java`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Utils/AddressUtils.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Utils/ApartmentAddressKeyBuilder.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Api/bean/DeliveryInfo.swift`
+- Requirement:
+  - Support Canadian postal codes with or without the embedded space so postal digits are not reused as apartment numbers.
+  - Strip province, country, and postal-code tail tokens before unit inference so house addresses such as `98 King St, Dartmouth, NS, CA, B2Y 2S1` stay on the 2-photo path.
+  - Only let confident unit sources trigger apartment behavior. Low-quality numeric guesses must no longer force the 3-photo apartment flow.
+  - Keep explicit apartment formats such as `301-101 ...`, `Unit 301 ...`, `#301 ...`, and `117 Richmond St 409 ...` working on both platforms.

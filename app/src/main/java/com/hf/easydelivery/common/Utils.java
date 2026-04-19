@@ -35,10 +35,14 @@ public class Utils {
     public static class AddressInfo {
         private final String apartmentNumber;
         private final String streetNumber;
+        private final String unitSource;
+        private final boolean confidentUnit;
 
-        public AddressInfo(String apartmentNumber, String streetNumber) {
+        public AddressInfo(String apartmentNumber, String streetNumber, String unitSource, boolean confidentUnit) {
             this.apartmentNumber = apartmentNumber;
             this.streetNumber = streetNumber;
+            this.unitSource = unitSource == null ? "" : unitSource;
+            this.confidentUnit = confidentUnit;
         }
 
         public String getApartmentNumber() {
@@ -48,6 +52,14 @@ public class Utils {
         public String getStreetNumber() {
             return streetNumber;
         }
+
+        public String getUnitSource() {
+            return unitSource;
+        }
+
+        public boolean hasConfidentUnit() {
+            return confidentUnit;
+        }
     }
 
 
@@ -56,7 +68,7 @@ public class Utils {
     private static final Pattern POSTAL_CODE_PATTERN = Pattern.compile("\\b\\d{1,3}\\s?\\w{1,2}\\s?\\d{1,3}\\b");
     private static final Pattern WORD_PATTERN = Pattern.compile("\\b[a-zA-Z]+\\b");
 
-    private static final Pattern LEADING_UNIT_HYPHEN = Pattern.compile("^\\s*(\\w{1,6})\\s*-\\s*(\\d{1,5})\\b");
+    private static final Pattern LEADING_UNIT_HYPHEN = Pattern.compile("^\\s*([A-Za-z]*\\d[A-Za-z0-9]{0,5})\\s*-\\s*(\\d{1,5})\\b");
     private static final Pattern UNIT_PREFIX_PATTERN = Pattern.compile(
             "^\\s*(?:apt|apartment|unit|suite|ste|rm|room|ph|buzzer|fl|floor|lvl|level|entrance|door|code|bldg|building|#)\\s*[:#-]?\\s*(\\w{1,8})\\s+(\\d{1,5})\\b",
             Pattern.CASE_INSENSITIVE
@@ -64,7 +76,7 @@ public class Utils {
     private static final Pattern DOUBLE_NUMBER_PREFIX = Pattern.compile("^\\s*(\\d{1,4})\\s+(\\d{1,5})\\b");
     private static final Pattern HASH_ONLY_PREFIX = Pattern.compile("^\\s*#\\s*(\\w{1,8})\\b");
     private static final Pattern GENERIC_NUMBER_PATTERN = Pattern.compile("\\b(\\d{1,5}[A-Za-z]?)\\b");
-    private static final Pattern POSTAL_CODE_CA = Pattern.compile("(?i)\\b[A-Z]\\d[A-Z]\\d[A-Z]\\d\\b");
+    private static final Pattern POSTAL_CODE_CA = Pattern.compile("(?i)\\b[A-Z]\\d[A-Z]\\s?\\d[A-Z]\\d\\b");
     private static final Pattern UNIT_KEYWORD_GLOBAL = Pattern.compile(
             "(?i)(?:\\b(?:apt|apartment|unit|suite|ste|rm|room|ph|buzzer|fl|floor|lvl|level|entrance|door|code|bldg|building|locker|buzz)\\s*[:#-]?\\s*(\\w{1,8}))"
     );
@@ -75,6 +87,18 @@ public class Utils {
     private static final Set<String> UNIT_KEYWORDS = new HashSet<>(Arrays.asList(
             "apt","apartment","unit","suite","ste","rm","room","ph","buzzer","fl","floor","lvl","level","entrance","door","code","bldg","building","locker","buzz"
     ));
+    private static final Set<String> PROVINCE_CODES = new HashSet<>(Arrays.asList(
+            "NS","NB","PE","NL","QC","ON","MB","SK","AB","BC"
+    ));
+    private static final Set<String> COUNTRY_CODES = new HashSet<>(Arrays.asList(
+            "CA","CANADA"
+    ));
+    private static final Set<String> STREET_SUFFIXES = new HashSet<>(Arrays.asList(
+            "st","street","rd","road","ave","avenue","blvd","boulevard","dr","drive",
+            "ln","lane","crt","court","close","pl","place","way","terr","terrace",
+            "cres","crescent","cir","circle","pkwy","parkway","hwy","highway","trl","trail",
+            "row","path","wharf","quay","sq","square"
+    ));
 
 
     public String getTodayString() {
@@ -84,35 +108,46 @@ public class Utils {
 
     public static AddressInfo extractApartmentAndStreetNumber(String strAddress) {
         if (strAddress == null || strAddress.trim().isEmpty()) {
-            return new AddressInfo("", "");
+            return new AddressInfo("", "", "", false);
         }
 
         String normalized = normalizeAddress(strAddress);
-        UnitExtractionResult leading = extractLeadingUnit(normalized);
+        String relevant = relevantAddressLine(normalized);
+        UnitExtractionResult leading = extractLeadingUnit(relevant);
         String working = leading.remaining;
 
         String streetNumber = firstStreetNumber(working);
+        if (streetNumber.isEmpty()) {
+            streetNumber = firstStreetNumber(relevant);
+        }
         if (streetNumber.isEmpty()) {
             streetNumber = firstStreetNumber(normalized);
         }
 
         String apartment = leading.unit;
+        String unitSource = leading.source;
         if (apartment.isEmpty()) {
-            apartment = detectUnitFromKeywords(normalized, streetNumber);
+            UnitCandidate candidate = detectUnitFromKeywords(relevant, streetNumber);
+            apartment = candidate.unit;
+            unitSource = candidate.source;
         }
         if (apartment.isEmpty()) {
-            apartment = heuristicUnitFromNumbers(normalized, streetNumber);
+            UnitCandidate candidate = detectTrailingUnitAfterStreetSuffix(relevant, streetNumber);
+            apartment = candidate.unit;
+            unitSource = candidate.source;
         }
         if (apartment.isEmpty()) {
-            apartment = fallbackUnitFromTokens(normalized, streetNumber);
+            UnitCandidate candidate = fallbackUnitFromTokens(relevant, streetNumber);
+            apartment = candidate.unit;
+            unitSource = candidate.source;
         }
 
-        return new AddressInfo(apartment, streetNumber);
+        return new AddressInfo(apartment, streetNumber, unitSource, isConfidentUnitSource(unitSource));
     }
 
     private static String normalizeAddress(String raw) {
         String stripped = stripNonAddressPrefix(raw == null ? "" : raw);
-        stripped = stripped.replace(',', ' ');
+        stripped = stripped.replaceAll("\\s*,\\s*", ", ");
         stripped = stripped.replaceAll("\\s+", " ").trim();
         return stripped;
     }
@@ -136,25 +171,25 @@ public class Utils {
 
         Matcher hyphen = LEADING_UNIT_HYPHEN.matcher(working);
         if (hyphen.find()) {
-            return new UnitExtractionResult(hyphen.group(1), working.substring(hyphen.start(2)).trim());
+            return new UnitExtractionResult(hyphen.group(1), working.substring(hyphen.start(2)).trim(), "leading_hyphen");
         }
 
         Matcher prefix = UNIT_PREFIX_PATTERN.matcher(working);
         if (prefix.find()) {
-            return new UnitExtractionResult(prefix.group(1), working.substring(prefix.start(2)).trim());
+            return new UnitExtractionResult(prefix.group(1), working.substring(prefix.start(2)).trim(), "unit_prefix");
         }
 
         Matcher doubleNumbers = DOUBLE_NUMBER_PREFIX.matcher(working);
         if (doubleNumbers.find()) {
-            return new UnitExtractionResult(doubleNumbers.group(1), working.substring(doubleNumbers.start(2)).trim());
+            return new UnitExtractionResult(doubleNumbers.group(1), working.substring(doubleNumbers.start(2)).trim(), "double_number_prefix");
         }
 
         Matcher hashOnly = HASH_ONLY_PREFIX.matcher(working);
         if (hashOnly.find()) {
-            return new UnitExtractionResult(hashOnly.group(1), working.substring(hashOnly.end()).trim());
+            return new UnitExtractionResult(hashOnly.group(1), working.substring(hashOnly.end()).trim(), "hash_prefix");
         }
 
-        return new UnitExtractionResult("", working);
+        return new UnitExtractionResult("", working, "");
     }
 
     private static String firstStreetNumber(String text) {
@@ -169,72 +204,70 @@ public class Utils {
         return "";
     }
 
-    private static String detectUnitFromKeywords(String text, String streetNumber) {
-        if (text == null) return "";
+    private static UnitCandidate detectUnitFromKeywords(String text, String streetNumber) {
+        if (text == null) return UnitCandidate.empty();
         Matcher matcher = UNIT_KEYWORD_GLOBAL.matcher(text);
         while (matcher.find()) {
             String candidate = matcher.group(1);
             if (candidate == null || candidate.isEmpty()) continue;
             if (candidate.equalsIgnoreCase(streetNumber)) continue;
-            return candidate;
+            return new UnitCandidate(candidate, "keyword_global");
         }
 
         Matcher trailing = TRAILING_UNIT_PATTERN.matcher(text);
         if (trailing.find()) {
             String candidate = trailing.group(1);
             if (!candidate.equalsIgnoreCase(streetNumber)) {
-                return candidate;
+                return new UnitCandidate(candidate, "trailing_keyword");
             }
         }
+        return UnitCandidate.empty();
+    }
 
-        if (!POSTAL_CODE_CA.matcher(text).find()) {
-            Matcher hashTail = Pattern.compile("(?i)(\\d+[A-Za-z]?)\\s*$").matcher(text);
-            if (hashTail.find()) {
-                String candidate = hashTail.group(1);
-                if (!candidate.equalsIgnoreCase(streetNumber)) {
-                    return candidate;
+    private static UnitCandidate detectTrailingUnitAfterStreetSuffix(String text, String streetNumber) {
+        if (text == null || text.isEmpty() || streetNumber == null || streetNumber.isEmpty()) {
+            return UnitCandidate.empty();
+        }
+        String[] tokens = text.split("\\s+");
+        boolean seenStreetNumber = false;
+        boolean seenStreetSuffix = false;
+        for (int i = 0; i < tokens.length; i++) {
+            String sanitized = sanitizeToken(tokens[i]);
+            if (sanitized.isEmpty()) continue;
+            if (!seenStreetNumber) {
+                if (sanitized.equalsIgnoreCase(streetNumber)) {
+                    seenStreetNumber = true;
                 }
+                continue;
+            }
+            if (!seenStreetSuffix) {
+                if (STREET_SUFFIXES.contains(sanitized.toLowerCase(Locale.US))) {
+                    seenStreetSuffix = true;
+                }
+                continue;
+            }
+
+            if (UNIT_KEYWORDS.contains(sanitized.toLowerCase(Locale.US)) && i + 1 < tokens.length) {
+                String next = sanitizeToken(tokens[i + 1]);
+                if (looksLikeUnitToken(next, streetNumber)) {
+                    return new UnitCandidate(next, "street_suffix_keyword");
+                }
+                return UnitCandidate.empty();
+            }
+
+            if (looksLikeUnitToken(sanitized, streetNumber)) {
+                return new UnitCandidate(sanitized, "street_suffix_trailing");
+            }
+
+            if (isLocationTailToken(tokens[i])) {
+                return UnitCandidate.empty();
             }
         }
-        return "";
+        return UnitCandidate.empty();
     }
 
-    private static String heuristicUnitFromNumbers(String text, String streetNumber) {
-        if (text == null) return "";
-        List<String> numbers = new ArrayList<>();
-        Matcher matcher = GENERIC_NUMBER_PATTERN.matcher(text);
-        while (matcher.find()) {
-            numbers.add(matcher.group(1));
-            if (numbers.size() >= 3) break;
-        }
-        if (numbers.size() < 2) {
-            return "";
-        }
-        String first = numbers.get(0);
-        String second = numbers.get(1);
-        int firstVal = numericHint(first);
-        int secondVal = numericHint(second);
-
-        if (streetNumber != null && !streetNumber.isEmpty()) {
-            if (streetNumber.equals(second) && firstVal > 0 && firstVal < secondVal && secondVal >= 1000) {
-                return first;
-            }
-            if (streetNumber.equals(first) && secondVal > 0 && secondVal < firstVal) {
-                return second;
-            }
-        }
-
-        if (streetNumber == null || streetNumber.isEmpty()) {
-            if (secondVal >= 1000 && firstVal > 0 && firstVal < secondVal) {
-                return first;
-            }
-        }
-
-        return "";
-    }
-
-    private static String fallbackUnitFromTokens(String text, String streetNumber) {
-        if (text == null || text.isEmpty()) return "";
+    private static UnitCandidate fallbackUnitFromTokens(String text, String streetNumber) {
+        if (text == null || text.isEmpty()) return UnitCandidate.empty();
         String[] tokens = text.split("\\s+");
 
         for (String token : tokens) {
@@ -242,7 +275,7 @@ public class Utils {
             if (hyphen.find()) {
                 String candidate = hyphen.group(1);
                 if (!candidate.equalsIgnoreCase(streetNumber)) {
-                    return candidate;
+                    return new UnitCandidate(candidate, "inline_hyphen");
                 }
             }
         }
@@ -255,7 +288,7 @@ public class Utils {
             if (embedded.find()) {
                 String candidate = embedded.group(1);
                 if (candidate != null && !candidate.isEmpty() && !candidate.equalsIgnoreCase(streetNumber)) {
-                    return candidate;
+                    return new UnitCandidate(candidate, "embedded_unit_token");
                 }
             }
 
@@ -263,20 +296,104 @@ public class Utils {
             if (hash.find()) {
                 String candidate = hash.group(1);
                 if (candidate != null && !candidate.isEmpty() && !candidate.equalsIgnoreCase(streetNumber)) {
-                    return candidate;
+                    return new UnitCandidate(candidate, "hashed_unit_token");
                 }
             }
 
             String keyword = raw.replaceAll("[^A-Za-z]", "").toLowerCase(Locale.US);
             if (UNIT_KEYWORDS.contains(keyword) && i + 1 < tokens.length) {
                 String next = tokens[i + 1].replaceAll("[^0-9A-Za-z]", "");
-                if (!next.isEmpty() && !next.equalsIgnoreCase(streetNumber)) {
-                    return next;
+                if (looksLikeUnitToken(next, streetNumber)) {
+                    return new UnitCandidate(next, "unit_keyword_token");
                 }
             }
         }
 
-        return "";
+        return UnitCandidate.empty();
+    }
+
+    private static String relevantAddressLine(String normalized) {
+        if (normalized == null || normalized.isEmpty()) return "";
+        String[] segments = normalized.split("\\s*,\\s*");
+        if (segments.length == 0) return normalized;
+        StringBuilder sb = new StringBuilder();
+        sb.append(segments[0].trim());
+        for (int i = 1; i < segments.length; i++) {
+            String segment = segments[i].trim();
+            if (segment.isEmpty()) continue;
+            if (looksLikeUnitSegment(segment)) {
+                sb.append(' ').append(segment);
+                continue;
+            }
+            break;
+        }
+        String candidate = stripCanadianTail(sb.toString());
+        return candidate.isEmpty() ? stripCanadianTail(normalized) : candidate;
+    }
+
+    private static boolean looksLikeUnitSegment(String segment) {
+        if (segment == null || segment.isEmpty()) return false;
+        String lower = segment.toLowerCase(Locale.US);
+        if (lower.startsWith("#")) return true;
+        for (String keyword : UNIT_KEYWORDS) {
+            if (lower.startsWith(keyword + " ") || lower.equals(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String stripCanadianTail(String text) {
+        if (text == null || text.isEmpty()) return "";
+        String working = POSTAL_CODE_CA.matcher(text).replaceAll(" ");
+        List<String> tokens = new ArrayList<>(Arrays.asList(working.split("\\s+")));
+        while (!tokens.isEmpty()) {
+            String last = sanitizeToken(tokens.get(tokens.size() - 1)).toUpperCase(Locale.US);
+            if (last.isEmpty()) {
+                tokens.remove(tokens.size() - 1);
+                continue;
+            }
+            if (PROVINCE_CODES.contains(last) || COUNTRY_CODES.contains(last)) {
+                tokens.remove(tokens.size() - 1);
+                continue;
+            }
+            break;
+        }
+        return String.join(" ", tokens).trim();
+    }
+
+    private static String sanitizeToken(String token) {
+        return token == null ? "" : token.replaceAll("[^0-9A-Za-z]", "");
+    }
+
+    private static boolean looksLikeUnitToken(String token, String streetNumber) {
+        String candidate = sanitizeToken(token);
+        if (candidate.isEmpty()) return false;
+        if (candidate.equalsIgnoreCase(streetNumber)) return false;
+        return candidate.matches(".*\\d.*");
+    }
+
+    private static boolean isLocationTailToken(String token) {
+        String sanitized = sanitizeToken(token);
+        if (sanitized.isEmpty()) return false;
+        if (PROVINCE_CODES.contains(sanitized.toUpperCase(Locale.US))) return true;
+        if (COUNTRY_CODES.contains(sanitized.toUpperCase(Locale.US))) return true;
+        return sanitized.matches("[A-Za-z]{2,}");
+    }
+
+    private static boolean isConfidentUnitSource(String source) {
+        return "leading_hyphen".equals(source)
+                || "unit_prefix".equals(source)
+                || "hash_prefix".equals(source)
+                || "keyword_global".equals(source)
+                || "trailing_keyword".equals(source)
+                || "street_suffix_keyword".equals(source)
+                || "street_suffix_trailing".equals(source)
+                || "inline_hyphen".equals(source)
+                || "embedded_unit_token".equals(source)
+                || "hashed_unit_token".equals(source)
+                || "unit_keyword_token".equals(source)
+                || "double_number_prefix".equals(source);
     }
 
     private static int numericHint(String token) {
@@ -294,9 +411,25 @@ public class Utils {
     private static class UnitExtractionResult {
         final String unit;
         final String remaining;
-        UnitExtractionResult(String unit, String remaining) {
+        final String source;
+        UnitExtractionResult(String unit, String remaining, String source) {
             this.unit = unit == null ? "" : unit;
             this.remaining = remaining == null ? "" : remaining;
+            this.source = source == null ? "" : source;
+        }
+    }
+
+    private static class UnitCandidate {
+        final String unit;
+        final String source;
+
+        UnitCandidate(String unit, String source) {
+            this.unit = unit == null ? "" : unit;
+            this.source = source == null ? "" : source;
+        }
+
+        static UnitCandidate empty() {
+            return new UnitCandidate("", "");
         }
     }
 
