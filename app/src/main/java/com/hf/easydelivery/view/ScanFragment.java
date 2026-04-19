@@ -90,7 +90,7 @@ public class ScanFragment extends Fragment implements Subscriber {
 
     // --- 视图和适配器 ---
     private PreviewView previewView;
-    private TextView tvProgress, tvPackageNumber, tvSubmitting, tvAutoSubmitState, tvHint, tvScanStatus;
+    private TextView tvPackageNumber, tvSubmitting, tvAutoSubmitState, tvHint;
     private RecyclerView rvRecentScans;
     private RecentScansAdapter adapter;
     private final List<ScanItem> recentScans = new ArrayList<>(); // 始终作为适配器的数据源
@@ -177,7 +177,6 @@ public class ScanFragment extends Fragment implements Subscriber {
 
     private void setupViews(View view) {
         previewView = view.findViewById(id.previewView);
-        tvProgress = view.findViewById(id.tvProgress);
         tvPackageNumber = view.findViewById(id.tvPackageNumber);
         rvRecentScans = view.findViewById(id.rvRecentScans);
         segmented = view.findViewById(R.id.segmented);
@@ -188,7 +187,6 @@ public class ScanFragment extends Fragment implements Subscriber {
         tvSubmitting = view.findViewById(R.id.tvSubmitting);
         tvAutoSubmitState = view.findViewById(R.id.tvAutoSubmitState);
         tvHint = view.findViewById(R.id.tvHint);
-        tvScanStatus = view.findViewById(R.id.tvScanStatus);
         btnScanMode = view.findViewById(R.id.btnScanMode);
         viewFinderOverlay = view.findViewById(id.viewFinderOverlay);
         scanLine = view.findViewById(id.scanLine);
@@ -472,11 +470,7 @@ public class ScanFragment extends Fragment implements Subscriber {
      * 更新进度文本，由 LiveData 观察者调用
      */
     private void updateProgressText(Integer count) {
-        Integer scanned = scanViewModel.getScannedCountLive().getValue();
-        Integer total = scanViewModel.getTotalCountLive().getValue();
-        if (scanned != null && total != null) {
-            tvProgress.setText(getString(R.string.scan_progress_format, scanned, total));
-        }
+        // Top-right progress badge was removed to keep the scan view visually simpler.
     }
 
     /**
@@ -575,33 +569,24 @@ public class ScanFragment extends Fragment implements Subscriber {
     }
 
     private void renderScanFeedbackState(ScanFeedbackState state, int messageRes, boolean autoReset) {
-        if (tvScanStatus == null || scanLine == null || viewFinderOverlay == null) {
+        if (scanLine == null || viewFinderOverlay == null) {
             return;
         }
         uiHandler.removeCallbacks(resetScanFeedbackRunnable);
-        tvScanStatus.setText(messageRes);
         switch (state) {
             case IDLE:
-                tvScanStatus.setBackgroundColor(0xCC263238);
-                tvScanStatus.setTextColor(0xFFF5F5F5);
                 scanLine.setBackgroundColor(0xFFE53935);
                 viewFinderOverlay.setBackgroundResource(R.drawable.overlay_barcode_finder);
                 break;
             case CANDIDATE:
-                tvScanStatus.setBackgroundColor(0xCCE65100);
-                tvScanStatus.setTextColor(0xFFFFF8E1);
                 scanLine.setBackgroundColor(0xFFFFB300);
                 viewFinderOverlay.setBackgroundResource(R.drawable.overlay_barcode_finder_align);
                 break;
             case SUCCESS:
-                tvScanStatus.setBackgroundColor(0xCC1B5E20);
-                tvScanStatus.setTextColor(0xFFE8F5E9);
                 scanLine.setBackgroundColor(0xFF43A047);
                 viewFinderOverlay.setBackgroundResource(R.drawable.overlay_barcode_finder_success);
                 break;
             case ERROR:
-                tvScanStatus.setBackgroundColor(0xCCB71C1C);
-                tvScanStatus.setTextColor(0xFFFFEBEE);
                 scanLine.setBackgroundColor(0xFFEF5350);
                 viewFinderOverlay.setBackgroundResource(R.drawable.overlay_barcode_finder_error);
                 break;
