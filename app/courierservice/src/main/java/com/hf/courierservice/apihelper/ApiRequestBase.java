@@ -13,9 +13,13 @@ import com.android.volley.VolleyError;
 import com.android.volley.toolbox.Volley;
 import com.hf.courierservice.IResponseCallBack;
 import com.hf.courierservice.apihelper.exception.RequestParamException;
+import com.hf.courierservice.apihelper.exception.AlreadyScannedException;
 import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
 
+import org.json.JSONObject;
+
 import java.net.HttpURLConnection;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -85,12 +89,21 @@ public class ApiRequestBase<RE , RS> {
                 }, new Response.ErrorListener() {
                     @Override
                     public void onErrorResponse(VolleyError error) {
-
-
                         if (error.networkResponse != null && (error.networkResponse.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED
                                 || error.networkResponse.statusCode == HttpURLConnection.HTTP_FORBIDDEN
                                 || 449 == error.networkResponse.statusCode)) {
-                            cb.onFail(new UnAuthorizedException());
+                            int statusCode = error.networkResponse.statusCode;
+                            String responseBody = extractResponseBody(error);
+                            String bizCode = extractBizField(responseBody, "biz_code");
+                            String bizMessage = extractBizField(responseBody, "biz_message");
+                            FileLog.w(TAG, "Unauthorized-style response, http=" + statusCode + ", url=" + url
+                                    + ", bizCode=" + bizCode + ", bizMessage=" + bizMessage);
+                            if (statusCode == HttpURLConnection.HTTP_FORBIDDEN
+                                    && "SCAN.ALREADY.SCANNED".equals(bizCode)) {
+                                cb.onFail(new AlreadyScannedException(url, bizCode, bizMessage));
+                                return;
+                            }
+                            cb.onFail(new UnAuthorizedException(statusCode, url));
                         }else if (error.networkResponse != null && error.networkResponse.statusCode == HttpURLConnection.HTTP_BAD_REQUEST)
                         {
                             cb.onFail(new RequestParamException());
@@ -107,6 +120,31 @@ public class ApiRequestBase<RE , RS> {
 
         geneticReq.setHeader(mHeader);
         requestQueue.add(geneticReq);
+    }
+
+    private static String extractResponseBody(VolleyError error) {
+        if (error == null || error.networkResponse == null || error.networkResponse.data == null) {
+            return null;
+        }
+        try {
+            return new String(error.networkResponse.data, StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String extractBizField(String responseBody, String fieldName) {
+        if (responseBody == null || responseBody.isEmpty()) {
+            return null;
+        }
+        try {
+            JSONObject object = new JSONObject(responseBody);
+            if (object.has(fieldName) && !object.isNull(fieldName)) {
+                return object.optString(fieldName, null);
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     /**

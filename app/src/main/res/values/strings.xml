@@ -103,6 +103,13 @@
     <string name="scan_unscanned_count">Unscanned(%1$d)</string>
     <string name="scan_scanned_count">Scanned(%1$d)</string>
     <string name="scan_hint">Place the barcode inside the frame and move closer</string>
+    <string name="scan_status_ready">Align the barcode inside the frame</string>
+    <string name="scan_status_candidate">Barcode detected, hold steady</string>
+    <string name="scan_status_success">Scan saved</string>
+    <string name="scan_status_duplicate">Already scanned</string>
+    <string name="scan_status_not_your">Not in your parcel list</string>
+    <string name="scan_status_batch_invalid">Batch unavailable</string>
+    <string name="scan_status_loading">Parcel list is loading</string>
     <string name="scan_submitting_default">Submitting 0/0</string>
     <string name="scan_submitting_format">Submitting %1$d / %2$d</string>
     <string name="scan_menu_begin_scan">Start scan</string>
@@ -117,6 +124,10 @@
     <string name="scan_recent_waybill_default">Waybill: —</string>
     <string name="scan_test_mode_on">Test mode: allow smaller barcodes on screen</string>
     <string name="scan_test_mode_off">Test mode off</string>
+    <string name="scan_screen_mode_on">Screen code: On</string>
+    <string name="scan_screen_mode_off">Screen code: Off</string>
+    <string name="scan_mode_hint_off">Paper barcode/QR</string>
+    <string name="scan_mode_hint_on">Use for screen barcode/QR</string>
     <string name="scan_query_unscanned_toast">Fetching unscanned parcels...</string>
     <string name="scan_unscanned_toast">You have %1$d parcels to scan</string>
     <string name="scan_duplicate_toast">This parcel has already been scanned\nPackage ID: %1$s</string>

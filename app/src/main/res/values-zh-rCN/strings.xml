@@ -111,6 +111,17 @@
     <string name="scan_recent_waybill_default">运单：—</string>
     <string name="scan_test_mode_on">测试模式：允许扫描屏幕上较小条码</string>
     <string name="scan_test_mode_off">测试模式关闭</string>
+    <string name="scan_screen_mode_on">屏幕码：开</string>
+    <string name="scan_screen_mode_off">屏幕码：关</string>
+    <string name="scan_mode_hint_off">纸质条码/二维码</string>
+    <string name="scan_mode_hint_on">适合屏幕上的条码/二维码</string>
+    <string name="scan_status_ready">将条码放入框内</string>
+    <string name="scan_status_candidate">已识别候选，请保持稳定</string>
+    <string name="scan_status_success">扫描已保存</string>
+    <string name="scan_status_duplicate">该包裹已扫过</string>
+    <string name="scan_status_not_your">不在你的包裹列表内</string>
+    <string name="scan_status_batch_invalid">扫描批次不可用</string>
+    <string name="scan_status_loading">包裹列表加载中</string>
     <string name="scan_query_unscanned_toast">正在查询未扫描包裹...</string>
     <string name="scan_unscanned_toast">您有 %1$d 个包裹需要扫描</string>
     <string name="scan_duplicate_toast">该包裹已扫\n包裹号：%1$s</string>

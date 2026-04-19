@@ -595,13 +595,21 @@ public class ScanViewModel extends ViewModel implements Subscriber {
             public void onFail(Exception e) {
                 submittingInternal = false;
                 if (!publishUiState) {
-                    FileLog.getInstance().warning(TAG, "auto submit failed: " + e.getMessage());
+                    if (e instanceof UnAuthorizedException) {
+                        UnAuthorizedException unauthorized = (UnAuthorizedException) e;
+                        FileLog.getInstance().warning(
+                                TAG,
+                                "auto submit unauthorized: http=" + unauthorized.getHttpStatusCode()
+                                        + ", url=" + unauthorized.getRequestUrl());
+                    } else {
+                        FileLog.getInstance().warning(TAG, "auto submit failed: " + e.getMessage());
+                    }
                     autoSubmitUiState.postValue(AutoSubmitUiState.FAILED);
                 }
                 if (notifyResultToast) {
                     toastMessage.postValue(new Event<>(getString(R.string.scan_login_expired)));
                 }
-                if (e instanceof UnAuthorizedException) {
+                if (e instanceof UnAuthorizedException && (publishUiState || notifyResultToast)) {
                     resourceMgr.requestLoginRedirect();
                 }
                 if (publishUiState) {

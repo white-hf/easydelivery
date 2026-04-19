@@ -6,12 +6,14 @@ import android.Manifest;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.util.Size;
 import android.util.Pair;
 import android.graphics.Typeface;
 import android.text.SpannableStringBuilder;
@@ -19,6 +21,7 @@ import android.text.Spanned;
 import android.text.style.AbsoluteSizeSpan;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -75,8 +78,11 @@ import com.hf.easydelivery.view.model.ScanViewModel;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ScanFragment extends Fragment implements Subscriber {
 
@@ -84,14 +90,16 @@ public class ScanFragment extends Fragment implements Subscriber {
 
     // --- 视图和适配器 ---
     private PreviewView previewView;
-    private TextView tvProgress, tvPackageNumber, tvSubmitting, tvAutoSubmitState;
+    private TextView tvProgress, tvPackageNumber, tvSubmitting, tvAutoSubmitState, tvHint, tvScanStatus;
     private RecyclerView rvRecentScans;
     private RecentScansAdapter adapter;
     private final List<ScanItem> recentScans = new ArrayList<>(); // 始终作为适配器的数据源
     private MaterialButtonToggleGroup segmented;
-    private MaterialButton btnUnscanned, btnScanned;
+    private MaterialButton btnUnscanned, btnScanned, btnScanMode;
     private FrameLayout flProgressOverlay;
     private ProgressBar pbSubmitting;
+    private View viewFinderOverlay;
+    private View scanLine;
 
     // --- ViewModel: 业务逻辑和状态管理的核心 ---
     private ScanViewModel scanViewModel;
@@ -103,6 +111,9 @@ public class ScanFragment extends Fragment implements Subscriber {
     private long lastDetectTime = 0;
     private final long DEBOUNCE_MS = 1000;
     private boolean testMode = false;
+    private static final Pattern WAYBILL_TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9]{8,}");
+    private static final float TEST_MODE_MIN_SCORE = 0.04f;
+    private static final float NORMAL_MODE_MIN_SCORE = -0.10f;
 
     // --- 其他 ---
     private Vibrator vibrator;
@@ -118,6 +129,16 @@ public class ScanFragment extends Fragment implements Subscriber {
     private final Runnable hideAutoSubmitHintRunnable = () -> {
         if (tvAutoSubmitState != null) tvAutoSubmitState.setVisibility(View.GONE);
     };
+    private final Runnable resetScanFeedbackRunnable = () ->
+            renderScanFeedbackState(ScanFeedbackState.IDLE, R.string.scan_status_ready, false);
+    private final Runnable resetResultCardRunnable = this::resetResultCardVisualState;
+
+    private enum ScanFeedbackState {
+        IDLE,
+        CANDIDATE,
+        SUCCESS,
+        ERROR
+    }
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -148,12 +169,8 @@ public class ScanFragment extends Fragment implements Subscriber {
 
         // 订阅数据就绪事件，通知 ViewModel 刷新
         ResourceMgr.getInstance().getPublisher().subscribe(EventConstant.EVENT_DELIVERY_DATA_READY, this);
-        // Token 刷新器，现在调用 ViewModel 的方法
         tokenRefresher = new TokenRefresher(REFRESH_INTERVAL);
-        tokenRefresher.start(() -> scanViewModel.refreshBatchId());
-        // 自动提交离线扫描：扫描过程中周期执行，不依赖手工菜单点击
         autoSubmitRefresher = new TokenRefresher(AUTO_SUBMIT_INTERVAL);
-        autoSubmitRefresher.start(() -> scanViewModel.tryAutoSubmitOfflineScans());
 
         return view;
     }
@@ -170,8 +187,15 @@ public class ScanFragment extends Fragment implements Subscriber {
         pbSubmitting = view.findViewById(R.id.pbSubmitting);
         tvSubmitting = view.findViewById(R.id.tvSubmitting);
         tvAutoSubmitState = view.findViewById(R.id.tvAutoSubmitState);
+        tvHint = view.findViewById(R.id.tvHint);
+        tvScanStatus = view.findViewById(R.id.tvScanStatus);
+        btnScanMode = view.findViewById(R.id.btnScanMode);
+        viewFinderOverlay = view.findViewById(id.viewFinderOverlay);
+        scanLine = view.findViewById(id.scanLine);
 
         renderScanResult(null);
+        updateScanModeUi();
+        renderScanFeedbackState(ScanFeedbackState.IDLE, R.string.scan_status_ready, false);
 
         adapter = new RecentScansAdapter(recentScans);
         rvRecentScans.setLayoutManager(new LinearLayoutManager(getContext()));
@@ -209,18 +233,17 @@ public class ScanFragment extends Fragment implements Subscriber {
             if (isChecked) applySegment(); // 切换时刷新列表
         });
 
-        View tvHint = view.findViewById(R.id.tvHint);
+        if (btnScanMode != null) {
+            btnScanMode.setOnClickListener(v -> setTestModeEnabled(!testMode, true));
+        }
         if (tvHint != null) {
             tvHint.setOnLongClickListener(v -> {
-                testMode = !testMode;
-                int msgRes = testMode ? R.string.scan_test_mode_on : R.string.scan_test_mode_off;
-                Toast.makeText(requireContext(), msgRes, Toast.LENGTH_SHORT).show();
+                setTestModeEnabled(!testMode, true);
                 return true;
             });
         }
 
         // 扫描线动画 (无改动)
-        View scanLine = view.findViewById(id.scanLine);
         scanLine.post(() -> {
             float height = view.findViewById(id.viewFinderOverlay).getHeight();
             ObjectAnimator animator = ObjectAnimator.ofFloat(scanLine, "translationY", 0f, height - scanLine.getHeight());
@@ -345,7 +368,15 @@ public class ScanFragment extends Fragment implements Subscriber {
             if (event == null) return;
             Object payload = event.getMessage();
             if (payload instanceof String) {
-                Toast.makeText(getContext(), (String) payload, Toast.LENGTH_SHORT).show();
+                String message = (String) payload;
+                Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+                if (message.equals(getString(R.string.scan_not_your_parcel))) {
+                    renderScanFeedbackState(ScanFeedbackState.ERROR, R.string.scan_status_not_your, true);
+                } else if (message.equals(getString(R.string.scan_data_loading))) {
+                    renderScanFeedbackState(ScanFeedbackState.ERROR, R.string.scan_status_loading, true);
+                } else if (message.equals(getString(R.string.scan_report_closed_or_invalid))) {
+                    renderScanFeedbackState(ScanFeedbackState.ERROR, R.string.scan_status_batch_invalid, true);
+                }
             }
         });
 
@@ -360,6 +391,7 @@ public class ScanFragment extends Fragment implements Subscriber {
                 String msg = getString(R.string.scan_duplicate_toast, pkgValue);
                 Toast.makeText(getContext(), msg, Toast.LENGTH_SHORT).show();
                 renderScanResult(new ScanItem(pkgValue, data.first, false, true));
+                renderScanFeedbackState(ScanFeedbackState.ERROR, R.string.scan_status_duplicate, true);
             }
         });
 
@@ -367,6 +399,8 @@ public class ScanFragment extends Fragment implements Subscriber {
             if (event == null) return;
             if (Boolean.TRUE.equals(event.getMessage())) {
                 playScanHaptic();
+                animateResultCardSuccess();
+                renderScanFeedbackState(ScanFeedbackState.SUCCESS, R.string.scan_status_success, true);
             }
         });
 
@@ -487,6 +521,96 @@ public class ScanFragment extends Fragment implements Subscriber {
         tvPackageNumber.setText(builder);
     }
 
+    private void animateResultCardSuccess() {
+        if (tvPackageNumber == null) {
+            return;
+        }
+        uiHandler.removeCallbacks(resetResultCardRunnable);
+        ViewCompat.setBackgroundTintList(tvPackageNumber, ColorStateList.valueOf(0xFF1F5D3A));
+        tvPackageNumber.animate().cancel();
+        tvPackageNumber.setScaleX(1f);
+        tvPackageNumber.setScaleY(1f);
+        tvPackageNumber.animate()
+                .scaleX(1.035f)
+                .scaleY(1.035f)
+                .setDuration(110L)
+                .withEndAction(() -> tvPackageNumber.animate()
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setDuration(180L)
+                        .start())
+                .start();
+        uiHandler.postDelayed(resetResultCardRunnable, 420L);
+    }
+
+    private void resetResultCardVisualState() {
+        if (tvPackageNumber == null) {
+            return;
+        }
+        ViewCompat.setBackgroundTintList(tvPackageNumber, null);
+        tvPackageNumber.setScaleX(1f);
+        tvPackageNumber.setScaleY(1f);
+    }
+
+    private void setTestModeEnabled(boolean enabled, boolean showToast) {
+        testMode = enabled;
+        updateScanModeUi();
+        if (showToast) {
+            int msgRes = testMode ? R.string.scan_test_mode_on : R.string.scan_test_mode_off;
+            Toast.makeText(requireContext(), msgRes, Toast.LENGTH_SHORT).show();
+        }
+        if (cameraWasBound) {
+            bindCameraNow();
+        }
+    }
+
+    private void updateScanModeUi() {
+        if (btnScanMode != null) {
+            btnScanMode.setText(testMode ? R.string.scan_screen_mode_on : R.string.scan_screen_mode_off);
+        }
+        if (tvHint != null) {
+            tvHint.setText(testMode ? R.string.scan_mode_hint_on : R.string.scan_mode_hint_off);
+            tvHint.setGravity(Gravity.CENTER_VERTICAL);
+        }
+    }
+
+    private void renderScanFeedbackState(ScanFeedbackState state, int messageRes, boolean autoReset) {
+        if (tvScanStatus == null || scanLine == null || viewFinderOverlay == null) {
+            return;
+        }
+        uiHandler.removeCallbacks(resetScanFeedbackRunnable);
+        tvScanStatus.setText(messageRes);
+        switch (state) {
+            case IDLE:
+                tvScanStatus.setBackgroundColor(0xCC263238);
+                tvScanStatus.setTextColor(0xFFF5F5F5);
+                scanLine.setBackgroundColor(0xFFE53935);
+                viewFinderOverlay.setBackgroundResource(R.drawable.overlay_barcode_finder);
+                break;
+            case CANDIDATE:
+                tvScanStatus.setBackgroundColor(0xCCE65100);
+                tvScanStatus.setTextColor(0xFFFFF8E1);
+                scanLine.setBackgroundColor(0xFFFFB300);
+                viewFinderOverlay.setBackgroundResource(R.drawable.overlay_barcode_finder_align);
+                break;
+            case SUCCESS:
+                tvScanStatus.setBackgroundColor(0xCC1B5E20);
+                tvScanStatus.setTextColor(0xFFE8F5E9);
+                scanLine.setBackgroundColor(0xFF43A047);
+                viewFinderOverlay.setBackgroundResource(R.drawable.overlay_barcode_finder_success);
+                break;
+            case ERROR:
+                tvScanStatus.setBackgroundColor(0xCCB71C1C);
+                tvScanStatus.setTextColor(0xFFFFEBEE);
+                scanLine.setBackgroundColor(0xFFEF5350);
+                viewFinderOverlay.setBackgroundResource(R.drawable.overlay_barcode_finder_error);
+                break;
+        }
+        if (autoReset) {
+            uiHandler.postDelayed(resetScanFeedbackRunnable, 1400L);
+        }
+    }
+
     private void appendResultSegment(SpannableStringBuilder builder, Context context,
                                      String label, String value, boolean accent) {
         int labelStart = builder.length();
@@ -494,7 +618,7 @@ public class ScanFragment extends Fragment implements Subscriber {
         builder.setSpan(new ForegroundColorSpan(
                         ContextCompat.getColor(context, R.color.scan_result_label)),
                 labelStart, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        builder.setSpan(new AbsoluteSizeSpan(14, true),
+        builder.setSpan(new AbsoluteSizeSpan(15, true),
                 labelStart, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 
         int valueStart = builder.length();
@@ -504,7 +628,7 @@ public class ScanFragment extends Fragment implements Subscriber {
                 valueStart, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         builder.setSpan(new StyleSpan(Typeface.BOLD), valueStart, builder.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        int valueSizeSp = accent ? 28 : 17;
+        int valueSizeSp = accent ? 34 : 21;
         builder.setSpan(new AbsoluteSizeSpan(valueSizeSp, true),
                 valueStart, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     }
@@ -522,9 +646,10 @@ public class ScanFragment extends Fragment implements Subscriber {
     private void playScanHaptic() {
         if (vibrator != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(80, VibrationEffect.DEFAULT_AMPLITUDE));
+                vibrator.vibrate(VibrationEffect.createWaveform(
+                        new long[]{0, 35, 45, 55}, -1));
             } else {
-                vibrator.vibrate(80);
+                vibrator.vibrate(120);
             }
         }
     }
@@ -540,7 +665,77 @@ public class ScanFragment extends Fragment implements Subscriber {
     }
 
     private boolean isValidWaybill(String raw) {
-        return raw != null && raw.matches("[A-Za-z0-9]{8,}");
+        return raw != null && WAYBILL_TOKEN_PATTERN.matcher(raw).matches();
+    }
+
+    @Nullable
+    private String extractWaybillCandidate(@Nullable String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        Matcher matcher = WAYBILL_TOKEN_PATTERN.matcher(trimmed);
+        String best = null;
+        while (matcher.find()) {
+            String candidate = matcher.group();
+            if (candidate == null || candidate.isEmpty()) {
+                continue;
+            }
+            if (best == null || candidate.length() > best.length()) {
+                best = candidate;
+            }
+        }
+        return best == null ? null : best.toUpperCase(Locale.US);
+    }
+
+    @Nullable
+    private String selectBestBarcodeValue(@NonNull List<Barcode> barcodes) {
+        Barcode bestBarcode = null;
+        float bestScore = Float.NEGATIVE_INFINITY;
+        for (Barcode barcode : barcodes) {
+            String candidate = extractWaybillCandidate(barcode.getRawValue());
+            if (candidate == null) {
+                continue;
+            }
+            android.graphics.Rect box = barcode.getBoundingBox();
+            float score = 1f;
+            if (box != null && previewView != null && previewView.getWidth() > 0 && previewView.getHeight() > 0) {
+                float left = viewFinderOverlay != null ? viewFinderOverlay.getLeft() : 0f;
+                float top = viewFinderOverlay != null ? viewFinderOverlay.getTop() : 0f;
+                float right = viewFinderOverlay != null ? viewFinderOverlay.getRight() : previewView.getWidth();
+                float bottom = viewFinderOverlay != null ? viewFinderOverlay.getBottom() : previewView.getHeight();
+                float expandX = testMode ? previewView.getWidth() * 0.10f : previewView.getWidth() * 0.06f;
+                float expandY = testMode ? previewView.getHeight() * 0.10f : previewView.getHeight() * 0.06f;
+                left -= expandX;
+                right += expandX;
+                top -= expandY;
+                bottom += expandY;
+                float width = Math.max(1f, box.width());
+                float height = Math.max(1f, box.height());
+                float frameArea = Math.max(1f, (float) previewView.getWidth() * previewView.getHeight());
+                float areaRatio = (width * height) / frameArea;
+                float centerX = box.exactCenterX();
+                float centerY = box.exactCenterY();
+                if (centerX < left || centerX > right || centerY < top || centerY > bottom) {
+                    continue;
+                }
+                float dx = Math.abs(centerX - ((left + right) / 2f)) / Math.max(1f, (right - left) / 2f);
+                float dy = Math.abs(centerY - ((top + bottom) / 2f)) / Math.max(1f, (bottom - top) / 2f);
+                float centerPenalty = (dx * 0.20f) + (dy * 0.16f);
+                score = areaRatio * 7.5f - centerPenalty;
+            }
+            if ((testMode && score < TEST_MODE_MIN_SCORE) || (!testMode && score < NORMAL_MODE_MIN_SCORE)) {
+                continue;
+            }
+            if (bestBarcode == null || score > bestScore) {
+                bestBarcode = barcode;
+                bestScore = score;
+            }
+        }
+        return bestBarcode == null ? null : extractWaybillCandidate(bestBarcode.getRawValue());
     }
 
 
@@ -737,6 +932,7 @@ public class ScanFragment extends Fragment implements Subscriber {
                 preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
                 ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
+                        .setTargetResolution(testMode ? new Size(1920, 1080) : new Size(1280, 720))
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build();
 
@@ -747,7 +943,13 @@ public class ScanFragment extends Fragment implements Subscriber {
                          barcodeScanner.process(inputImage)
                                 .addOnSuccessListener(barcodes -> {
                                     if (barcodes != null && !barcodes.isEmpty()) {
-                                        onBarcodeDetectedFromService(barcodes.get(0).getRawValue());
+                                        String bestValue = selectBestBarcodeValue(barcodes);
+                                        if (bestValue != null) {
+                                            renderScanFeedbackState(ScanFeedbackState.CANDIDATE, R.string.scan_status_candidate, false);
+                                            onBarcodeDetectedFromService(bestValue);
+                                        } else {
+                                            renderScanFeedbackState(ScanFeedbackState.CANDIDATE, R.string.scan_status_candidate, true);
+                                        }
                                     }
                                 })
                                 .addOnFailureListener(e -> FileLog.e(TAG, "Barcode analysis failed", e))
@@ -787,12 +989,14 @@ public class ScanFragment extends Fragment implements Subscriber {
         if (cameraWasBound) {
             bindCameraNow();
         }
+        startScanForegroundRefreshers();
         scanViewModel.tryAutoSubmitOfflineScans();
     }
 
     @Override
     public void onPause() {
         super.onPause();
+        stopScanForegroundRefreshers();
         try {
             ProcessCameraProvider.getInstance(requireContext()).get().unbindAll();
         } catch (Exception e) {
@@ -804,12 +1008,27 @@ public class ScanFragment extends Fragment implements Subscriber {
     public void onDestroyView() {
         super.onDestroyView();
         uiHandler.removeCallbacks(hideAutoSubmitHintRunnable);
-        if (tokenRefresher != null) tokenRefresher.stop();
-        if (autoSubmitRefresher != null) autoSubmitRefresher.stop();
+        uiHandler.removeCallbacks(resetScanFeedbackRunnable);
+        uiHandler.removeCallbacks(resetResultCardRunnable);
+        stopScanForegroundRefreshers();
         if (cameraExecutor != null && !cameraExecutor.isShutdown()) cameraExecutor.shutdown();
         if (barcodeScanner != null) barcodeScanner.close();
 
         ResourceMgr.getInstance().getPublisher().unsubscribe(EventConstant.EVENT_DELIVERY_DATA_READY, this);
+    }
+
+    private void startScanForegroundRefreshers() {
+        if (tokenRefresher != null) {
+            tokenRefresher.start(() -> scanViewModel.refreshBatchId());
+        }
+        if (autoSubmitRefresher != null) {
+            autoSubmitRefresher.start(() -> scanViewModel.tryAutoSubmitOfflineScans());
+        }
+    }
+
+    private void stopScanForegroundRefreshers() {
+        if (tokenRefresher != null) tokenRefresher.stop();
+        if (autoSubmitRefresher != null) autoSubmitRefresher.stop();
     }
 
     /**

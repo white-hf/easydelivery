@@ -6,6 +6,7 @@ import android.os.Looper;
 import com.hf.courierservice.ICourierService;
 import com.hf.courierservice.IResponseCallBack;
 import com.hf.courierservice.Result;
+import com.hf.courierservice.apihelper.exception.AlreadyScannedException;
 import com.hf.courierservice.apihelper.exception.UnAuthorizedException;
 import com.hf.courierservice.bean.ParcelScanData;
 import com.hf.courierservice.apihelper.FileLog;
@@ -82,12 +83,34 @@ public class BatchSubmitHelper {
 
                     @Override
                     public void onFail(Exception e) {
-                        FileLog.getInstance().writeLog("Failed to set scanned status  " + rec.trackingNo + e.getMessage());
-
+                        if (e instanceof AlreadyScannedException) {
+                            AlreadyScannedException alreadyScanned = (AlreadyScannedException) e;
+                            FileLog.getInstance().warning(
+                                    "BatchSubmitHelper",
+                                    "scan submit deduped as already scanned: tracking=" + rec.trackingNo
+                                            + ", batchId=" + rec.scanBatchId
+                                            + ", bizCode=" + alreadyScanned.getBizCode()
+                                            + ", url=" + alreadyScanned.getRequestUrl());
+                            successCount.incrementAndGet();
+                            dbHandler.post(() -> scanDao.markUploadedByTrackingNo(rec.trackingNo));
+                            uiHandler.post(() -> cb.onSingleComplete(rec.trackingNo));
+                            postProgress(successCount.get() + failCount.get(), total,
+                                    successCount.get(), failCount.get(), cb);
+                            executor.execute(() -> submitNext(list, index + 1, total, successCount, failCount, cb));
+                            return;
+                        }
                         if (e instanceof UnAuthorizedException) {
+                            UnAuthorizedException unauthorized = (UnAuthorizedException) e;
+                            FileLog.getInstance().warning(
+                                    "BatchSubmitHelper",
+                                    "scan submit unauthorized: tracking=" + rec.trackingNo
+                                            + ", batchId=" + rec.scanBatchId
+                                            + ", http=" + unauthorized.getHttpStatusCode()
+                                            + ", url=" + unauthorized.getRequestUrl());
                             uiHandler.post(() -> cb.onFail(e));
                             return;
                         }
+                        FileLog.getInstance().writeLog("Failed to set scanned status  " + rec.trackingNo + e.getMessage());
 
                         failCount.incrementAndGet();
                         postProgress(successCount.get() + failCount.get(), total,

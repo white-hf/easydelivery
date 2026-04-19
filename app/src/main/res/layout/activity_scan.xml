@@ -31,17 +31,21 @@
 
     <TextView
         android:id="@+id/tvProgress"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:padding="8dp"
-        android:background="#80000000"
+        android:layout_marginTop="6dp"
+        android:layout_marginEnd="12dp"
+        android:paddingStart="10dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="4dp"
+        android:background="#8F111827"
         android:text="@string/scan_progress_default"
         android:textColor="@android:color/white"
-        android:textSize="16sp"
+        android:textSize="13sp"
         android:elevation="6dp"
         android:translationZ="8dp"
         app:layout_constraintTop_toBottomOf="@id/appBar"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
     <TextView
@@ -64,12 +68,31 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/appBar"/>
 
+    <TextView
+        android:id="@+id/tvScanStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="6dp"
+        android:background="#CC263238"
+        android:elevation="10dp"
+        android:paddingStart="10dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="4dp"
+        android:text="@string/scan_status_ready"
+        android:textColor="#FFF5F5F5"
+        android:textSize="12sp"
+        android:translationZ="10dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/appBar"/>
+
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="0dp"
         android:layout_height="0dp"
         app:implementationMode="compatible"
-        app:layout_constraintTop_toBottomOf="@id/tvProgress"
+        app:layout_constraintTop_toBottomOf="@id/appBar"
         app:layout_constraintBottom_toTopOf="@id/guideline50"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -78,7 +101,9 @@
     <View
         android:id="@+id/viewFinderOverlay"
         android:layout_width="0dp"
-        android:layout_height="80dp"
+        android:layout_height="148dp"
+        android:layout_marginStart="18dp"
+        android:layout_marginEnd="18dp"
         android:background="@drawable/overlay_barcode_finder"
         android:elevation="2dp"
         android:clickable="false"
@@ -103,7 +128,10 @@
         android:id="@+id/tvPackageNumber"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:padding="16dp"
+        android:paddingStart="18dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="18dp"
+        android:paddingBottom="16dp"
         android:background="@drawable/bg_scan_result"
         android:text="@string/scan_result_default"
         android:textColor="@color/scan_result_label"
@@ -120,14 +148,14 @@
         app:layout_constraintVertical_bias="1.0"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="12dp"/>
+        android:layout_marginBottom="10dp"/>
 
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/segmented"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:elevation="4dp"
-        android:translationZ="6dp"
+        android:elevation="1dp"
+        android:translationZ="2dp"
         app:selectionRequired="true"
         app:singleSelection="true"
         app:layout_constraintTop_toTopOf="@id/guideline50"
@@ -135,7 +163,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="10dp">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnUnscanned"
@@ -162,12 +190,12 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        app:layout_constraintGuide_percent="0.5" />
+        app:layout_constraintGuide_percent="0.56" />
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvRecentScans"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:translationZ="6dp"
+        android:translationZ="2dp"
         app:layout_constraintTop_toBottomOf="@id/segmented"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -177,21 +205,40 @@
         android:paddingTop="8dp"
         android:paddingBottom="96dp"
         android:clipToPadding="false"
-        android:background="@android:color/transparent"/>
+        android:background="#F6F8FC"/>
 
     <TextView
         android:id="@+id/tvHint"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="@string/scan_hint"
+        android:text="@string/scan_mode_hint_off"
         android:textColor="@android:color/white"
         android:textSize="12sp"
-        android:background="#66000000"
+        android:background="#5C111827"
         android:padding="6dp"
-        app:layout_constraintTop_toBottomOf="@id/viewFinderOverlay"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_margin="8dp"
-        android:layout_marginEnd="16dp"/>
+        app:layout_constraintBottom_toBottomOf="@id/previewView"
+        app:layout_constraintStart_toStartOf="@id/previewView"
+        app:layout_constraintEnd_toStartOf="@id/btnScanMode"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="12dp"/>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnScanMode"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="12dp"
+        android:minHeight="40dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:text="@string/scan_screen_mode_off"
+        android:textAllCaps="false"
+        android:textSize="12sp"
+        app:cornerRadius="18dp"
+        app:layout_constraintBottom_toBottomOf="@id/previewView"
+        app:layout_constraintEnd_toEndOf="@id/previewView"/>
 
     <FrameLayout
         android:id="@+id/flProgressOverlay"

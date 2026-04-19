@@ -18,3 +18,86 @@ This file tracks product requirement changes that affect app behavior across ver
   - After auto-complete is canceled, the driver can manually tap Done, delete photos, retake photos, or continue other existing manual actions.
   - Any photo-set change should re-enable auto-complete logic the next time the completion condition is met.
   - Auto-complete must reuse the same completion behavior as the existing manual Done action.
+
+## 2026-04-19
+
+### Camera auto-complete consistency fix
+
+- Status: iOS fixed in `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/View/PhotoViewController.swift`.
+- Fixes:
+  - Restored `Done` to always complete immediately even while the auto-complete countdown is visible.
+  - Kept tapping the countdown banner itself as the only in-banner action that cancels auto-complete and returns to manual mode.
+  - Re-evaluate the active countdown when nearby/same-address next-package candidates finish refreshing, so multi-package stops can switch to the 1-second countdown instead of remaining on the default 5-second path.
+
+### Scan unauthorized diagnostics
+
+- Status: Android implemented.
+- Scope:
+  - `app/courierservice/src/main/java/com/hf/courierservice/apihelper/ApiRequestBase.java`
+  - `app/courierservice/src/main/java/com/hf/courierservice/apihelper/exception/UnAuthorizedException.java`
+  - `app/src/main/java/com/hf/easydelivery/component/BatchSubmitHelper.java`
+  - `app/src/main/java/com/hf/easydelivery/view/model/ScanViewModel.java`
+- Requirement:
+  - When scan-related APIs fail with 401/403/449, logs must include the real HTTP status code and request URL.
+  - Scan auto-submit logs must include the affected tracking number and scan batch id so repeated unauthorized failures can be traced to a specific record.
+
+### Scan submit duplicate handling
+
+- Status: Android implemented. iOS implemented in `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Core/OfflineSubmitManager.swift`.
+- Scope:
+  - `app/courierservice/src/main/java/com/hf/courierservice/apihelper/ApiRequestBase.java`
+  - `app/courierservice/src/main/java/com/hf/courierservice/apihelper/exception/AlreadyScannedException.java`
+  - `app/src/main/java/com/hf/easydelivery/component/BatchSubmitHelper.java`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Api/APIRequestBase.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Core/OfflineSubmitManager.swift`
+- Requirement:
+  - When scan submit returns `403` with `biz_code=SCAN.ALREADY.SCANNED`, treat it as an already-synced duplicate instead of login expiry.
+  - Mark the local scan record uploaded, continue the remaining batch, and do not redirect the driver to login.
+
+### Scan barcode and QR recognition improvements
+
+- Status: Android implemented. iOS implemented in `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/View/ScanViewController.swift`.
+- Scope:
+  - `app/src/main/java/com/hf/easydelivery/view/ScanFragment.java`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/View/ScanViewController.swift`
+- Requirement:
+  - Improve recognition of screen-generated barcodes and QR codes in scan view.
+  - Make hidden test mode actually affect scanner behavior instead of only showing a toast.
+  - Prefer the largest and most centered detected code instead of blindly taking the first result.
+  - Accept QR payloads that contain an embedded alphanumeric waybill token, not only payloads that are already a pure waybill string.
+  - Use a more permissive size threshold and higher camera analysis quality in test mode.
+
+### Scan view real-time feedback and visible screen-code mode
+
+- Status: Android implemented. iOS implemented in `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/View/ScanViewController.swift`.
+- Scope:
+  - `app/src/main/java/com/hf/easydelivery/view/ScanFragment.java`
+  - `app/src/main/res/layout/activity_scan.xml`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/View/ScanViewController.swift`
+- Requirement:
+  - Replace the hidden test-mode-only entrance with a visible in-view `screen code` toggle on both platforms.
+  - Show a clear real-time scan status pill so drivers can tell whether the scanner is idle, has locked onto a candidate, saved a scan, or rejected the code.
+  - Change the scan frame visual state with the status so detection feels responsive instead of static.
+
+### Scan success feedback strengthening
+
+- Status: Android implemented. iOS implemented in `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/View/ScanViewController.swift`.
+- Scope:
+  - `app/src/main/java/com/hf/easydelivery/view/ScanFragment.java`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/View/ScanViewController.swift`
+- Requirement:
+  - Make the top result card easier to confirm at a glance by increasing package and waybill font sizes.
+  - Make the success flash shorter but stronger, with a brief green highlight on the result card.
+  - Make success haptics more explicit so drivers can feel the scan confirmation without staring at the screen.
+
+### Scan page visual hierarchy simplification
+
+- Status: Android implemented. iOS implemented in `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/View/ScanViewController.swift`.
+- Scope:
+  - `app/src/main/res/layout/activity_scan.xml`
+  - `app/src/main/java/com/hf/easydelivery/view/ScanFragment.java`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/View/ScanViewController.swift`
+- Requirement:
+  - Keep the scan page focused on three layers only: active scan area, most recent scan result, and scanned/unscanned counts with list access.
+  - Reduce the visual weight of the counts row and list section so the camera area stays dominant.
+  - Enlarge the visible scan area and widen the effective candidate region so drivers do not need to pin the barcode to the exact center.
