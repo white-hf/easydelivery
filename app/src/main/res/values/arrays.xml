@@ -22,7 +22,7 @@
     </string-array>
 
     <string-array name="sms_tempalte">
-        <item>Hi, this is your delivery driver. I have a parcel (No. {tracking}) for you and will be delivering it to you. Are you home?</item>
+        <item>Hi {name}, this is your delivery driver. I have a parcel (No. {tracking}) for you and will be delivering it to {address}. Are you home?</item>
         <item>Hi, this is your delivery driver. I have delivered (No. {tracking}) your parcel at: mailroom</item>
         <item>Hi, This is your delivery driver. I have a parcel (No. {tracking}) for you. Please call or message me to arrange for delivery. Thank you!</item>
         <item>Hi, This is your delivery driver. I have a parcel (No. {tracking}) for you but could not reach you.</item>

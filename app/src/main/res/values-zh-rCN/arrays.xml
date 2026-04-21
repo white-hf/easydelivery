@@ -22,7 +22,7 @@
     </string-array>
 
     <string-array name="sms_tempalte">
-        <item>您好，我是您的派送司机。我有一个包裹（单号 {tracking}）将送达，您在家吗？</item>
+        <item>您好，{name}。我是您的派送司机。我有一个包裹（单号 {tracking}）将送达至 {address}。请问您在家吗？</item>
         <item>您好，我是您的派送司机。我已将包裹（单号 {tracking}）放在：收件处</item>
         <item>您好，我是您的派送司机。我有一个包裹（单号 {tracking}）。请电话或短信联系我安排派送，谢谢！</item>
         <item>您好，我是您的派送司机。我有一个包裹（单号 {tracking}），但未能联系到您。</item>
