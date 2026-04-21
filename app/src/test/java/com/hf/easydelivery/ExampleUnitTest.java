@@ -33,6 +33,7 @@ public class ExampleUnitTest {
         Utils.AddressInfo trailingUnit = extractApartmentAndStreetNumber("117 Richmond St 409 DARTMOUTH NS");
         Utils.AddressInfo spacedPostalHouse = extractApartmentAndStreetNumber("10 TRINAH COURT, HALIFAX, NS, CA, B2W 6J7");
         Utils.AddressInfo malformedHyphenHouse = extractApartmentAndStreetNumber("Street - 49 Loggen Rd Middle Sackville NS");
+        Utils.AddressInfo backDoorHouse = extractApartmentAndStreetNumber("6 Dawson St Back Door DARTMOUTH");
 
         assertEquals("1001", apartmentHyphen.getApartmentNumber());
         assertEquals("67", apartmentHyphen.getStreetNumber());
@@ -53,6 +54,10 @@ public class ExampleUnitTest {
         assertEquals("", malformedHyphenHouse.getApartmentNumber());
         assertEquals("49", malformedHyphenHouse.getStreetNumber());
         assertFalse(malformedHyphenHouse.hasConfidentUnit());
+
+        assertEquals("", backDoorHouse.getApartmentNumber());
+        assertEquals("6", backDoorHouse.getStreetNumber());
+        assertFalse(backDoorHouse.hasConfidentUnit());
     }
     private Utils.AddressInfo extractApartmentAndStreetNumber(String address) {
         return Utils.extractApartmentAndStreetNumber(address);

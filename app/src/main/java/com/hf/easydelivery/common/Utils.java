@@ -70,7 +70,7 @@ public class Utils {
 
     private static final Pattern LEADING_UNIT_HYPHEN = Pattern.compile("^\\s*([A-Za-z]*\\d[A-Za-z0-9]{0,5})\\s*-\\s*(\\d{1,5})\\b");
     private static final Pattern UNIT_PREFIX_PATTERN = Pattern.compile(
-            "^\\s*(?:apt|apartment|unit|suite|ste|rm|room|ph|buzzer|fl|floor|lvl|level|entrance|door|code|bldg|building|#)\\s*[:#-]?\\s*(\\w{1,8})\\s+(\\d{1,5})\\b",
+            "^\\s*(?:apt|apartment|unit|suite|ste|rm|room|ph|fl|floor|lvl|level|locker|#)\\s*[:#-]?\\s*(\\w{1,8})\\s+(\\d{1,5})\\b",
             Pattern.CASE_INSENSITIVE
     );
     private static final Pattern DOUBLE_NUMBER_PREFIX = Pattern.compile("^\\s*(\\d{1,4})\\s+(\\d{1,5})\\b");
@@ -78,14 +78,14 @@ public class Utils {
     private static final Pattern GENERIC_NUMBER_PATTERN = Pattern.compile("\\b(\\d{1,5}[A-Za-z]?)\\b");
     private static final Pattern POSTAL_CODE_CA = Pattern.compile("(?i)\\b[A-Z]\\d[A-Z]\\s?\\d[A-Z]\\d\\b");
     private static final Pattern UNIT_KEYWORD_GLOBAL = Pattern.compile(
-            "(?i)(?:\\b(?:apt|apartment|unit|suite|ste|rm|room|ph|buzzer|fl|floor|lvl|level|entrance|door|code|bldg|building|locker|buzz)\\s*[:#-]?\\s*(\\w{1,8}))"
+            "(?i)(?:\\b(?:apt|apartment|unit|suite|ste|rm|room|ph|fl|floor|lvl|level|locker)\\s*[:#-]?\\s*(\\w{1,8}))"
     );
     private static final Pattern TRAILING_UNIT_PATTERN = Pattern.compile("(?i)(?:#|no\\.?|unit)\\s*(\\w{1,8})\\s*$");
-    private static final Pattern EMBEDDED_UNIT_TOKEN = Pattern.compile("(?i)^(?:apt|apartment|unit|suite|ste|rm|room|fl|floor|lvl|level|locker|buzzer|buzz)[:#-]?\\s*(\\w{1,8})$");
+    private static final Pattern EMBEDDED_UNIT_TOKEN = Pattern.compile("(?i)^(?:apt|apartment|unit|suite|ste|rm|room|fl|floor|lvl|level|locker)[:#-]?\\s*(\\w{1,8})$");
     private static final Pattern HASHED_UNIT_TOKEN = Pattern.compile("^#\\s*(\\w{1,8})$", Pattern.CASE_INSENSITIVE);
     private static final Pattern INLINE_HYPHEN_UNIT = Pattern.compile("^(\\d{1,4})-(\\d{1,5})$");
     private static final Set<String> UNIT_KEYWORDS = new HashSet<>(Arrays.asList(
-            "apt","apartment","unit","suite","ste","rm","room","ph","buzzer","fl","floor","lvl","level","entrance","door","code","bldg","building","locker","buzz"
+            "apt","apartment","unit","suite","ste","rm","room","ph","fl","floor","lvl","level","locker"
     ));
     private static final Set<String> PROVINCE_CODES = new HashSet<>(Arrays.asList(
             "NS","NB","PE","NL","QC","ON","MB","SK","AB","BC"
