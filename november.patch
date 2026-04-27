@@ -1,0 +1,136 @@
+diff --git a/app/src/main/java/com/hf/easydelivery/map/MapInnerFragment.java b/app/src/main/java/com/hf/easydelivery/map/MapInnerFragment.java
+index 0000000..0000001 100644
+--- a/app/src/main/java/com/hf/easydelivery/map/MapInnerFragment.java
++++ b/app/src/main/java/com/hf/easydelivery/map/MapInnerFragment.java
+@@ -330,11 +330,12 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
+     }
+ 
+     private void showStatusLegendDialog() {
+-        new AlertDialog.Builder(requireActiv ity())
++        // FIX: crash — wrong API call (typo). Must be requireActivity()
++        new AlertDialog.Builder(requireActivity())
+                 .setTitle("状态说明")
+                 .setMessage("顺序为：\n已送达 / 派送中\n\n例如：30/29")
+                 .setPositiveButton("知道了", null)
+                 .show();
+     }
+ 
+@@ -146,8 +147,12 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
+         ImageButton pillCloseButton = view.findViewById(R.id.btn_pill_close);
+-        btnResumeFollow = view.findViewById(R.id.btn_resume_follow);
++        btnResumeFollow = view.findViewById(R.id.btn_resume_follow);
+         if (btnResumeFollow != null) {
+             btnResumeFollow.setVisibility(View.GONE);
+             btnResumeFollow.setOnClickListener(v -> onResumeFollowClicked());
++            // Bring to front & add elevation so it won't be covered by MapView on some OEMs
++            try { btnResumeFollow.bringToFront(); } catch (Throwable ignore) {}
++            try { btnResumeFollow.setElevation(10f); } catch (Throwable ignore) {}
+         }
+ 
+         if (statusSummaryText != null) {
+@@ -230,6 +235,7 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
+         clusterManager = new ClusterManager<>(requireContext(), googleMap);
+         myClusterRenderer = new MyClusterRenderer<>(requireContext(), googleMap, clusterManager);
+         clusterManager.setRenderer(myClusterRenderer);
+ 
+         googleMap.setOnCameraIdleListener(() -> {
+             clusterManager.onCameraIdle();
+             if (cameraController != null) {
+                 cameraController.onCameraIdle();
+             }
+             isUserInteracting = false;
+         });
+         googleMap.setOnCameraMoveStartedListener(reason -> {
+             boolean gesture = reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE;
+             if (gesture && cameraController != null) {
+                 cameraController.beginBearingCapture();
+             }
+             if (!gesture && cameraController != null) {
+                 cameraController.endBearingCapture();
+             }
+-            if (gesture) {
+-                pauseAutoFollowByGesture();
+-            }
++            if (gesture) { pauseAutoFollowByGesture(); }
+             isUserInteracting = gesture;
+         });
++        // Fallback: Some devices/GMS versions won't mark taps/quick pans as gestures.
++        // Treat any map click as user intervention to show the resume-follow button.
++        googleMap.setOnMapClickListener(latLng -> {
++            logD("map click -> pauseAutoFollow (fallback)");
++            pauseAutoFollowByGesture();
++            isUserInteracting = true;
++        });
++        googleMap.setOnMapLongClickListener(latLng -> {
++            logD("map long click -> pauseAutoFollow (fallback)");
++            pauseAutoFollowByGesture();
++            isUserInteracting = true;
++        });
+ 
+         googleMap.setOnCameraMoveListener(() -> {
+             CameraPosition cameraPosition = googleMap.getCameraPosition();
+             myClusterRenderer.setZoomLevel(cameraPosition.zoom);
+             if (cameraController != null) {
+                 cameraController.onCameraMove(cameraPosition);
+             }
+         });
+@@ -608,7 +616,8 @@ public class MapInnerFragment extends Fragment implements OnMapReadyCallback, Sm
+     }
+ 
+     private void onResumeFollowClicked() {
+-        centerOnMyLocation();
++        logD("resume-follow clicked -> clear pause & center");
++        centerOnMyLocation();
+     }
+ 
+     private void pauseAutoFollowByGesture() {
+         if (autoFollowPausedByGesture) return;
+         autoFollowPausedByGesture = true;
+         showResumeFollowButton();
++        logD("auto-follow paused by user gesture");
+     }
+ 
+     private void clearAutoFollowPause() {
+         autoFollowPausedByGesture = false;
+         isUserInteracting = false;
+         hideResumeFollowButton();
++        logD("auto-follow pause cleared");
+     }
+diff --git a/app/src/main/res/layout/activity_map.xml b/app/src/main/res/layout/activity_map.xml
+index 0000000..0000002 100644
+--- a/app/src/main/res/layout/activity_map.xml
++++ b/app/src/main/res/layout/activity_map.xml
+@@ -190,6 +190,7 @@
+         android:layout_marginStart="16dp"
+         android:layout_marginBottom="24dp"
+         android:text="重新跟随"
+         android:visibility="gone"
++        android:elevation="10dp"
+         style="@style/Widget.MaterialComponents.Button" />
+ 
+ </androidx.coordinatorlayout.widget.CoordinatorLayout>
+diff --git a/app/src/main/java/com/hf/easydelivery/map/InfoPillProximityController.java b/app/src/main/java/com/hf/easydelivery/map/InfoPillProximityController.java
+index 0000000..0000003 100644
+--- a/app/src/main/java/com/hf/easydelivery/map/InfoPillProximityController.java
++++ b/app/src/main/java/com/hf/easydelivery/map/InfoPillProximityController.java
+@@
+ public class InfoPillProximityController {
+@@
+-    private ProximityProfile profile = ProximityProfile.ADVANCED; // 默认按你现在的接入
++    private ProximityProfile profile = ProximityProfile.ADVANCED; // 默认按你现在的接入
++
++    /** 只读：用于日志/开发者面板展示 */
++    @NonNull
++    public ProximityProfile getProfile() {
++        return profile == null ? ProximityProfile.ADVANCED : profile;
++    }
+ 
+     public void setProfile(@NonNull ProximityProfile profile) {
+         this.profile = profile;
+     }
+@@
+     public enum ProximityProfile {
+         SIMPLE,
+         BALANCED,
+         ADVANCED
+     }

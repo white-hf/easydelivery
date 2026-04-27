@@ -101,7 +101,7 @@
                     android:layout_weight="1"
                     android:textStyle="bold"
                     android:textColor="@android:color/black"
-                    android:textSize="18sp"
+                    android:textSize="20sp"
                     android:text="@string/map_pill_route_default" />
 
                 <TextView
@@ -133,8 +133,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="@android:color/black"
+                android:textStyle="bold"
                 android:text="@string/map_pill_address_placeholder"
-                android:textSize="15sp"
+                android:textSize="17sp"
                 android:layout_marginTop="4dp" />
 
             <TextView
@@ -144,7 +145,8 @@
                 android:textColor="@android:color/darker_gray"
                 android:text="@string/map_pill_recipient_placeholder"
                 android:textSize="14sp"
-                android:layout_marginTop="2dp" />
+                android:layout_marginTop="2dp"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_pill_show_list"

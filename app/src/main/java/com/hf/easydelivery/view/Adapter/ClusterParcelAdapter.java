@@ -67,7 +67,8 @@ public class ClusterParcelAdapter extends RecyclerView.Adapter<ClusterParcelAdap
                 ? context.getString(R.string.parcel_unit_unknown)
                 : context.getString(R.string.package_list_unit_format, unitRaw);
         String name = info.getName() == null ? "" : info.getName();
-        String line1 = context.getString(R.string.cluster_line1_format, streetNo, unitNo, name);
+        // Simplified: removed name, keeping only street and unit
+        String line1 = context.getString(R.string.cluster_line1_format, streetNo, unitNo, "").trim();
         String address = info.getAddress() == null
                 ? context.getString(R.string.map_placeholder)
                 : info.getAddress();

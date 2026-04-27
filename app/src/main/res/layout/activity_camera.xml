@@ -45,11 +45,12 @@
 
             <TextView
                 android:id="@+id/tv_route_number"
-                android:textSize="22sp"
+                android:textSize="24sp"
                 android:textStyle="bold"
                 android:textColor="@android:color/white"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"/>
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -64,19 +65,16 @@
                     android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:ellipsize="end"
-                    android:textSize="15sp"
-                    android:includeFontPadding="false"
-                    android:lineSpacingMultiplier="0.9"
-                    android:textColor="@android:color/white" />
+                    android:textSize="14sp"
+                    android:textColor="#E0E0E0" />
                 <TextView
                     android:id="@+id/tv_customer_name"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:ellipsize="end"
-                    android:textSize="15sp"
-                    android:includeFontPadding="false"
-                    android:lineSpacingMultiplier="0.9"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
                     android:textColor="@android:color/white" />
                 <TextView
                     android:id="@+id/tv_unit_number"
@@ -84,19 +82,18 @@
                     android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:ellipsize="end"
-                    android:textSize="15sp"
-                    android:includeFontPadding="false"
-                    android:lineSpacingMultiplier="0.9"
-                    android:textColor="@android:color/white" />
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:textColor="#FFEB3B" />
                 <TextView
                     android:id="@+id/tv_address"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:maxLines="2"
                     android:ellipsize="end"
-                    android:textSize="15sp"
-                    android:includeFontPadding="false"
-                    android:lineSpacingMultiplier="0.9"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:lineSpacingExtra="2dp"
                     android:textColor="@android:color/white" />
             </LinearLayout>
         </LinearLayout>

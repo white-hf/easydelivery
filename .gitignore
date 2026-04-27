@@ -14,3 +14,4 @@ app/uniuniservice/build/
 app/log0112.txt
 
 .DS_Store
+/app/uniuniservice/src/main/java/com/hf/uniuni/

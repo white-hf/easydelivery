@@ -382,15 +382,13 @@ public class PackageListFragment extends Fragment {
         public void onBindViewHolder(@NonNull VH h, int pos) {
             DeliveryInfo it = items.get(pos);
             h.itemView.setMinimumHeight(minRowHeightPx);
-            String routeText = ctx.getString(R.string.package_list_route_format,
-                    valueOrDash(it.getRouteNumber()));
-            String orderText = ctx.getString(R.string.package_list_waybill_format,
-                    valueOrDash(it.getOrderSn()));
-            String customerText = ctx.getString(R.string.package_list_customer_format,
-                    valueOrDash(it.getName()));
-            h.routeNumber.setText(routeText);
-            h.orderSn.setText(orderText);
-            h.customer.setText(customerText);
+            
+            String routeVal = valueOrDash(it.getRouteNumber());
+            String orderVal = valueOrDash(it.getOrderSn());
+
+            h.routeNumber.setText(routeVal);
+            h.orderSn.setText(orderVal);
+            h.customer.setVisibility(View.GONE);
 
             String placeholder = ctx.getString(R.string.map_placeholder);
             String unitRaw = it.getUnitNumber();
@@ -403,17 +401,16 @@ public class PackageListFragment extends Fragment {
             String addressLine = valueOrDash(it.getAddress());
             StringBuilder addressBuilder = new StringBuilder();
             if (!placeholder.equals(streetNo)) {
-                addressBuilder.append(ctx.getString(R.string.package_list_street_number_format,
-                        streetNo)).append(" ");
+                addressBuilder.append(streetNo).append(" ");
             }
             if (!placeholder.equals(unit)) {
-                addressBuilder.append(ctx.getString(R.string.package_list_unit_format, unit))
-                        .append(" ");
+                addressBuilder.append("#").append(unit).append(" ");
             }
             addressBuilder.append(addressLine);
-            String addressText = ctx.getString(R.string.package_list_address_format,
-                    addressBuilder.toString().trim());
+            
+            String addressText = addressBuilder.toString().trim();
             h.address.setText(addressText);
+
             View.OnClickListener clickListener = v -> {
                 int adapterPos = h.getBindingAdapterPosition();
                 if (adapterPos == RecyclerView.NO_POSITION)
@@ -424,12 +421,10 @@ public class PackageListFragment extends Fragment {
             h.itemView.setOnClickListener(clickListener);
             h.routeNumber.setOnClickListener(clickListener);
             h.orderSn.setOnClickListener(clickListener);
-            h.customer.setOnClickListener(clickListener);
             h.address.setOnClickListener(clickListener);
 
-            attachCopySupport(h.routeNumber, routeText);
-            attachCopySupport(h.orderSn, orderText);
-            attachCopySupport(h.customer, customerText);
+            attachCopySupport(h.routeNumber, routeVal);
+            attachCopySupport(h.orderSn, orderVal);
             attachCopySupport(h.address, addressText);
         }
 

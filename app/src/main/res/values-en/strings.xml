@@ -1,0 +1,68 @@
+<resources>
+    <!-- Common / buttons -->
+    <string name="app_name">EasyDelivery</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_back">Back</string>
+
+    <!-- Login / My -->
+    <string name="login_title">Login</string>
+    <string name="login_username_hint">Username</string>
+    <string name="login_password_hint">Password</string>
+    <string name="login_btn">Login</string>
+    <string name="login_success">Login succeeded</string>
+    <string name="login_failed">Login failed</string>
+    <string name="login_invalid_cred">Invalid username or password</string>
+    <string name="login_need">Please login first</string>
+    <string name="my_work">My Work</string>
+    <string name="my_apartment">My Apartments</string>
+    <string name="my_large_parcel">My Large Parcels</string>
+    <string name="my_logs">Logs</string>
+    <string name="my_delivered">Delivered / Upload Queue</string>
+
+    <!-- Map / main UI -->
+    <string name="map_toggle_list">List</string>
+    <string name="map_toggle_map">Map</string>
+    <string name="map_recenter">Recenter</string>
+    <string name="map_fullscreen">Fullscreen</string>
+    <string name="map_location_unavailable">Location unavailable</string>
+    <string name="map_info_pill_none">No active delivery</string>
+    <string name="map_info_pill_primary">Current delivery</string>
+
+    <!-- Camera / photos -->
+    <string name="camera_step_label">Take shipping label</string>
+    <string name="camera_step_dropoff">Take drop-off spot</string>
+    <string name="camera_step_building">Take building photo</string>
+    <string name="camera_save_success">Saved</string>
+    <string name="camera_save_failed">Save failed</string>
+    <string name="camera_retry">Retry</string>
+    <string name="camera_fail_reason">Fail reason</string>
+
+    <!-- SMS / share -->
+    <string name="sms_title">Send SMS</string>
+    <string name="sms_send">Send</string>
+    <string name="sms_template_default">Your parcel is arriving soon.</string>
+    <string name="share_title">Share</string>
+
+    <!-- Apartment photos -->
+    <string name="apt_save_prompt">Save apartment photo?</string>
+    <string name="apt_saved">Apartment photo saved</string>
+    <string name="apt_auto_fill">Apartment photo auto-filled</string>
+
+    <!-- Large parcels -->
+    <string name="large_title">My Large Parcels</string>
+    <string name="large_scan_hint">Scan barcode/QR to add</string>
+    <string name="large_manual_hint">Enter tracking or route</string>
+    <string name="large_add">Add</string>
+    <string name="large_clear">Clear today</string>
+    <string name="large_empty">No large parcels today</string>
+
+    <!-- Notifications / lockscreen -->
+    <string name="notif_channel_name">Delivery</string>
+    <string name="notif_channel_desc">Delivery updates</string>
+    <string name="notif_lock_title">Delivering</string>
+    <string name="notif_lock_action_open">Open App</string>
+    <string name="notif_lock_action_nav">Navigate</string>
+    <string name="notif_lock_action_camera">Camera</string>
+</resources>

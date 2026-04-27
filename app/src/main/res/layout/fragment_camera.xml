@@ -50,7 +50,7 @@
 
             <TextView
                 android:id="@+id/tv_route_number"
-                android:textSize="22sp"
+                android:textSize="24sp"
                 android:textStyle="bold"
                 android:textColor="@android:color/white"
                 android:maxLines="1"
@@ -69,10 +69,8 @@
                     android:id="@+id/tv_tracking_number"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="15sp"
-                    android:includeFontPadding="false"
-                    android:lineSpacingMultiplier="0.9"
+                    android:textColor="#E0E0E0"
+                    android:textSize="14sp"
                     android:maxLines="1"
                     android:ellipsize="end" />
                 <TextView
@@ -80,19 +78,17 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@android:color/white"
-                    android:textSize="15sp"
-                    android:includeFontPadding="false"
-                    android:lineSpacingMultiplier="0.9"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
                     android:maxLines="1"
                     android:ellipsize="end" />
                 <TextView
                     android:id="@+id/tv_unit_number"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="15sp"
-                    android:includeFontPadding="false"
-                    android:lineSpacingMultiplier="0.9"
+                    android:textColor="#FFEB3B"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
                     android:maxLines="1"
                     android:ellipsize="end" />
                 <TextView
@@ -100,10 +96,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@android:color/white"
-                    android:textSize="15sp"
-                    android:includeFontPadding="false"
-                    android:lineSpacingMultiplier="0.9"
-                    android:maxLines="1"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:lineSpacingExtra="2dp"
+                    android:maxLines="2"
                     android:ellipsize="end" />
             </LinearLayout>
         </LinearLayout>

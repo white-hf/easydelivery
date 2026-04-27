@@ -1077,6 +1077,7 @@ public class MapInnerFragment extends Fragment
             primaryParts.add(unitLabel);
         if (!TextUtils.isEmpty(parcelLabel))
             primaryParts.add(parcelLabel);
+
         if (sameAddressCount > 1) {
             primaryParts.add(getString(R.string.map_same_address_count_format, sameAddressCount));
         }
@@ -1088,14 +1089,11 @@ public class MapInnerFragment extends Fragment
         String baseAddress = info.getAddress() == null ? "" : info.getAddress();
         pillAddressText.setText(baseAddress);
 
-        String recipient = info.getName() == null ? getString(R.string.map_placeholder) : info.getName();
-        String parcelSummary = buildParcelSummary(sameAddressGroup, info);
-        String recipientLine = getString(R.string.map_recipient_format, recipient);
-        if (!parcelSummary.isEmpty()) {
-            recipientLine = recipientLine + "\n"
-                    + getString(R.string.map_parcel_summary_format, parcelSummary);
+        // Remove recipient and summary as requested
+        if (pillRecipientText != null) {
+            pillRecipientText.setVisibility(View.GONE);
         }
-        pillRecipientText.setText(recipientLine);
+
         if (pillLargeBadge != null) {
             boolean isLarge = LargeParcelStore.isLarge(requireContext(), info);
             pillLargeBadge.setVisibility(isLarge ? View.VISIBLE : View.GONE);
