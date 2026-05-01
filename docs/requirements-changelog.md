@@ -117,3 +117,16 @@ This file tracks product requirement changes that affect app behavior across ver
   - Strip province, country, and postal-code tail tokens before unit inference so house addresses such as `98 King St, Dartmouth, NS, CA, B2Y 2S1` stay on the 2-photo path.
   - Only let confident unit sources trigger apartment behavior. Low-quality numeric guesses must no longer force the 3-photo apartment flow.
   - Keep explicit apartment formats such as `301-101 ...`, `Unit 301 ...`, `#301 ...`, and `117 Richmond St 409 ...` working on both platforms.
+
+### Map empty-screen one-shot camera rescue
+
+- Status: Android implemented. iOS implemented in `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapViewController.swift` and `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/CameraFollowController.swift`.
+- Scope:
+  - `app/src/main/java/com/hf/easydelivery/map/MapInnerFragment.java`
+  - `app/src/main/java/com/hf/easydelivery/map/CameraFollowController.java`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapViewController.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/CameraFollowController.swift`
+- Requirement:
+  - Keep the existing driving follow and cluster behavior unchanged when the map core visible area already contains at least one parcel.
+  - When the driver is moving slowly, the core visible area is empty, and the next parcel sits just outside the screen, perform a single light camera nudge to reveal that parcel instead of forcing the driver to manually pan or zoom.
+  - Do not trigger this rescue while the driver is interacting with the map, while auto-follow is paused, at higher driving speeds, for far-away parcels, or repeatedly for the same parcel.

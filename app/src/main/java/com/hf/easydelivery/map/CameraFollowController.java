@@ -2,6 +2,7 @@ package com.hf.easydelivery.map;
 
 import android.animation.ValueAnimator;
 import android.graphics.Point;
+import android.graphics.RectF;
 import android.location.Location;
 import android.os.SystemClock;
 import android.view.animation.DecelerateInterpolator;
@@ -78,6 +79,10 @@ public class CameraFollowController {
     private static final int LIST_VIEW_MIN_ITEMS = 1;
     private static final long LIST_VIEW_MIN_INTERVAL_MS = 10_000L;
     private static final long LIST_VIEW_RESUME_COOLDOWN_MS = 8_000L;
+    private static final long EMPTY_SCREEN_RESCUE_SUPPRESS_MS = 1_200L;
+    private static final float EMPTY_SCREEN_RESCUE_INSET_X = 0.18f;
+    private static final float EMPTY_SCREEN_RESCUE_INSET_TOP = 0.14f;
+    private static final float EMPTY_SCREEN_RESCUE_INSET_BOTTOM = 0.22f;
 
     // Adaptive animation + lookAhead smoothing
     private static final long CAMERA_ANIM_MIN_MS = 120L;
@@ -1139,6 +1144,66 @@ public class CameraFollowController {
         follow(location, state, true, true, false, false, preferredFollowZoom);
     }
 
+    public boolean nudgeCameraTowardOffscreenParcel(@NonNull LatLng parcelLatLng) {
+        if (googleMap == null || mapView == null) {
+            return false;
+        }
+
+        CameraPosition current = googleMap.getCameraPosition();
+        int width = mapView.getWidth();
+        int height = mapView.getHeight();
+        if (current == null || width <= 0 || height <= 0) {
+            return false;
+        }
+
+        try {
+            Point parcelPoint = googleMap.getProjection().toScreenLocation(parcelLatLng);
+            RectF rescueRect = new RectF(
+                    width * EMPTY_SCREEN_RESCUE_INSET_X,
+                    height * EMPTY_SCREEN_RESCUE_INSET_TOP,
+                    width * (1f - EMPTY_SCREEN_RESCUE_INSET_X),
+                    height * (1f - EMPTY_SCREEN_RESCUE_INSET_BOTTOM));
+            if (rescueRect.contains(parcelPoint.x, parcelPoint.y)) {
+                return false;
+            }
+
+            float clampedX = Math.max(rescueRect.left, Math.min(parcelPoint.x, rescueRect.right));
+            float clampedY = Math.max(rescueRect.top, Math.min(parcelPoint.y, rescueRect.bottom));
+            float deltaX = parcelPoint.x - clampedX;
+            float deltaY = parcelPoint.y - clampedY;
+            if (Math.hypot(deltaX, deltaY) < 2f) {
+                return false;
+            }
+
+            Point cameraPoint = googleMap.getProjection().toScreenLocation(current.target);
+            Point shiftedTargetPoint = new Point(
+                    Math.round(cameraPoint.x + deltaX),
+                    Math.round(cameraPoint.y + deltaY));
+            LatLng shiftedTarget = googleMap.getProjection().fromScreenLocation(shiftedTargetPoint);
+            if (shiftedTarget == null) {
+                return false;
+            }
+
+            CameraPosition targetCamera = new CameraPosition.Builder(current)
+                    .target(shiftedTarget)
+                    .build();
+            animateCameraTo(targetCamera);
+            long now = SystemClock.uptimeMillis();
+            suppressFollowUntilMs = now + EMPTY_SCREEN_RESCUE_SUPPRESS_MS;
+            lastCameraUpdateUptime = now;
+            lastCameraTargetLatLng = targetCamera.target;
+            lastCameraBearing = targetCamera.bearing;
+            lastCameraKey = null;
+            return true;
+        } catch (Throwable t) {
+            try {
+                FileLog.getInstance().error(TAG, "nudgeCameraTowardOffscreenParcel failed", t);
+            } catch (Throwable ignore) {
+            }
+            return false;
+        }
+    }
+
     @Nullable
     private CameraPosition buildDrivingCamera(@NonNull Location location, float preferredFollowZoom) {
         LatLng driverLatLng = new LatLng(location.getLatitude(), location.getLongitude());
@@ -1601,4 +1666,3 @@ public class CameraFollowController {
     }
 
 }
-

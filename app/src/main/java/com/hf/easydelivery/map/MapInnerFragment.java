@@ -168,6 +168,7 @@ public class MapInnerFragment extends Fragment
     private final DeliveryFocusManager focusManager = new DeliveryFocusManager();
     private final SimpleEtaEstimator simpleEtaEstimator = new SimpleEtaEstimator();
     private CameraFollowController cameraController;
+    private final EmptyScreenRescueCoordinator emptyScreenRescueCoordinator = new EmptyScreenRescueCoordinator();
     private InfoPillProximityController proximityController;
     private ProximityCoordinator proximityCoordinator;
     // Profile (PowerSaver / Advanced)
@@ -646,6 +647,9 @@ public class MapInnerFragment extends Fragment
                 @Override
                 public void onHide() {
                     currentPrimaryKey = null;
+                    currentPrimaryDelivery = null;
+                    currentCloseDeliveries = Collections.emptyList();
+                    lastNearestDistanceMeters = Float.NaN;
                     hideInfoPillCompletely();
                     publishLockscreenFocus(null, Float.NaN);
                 }
@@ -1519,6 +1523,14 @@ public class MapInnerFragment extends Fragment
 
         long stationaryDurationMs = snapshot != null ? snapshot.stationaryDurationMs : 0L;
         float currentHeading = snapshot != null ? snapshot.currentHeadingDeg : Float.NaN;
+
+        // Camera "list/overview" mode should only consider genuinely nearby parcels.
+        // Passing the full deliveries list here can include a far-away first item (unsorted),
+        // causing camera oscillation between follow-mode and fit-bounds list-mode when stationary.
+        List<DeliveryInfo> cameraNearby = currentCloseDeliveries;
+        if (cameraNearby == null || cameraNearby.isEmpty()) {
+            cameraNearby = Collections.emptyList();
+        }
         CameraUpdateContext cameraContext = new CameraUpdateContext(
                 effective,
                 state,
@@ -1530,7 +1542,7 @@ public class MapInnerFragment extends Fragment
                 currentHeading,
                 distanceMeters,
                 stationaryDurationMs,
-                currentMapDeliveries,
+                cameraNearby,
                 insideZone,
                 getRealMapVisibleHeightPx(),
                 isUserInteracting,
@@ -1543,6 +1555,23 @@ public class MapInnerFragment extends Fragment
 
         if (navigationModeEnabled && isDriving && cameraController != null) {
             Utils.vibrate(requireContext(), 30);
+        }
+
+        if (emptyScreenRescueCoordinator.maybeTrigger(
+                googleMap,
+                mapView,
+                cameraController,
+                effective,
+                state,
+                currentMapDeliveries,
+                currentPrimaryDelivery,
+                navigationModeEnabled,
+                autoFollowPausedByGesture,
+                isUserInteracting,
+                isManualCenterHoldActive())) {
+            pendingCameraContext = null;
+            cameraUpdateHandler.removeCallbacks(cameraUpdateRunnable);
+            return;
         }
 
         pendingCameraContext = cameraContext;
@@ -1607,6 +1636,13 @@ public class MapInnerFragment extends Fragment
         long stationaryDurationMs = snapshot != null ? snapshot.stationaryDurationMs : 0L;
         float currentHeading = snapshot != null ? snapshot.currentHeadingDeg : Float.NaN;
 
+        // Keep tick-driven camera updates consistent with onLocationUpdate(): only feed nearby
+        // parcels to "list/overview" mode to avoid far-item fit-bounds oscillation.
+        List<DeliveryInfo> cameraNearby = currentCloseDeliveries;
+        if (cameraNearby == null || cameraNearby.isEmpty()) {
+            cameraNearby = Collections.emptyList();
+        }
+
         return new CameraUpdateContext(
                 effective,
                 lastMovementState,
@@ -1618,7 +1654,7 @@ public class MapInnerFragment extends Fragment
                 currentHeading,
                 distanceMeters,
                 stationaryDurationMs,
-                currentMapDeliveries,
+                cameraNearby,
                 insideZone,
                 getRealMapVisibleHeightPx(),
                 isUserInteracting,
