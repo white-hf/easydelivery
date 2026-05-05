@@ -115,15 +115,15 @@ Driving map follow demo:
 
 Map overview reference:
 
-<img src="./media/Map%20overlook.png" alt="Map overview reference" width="720" />
+<img src="./media/Map%20overlook.png" alt="Map overview reference" width="360" />
 
 Large parcel marker reference:
 
-<img src="./media/Map%20with%20large%20package%20sign.png" alt="Large parcel marker reference" width="720" />
+<img src="./media/Map%20with%20large%20package%20sign.png" alt="Large parcel marker reference" width="360" />
 
 Multi-parcel map reference:
 
-<img src="./media/Map%20with%20multipe%20packages.png" alt="Multi parcel map reference" width="720" />
+<img src="./media/Map%20with%20multipe%20packages.png" alt="Multi parcel map reference" width="360" />
 
 ## Suggested Future Cleanup
 
