@@ -106,12 +106,10 @@ Avoid:
 
 ### Demo Media
 Photo flow demo:
-
-<video src="./media/Take%20photos.mp4" controls width="360"></video>
+🎥 Demo: https://youtu.be/pon8pqhOicM
 
 Driving map follow demo:
-
-<video src="./media/Travel%20and%20show%20a%20package.mp4" controls width="360"></video>
+🎥 Demo: https://youtu.be/DM9m_VVtZhA
 
 Map overview reference:
 
