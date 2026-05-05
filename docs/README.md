@@ -106,24 +106,22 @@ Avoid:
 
 ### Demo Media
 Photo flow demo:
-
-<video src="./media/Take%20photos.mp4" controls width="360"></video>
+🎥 Demo: https://youtu.be/pon8pqhOicM
 
 Driving map follow demo:
-
-<video src="./media/Travel%20and%20show%20a%20package.mp4" controls width="360"></video>
+🎥 Demo: https://youtu.be/DM9m_VVtZhA
 
 Map overview reference:
 
-<img src="./media/Map%20overlook.png" alt="Map overview reference" width="720" />
+<img src="./media/Map%20overlook.png" alt="Map overview reference" width="360" />
 
 Large parcel marker reference:
 
-<img src="./media/Map%20with%20large%20package%20sign.png" alt="Large parcel marker reference" width="720" />
+<img src="./media/Map%20with%20large%20package%20sign.png" alt="Large parcel marker reference" width="360" />
 
 Multi-parcel map reference:
 
-<img src="./media/Map%20with%20multipe%20packages.png" alt="Multi parcel map reference" width="720" />
+<img src="./media/Map%20with%20multipe%20packages.png" alt="Multi parcel map reference" width="360" />
 
 ## Suggested Future Cleanup
 
