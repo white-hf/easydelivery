@@ -132,6 +132,28 @@ flowchart TB
   class L1S,L4S spacer;
 ```
 
+## Demo Media
+
+### Photo Flow
+
+<video src="docs/media/Take%20photos.mp4" controls width="360"></video>
+
+### Driving Map Follow
+
+<video src="docs/media/Travel%20and%20show%20a%20package.mp4" controls width="360"></video>
+
+### Map Overview Reference
+
+<img src="docs/media/Map%20overlook.png" alt="Map overview reference" width="900" />
+
+### Large Parcel Marker Reference
+
+<img src="docs/media/Map%20with%20large%20package%20sign.png" alt="Large parcel marker reference" width="900" />
+
+### Multi-parcel Map Reference
+
+<img src="docs/media/Map%20with%20multipe%20packages.png" alt="Multi parcel map reference" width="900" />
+
 ## How to Install and Run the Project
 
 1. **Clone the repository from GitHub**:

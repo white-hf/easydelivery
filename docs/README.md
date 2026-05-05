@@ -97,24 +97,33 @@ Avoid:
 ## Current Recommended Mapping
 
 ### Product Requirement Docs
-- [PRD_CAMERA_VIEW_READABILITY.zh-CN.md](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/PRD_CAMERA_VIEW_READABILITY.zh-CN.md)
-- [PRD_MAP_EMPTY_SCREEN_RESCUE.zh-CN.md](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/PRD_MAP_EMPTY_SCREEN_RESCUE.zh-CN.md)
-- [PRD_MAP_EMPTY_SCREEN_RESCUE.en.md](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/PRD_MAP_EMPTY_SCREEN_RESCUE.en.md)
+- [PRD_CAMERA_VIEW_READABILITY.zh-CN.md](./PRD_CAMERA_VIEW_READABILITY.zh-CN.md)
+- [PRD_MAP_EMPTY_SCREEN_RESCUE.zh-CN.md](./PRD_MAP_EMPTY_SCREEN_RESCUE.zh-CN.md)
+- [PRD_MAP_EMPTY_SCREEN_RESCUE.en.md](./PRD_MAP_EMPTY_SCREEN_RESCUE.en.md)
 
 ### Historical Requirement Log
-- [requirements-changelog.md](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/requirements-changelog.md)
+- [requirements-changelog.md](./requirements-changelog.md)
 
 ### Demo Media
-- [Take photos.mp4](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Take%20photos.mp4)
-  Driver photo flow demo.
-- [Travel and show a package.mp4](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Travel%20and%20show%20a%20package.mp4)
-  Driving map follow and parcel visibility demo.
-- [Map overlook.png](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Map%20overlook.png)
-  Overview state reference.
-- [Map with large package sign.png](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Map%20with%20large%20package%20sign.png)
-  Large parcel marker reference.
-- [Map with multipe packages.png](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Map%20with%20multipe%20packages.png)
-  Multi-parcel map state reference.
+Photo flow demo:
+
+<video src="./media/Take%20photos.mp4" controls width="360"></video>
+
+Driving map follow demo:
+
+<video src="./media/Travel%20and%20show%20a%20package.mp4" controls width="360"></video>
+
+Map overview reference:
+
+<img src="./media/Map%20overlook.png" alt="Map overview reference" width="720" />
+
+Large parcel marker reference:
+
+<img src="./media/Map%20with%20large%20package%20sign.png" alt="Large parcel marker reference" width="720" />
+
+Multi-parcel map reference:
+
+<img src="./media/Map%20with%20multipe%20packages.png" alt="Multi parcel map reference" width="720" />
 
 ## Suggested Future Cleanup
 
