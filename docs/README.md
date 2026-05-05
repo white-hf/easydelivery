@@ -104,12 +104,17 @@ Avoid:
 ### Historical Requirement Log
 - [requirements-changelog.md](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/requirements-changelog.md)
 
-### Media
-- [Map overlook.png](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Map%20overlook.png)
-- [Map with large package sign.png](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Map%20with%20large%20package%20sign.png)
-- [Map with multipe packages.png](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Map%20with%20multipe%20packages.png)
+### Demo Media
 - [Take photos.mp4](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Take%20photos.mp4)
+  Driver photo flow demo.
 - [Travel and show a package.mp4](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Travel%20and%20show%20a%20package.mp4)
+  Driving map follow and parcel visibility demo.
+- [Map overlook.png](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Map%20overlook.png)
+  Overview state reference.
+- [Map with large package sign.png](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Map%20with%20large%20package%20sign.png)
+  Large parcel marker reference.
+- [Map with multipe packages.png](/Users/whitetang/Desktop/Code/easydelivery_Android/docs/media/Map%20with%20multipe%20packages.png)
+  Multi-parcel map state reference.
 
 ## Suggested Future Cleanup
 
