@@ -100,6 +100,10 @@ Avoid:
 - [PRD_CAMERA_VIEW_READABILITY.zh-CN.md](./PRD_CAMERA_VIEW_READABILITY.zh-CN.md)
 - [PRD_MAP_EMPTY_SCREEN_RESCUE.zh-CN.md](./PRD_MAP_EMPTY_SCREEN_RESCUE.zh-CN.md)
 - [PRD_MAP_EMPTY_SCREEN_RESCUE.en.md](./PRD_MAP_EMPTY_SCREEN_RESCUE.en.md)
+- [power-saver-map-browse/prd.zh-CN.md](./power-saver-map-browse/prd.zh-CN.md)
+- [power-saver-map-browse/architecture.zh-CN.md](./power-saver-map-browse/architecture.zh-CN.md)
+- [power-saver-map-browse/delivery-plan.zh-CN.md](./power-saver-map-browse/delivery-plan.zh-CN.md)
+- [power-saver-map-browse/test-plan.zh-CN.md](./power-saver-map-browse/test-plan.zh-CN.md)
 
 ### Historical Requirement Log
 - [requirements-changelog.md](./requirements-changelog.md)

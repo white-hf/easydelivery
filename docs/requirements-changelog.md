@@ -130,3 +130,28 @@ This file tracks product requirement changes that affect app behavior across ver
   - Keep the existing driving follow and cluster behavior unchanged when the map core visible area already contains at least one parcel.
   - When the driver is moving slowly, the core visible area is empty, and the next parcel sits just outside the screen, perform a single light camera nudge to reveal that parcel instead of forcing the driver to manually pan or zoom.
   - Do not trigger this rescue while the driver is interacting with the map, while auto-follow is paused, at higher driving speeds, for far-away parcels, or repeatedly for the same parcel.
+
+## 2026-05-14
+
+### PowerSaver map browse mode iteration 1
+
+- Status: Android implemented in progress. iOS implemented in progress.
+- Scope:
+  - `app/src/main/java/com/hf/easydelivery/map/MapDisplayMode.java`
+  - `app/src/main/java/com/hf/easydelivery/map/MapDisplayModeResolver.java`
+  - `app/src/main/java/com/hf/easydelivery/map/MapExperienceCoordinator.java`
+  - `app/src/main/java/com/hf/easydelivery/map/PowerSaverBrowseParcelPresentationPolicy.java`
+  - `app/src/main/java/com/hf/easydelivery/map/PowerSaverBrowseClusterPolicy.java`
+  - `app/src/main/java/com/hf/easydelivery/map/MapInnerFragment.java`
+  - `app/src/main/java/com/hf/easydelivery/map/MyClusterRenderer.java`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapDisplayMode.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapDisplayModeResolver.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapExperienceCoordinator.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/PowerSaverBrowseParcelPresentationPolicy.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/PowerSaverBrowseClusterPolicy.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapViewController.swift`
+- Requirement:
+  - Add a dedicated `PowerSaver browse` map display mode instead of reusing realtime follow semantics.
+  - In `PowerSaver browse`, show a larger-area parcel map with clustering disabled by default.
+  - Limit visible parcels to a bounded subset so dense areas stay readable even without cluster aggregation.
+  - Keep the initial implementation strategy-based so future map modes, camera behavior, and marker presentation can evolve without adding more page-level condition branches.

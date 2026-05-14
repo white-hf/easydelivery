@@ -31,10 +31,15 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
 
 
     private float mZoomLevel = 15;
+    private boolean clusteringEnabled = true;
     private final Map<String, com.google.android.gms.maps.model.LatLng> spiderfyPositions = new HashMap<>();
 
     public void setZoomLevel(float mZoomLevel) {
         this.mZoomLevel = mZoomLevel;
+    }
+
+    public void setClusteringEnabled(boolean clusteringEnabled) {
+        this.clusteringEnabled = clusteringEnabled;
     }
 
     public MyClusterRenderer(Context context, GoogleMap map, ClusterManager<T> clusterManager) {
@@ -101,6 +106,6 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
 
     @Override
     protected boolean shouldRenderAsCluster(Cluster<T> cluster) {
-        return cluster.getSize() > 1 &&  mZoomLevel < 18;
+        return clusteringEnabled && cluster.getSize() > 1 && mZoomLevel < 18;
     }
 }

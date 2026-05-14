@@ -169,6 +169,7 @@ public class MapInnerFragment extends Fragment
     private final SimpleEtaEstimator simpleEtaEstimator = new SimpleEtaEstimator();
     private CameraFollowController cameraController;
     private final EmptyScreenRescueCoordinator emptyScreenRescueCoordinator = new EmptyScreenRescueCoordinator();
+    private final MapExperienceCoordinator mapExperienceCoordinator = new MapExperienceCoordinator();
     private InfoPillProximityController proximityController;
     private ProximityCoordinator proximityCoordinator;
     // Profile (PowerSaver / Advanced)
@@ -296,6 +297,7 @@ public class MapInnerFragment extends Fragment
 
     private ActivityResultLauncher<String> requestLocationPermissionLauncher;
     private MovementState lastMovementState = MovementState.STATIONARY;
+    private MapDisplayMode currentDisplayMode = MapDisplayMode.FOLLOW;
 
     private boolean isUserInteracting = false;
     private boolean infoPillCollapsed = false;
@@ -761,12 +763,34 @@ public class MapInnerFragment extends Fragment
             }
         }
         currentMapDeliveries = sanitized;
-        logD("updateMapItems sanitized=" + sanitized.size());
+        MapExperience mapExperience = mapExperienceCoordinator.evaluate(
+                profileManager != null ? profileManager.getCurrent() : ProfileManager.AppProfile.ADVANCED,
+                lastMovementState,
+                navigationModeEnabled,
+                autoFollowPausedByGesture,
+                isUserInteracting,
+                mLastEffectiveUiLocation != null ? mLastEffectiveUiLocation : mLastLocation,
+                sanitized,
+                currentPrimaryDelivery);
+        currentDisplayMode = mapExperience.displayMode;
+        List<DeliveryInfo> visibleDeliveries = mapExperience.visibleDeliveries;
+        logD("updateMapItems sanitized=" + sanitized.size() + " visible=" + visibleDeliveries.size()
+                + " mode=" + currentDisplayMode);
+        clusterManager.clearItems();
+        firstItem = null;
+        for (DeliveryInfo info : visibleDeliveries) {
+            clusterManager.addItem(info);
+            if (firstItem == null) {
+                firstItem = info;
+            }
+        }
         if (myClusterRenderer != null) {
             float zoom = googleMap != null ? googleMap.getCameraPosition().zoom : 15f;
-            myClusterRenderer.setSpiderfyPositions(buildSpiderfyPositions(sanitized, zoom));
+            myClusterRenderer.setSpiderfyPositions(buildSpiderfyPositions(visibleDeliveries, zoom));
+            myClusterRenderer.setClusteringEnabled(mapExperience.clusterDecision.clusteringEnabled);
         }
         clusterManager.cluster();
+        maybeApplyPowerSaverBrowseViewport(mapExperience, visibleDeliveries);
 
         if (!isCurrentPrimaryStillPending() && currentPrimaryDelivery != null) {
             logD("current primary removed -> hiding pill and forcing refresh");
@@ -778,7 +802,7 @@ public class MapInnerFragment extends Fragment
         if (currentMode == DataMode.DELIVERY && !sanitized.isEmpty()) {
             if (savedPosition == null) {
                 LatLngBounds.Builder builder = new LatLngBounds.Builder();
-                for (DeliveryInfo info : sanitized) {
+                for (DeliveryInfo info : visibleDeliveries) {
                     if (info != null) {
                         builder.include(new LatLng(info.getLatitude(), info.getLongitude()));
                     }
@@ -804,12 +828,36 @@ public class MapInnerFragment extends Fragment
             if (firstItem != null && savedPosition == null) {
                 LatLng firstPosition = new LatLng(firstItem.getLatitude(), firstItem.getLongitude());
                 googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(firstPosition, 14));
-            } else if (sanitized.isEmpty() && savedPosition == null) {
+            } else if (visibleDeliveries.isEmpty() && savedPosition == null) {
                 centerOnMyLocation(true);
             }
         }
-        if (sanitized.isEmpty()) {
+        if (visibleDeliveries.isEmpty()) {
             hideInfoPillCompletely();
+        }
+    }
+
+    private void maybeApplyPowerSaverBrowseViewport(@NonNull MapExperience mapExperience,
+            @NonNull List<DeliveryInfo> visibleDeliveries) {
+        if (mapExperience.displayMode != MapDisplayMode.POWER_SAVER_BROWSE
+                || googleMap == null
+                || visibleDeliveries.isEmpty()
+                || isUserInteracting
+                || autoFollowPausedByGesture
+                || navigationModeEnabled) {
+            return;
+        }
+        try {
+            LatLngBounds.Builder builder = new LatLngBounds.Builder();
+            for (DeliveryInfo info : visibleDeliveries) {
+                builder.include(new LatLng(info.getLatitude(), info.getLongitude()));
+            }
+            Location anchor = mLastEffectiveUiLocation != null ? mLastEffectiveUiLocation : mLastLocation;
+            if (anchor != null) {
+                builder.include(new LatLng(anchor.getLatitude(), anchor.getLongitude()));
+            }
+            googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 120));
+        } catch (Throwable ignore) {
         }
     }
 
