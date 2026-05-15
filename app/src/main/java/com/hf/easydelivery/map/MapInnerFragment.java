@@ -788,6 +788,11 @@ public class MapInnerFragment extends Fragment
             float zoom = googleMap != null ? googleMap.getCameraPosition().zoom : 15f;
             myClusterRenderer.setSpiderfyPositions(buildSpiderfyPositions(visibleDeliveries, zoom));
             myClusterRenderer.setClusteringEnabled(mapExperience.clusterDecision.clusteringEnabled);
+            myClusterRenderer.setMarkerStylePolicy(mapExperience.markerStylePolicy);
+            myClusterRenderer.setCurrentPrimaryDelivery(currentPrimaryDelivery);
+            myClusterRenderer.setMarkerColorTone(currentMode == DataMode.UNSCANNED
+                    ? MarkerColorTone.UNSCANNED
+                    : MarkerColorTone.DELIVERING);
         }
         clusterManager.cluster();
         maybeApplyPowerSaverBrowseViewport(mapExperience, visibleDeliveries);

@@ -31,6 +31,8 @@ final class PowerSaverBrowseParcelPresentationPolicy implements ParcelPresentati
         List<DeliveryInfo> ordered = new ArrayList<>(deliveries);
         ordered.sort(Comparator
                 .comparingInt((DeliveryInfo info) -> isPrimary(info, currentPrimaryDelivery) ? 0 : 1)
+                .thenComparingInt(info -> isSameStop(info, currentPrimaryDelivery) ? 0 : 1)
+                .thenComparingInt(info -> isNearPrimary(info, currentPrimaryDelivery) ? 0 : 1)
                 .thenComparingDouble(info -> distanceScore(driverLocation, info))
                 .thenComparing(info -> safeString(info.getRouteNumber()))
                 .thenComparing(info -> safeString(info.getOrderSn())));
@@ -46,6 +48,30 @@ final class PowerSaverBrowseParcelPresentationPolicy implements ParcelPresentati
             return false;
         }
         return info.getStableKey().equals(currentPrimaryDelivery.getStableKey());
+    }
+
+    private boolean isSameStop(@NonNull DeliveryInfo info, @Nullable DeliveryInfo currentPrimaryDelivery) {
+        if (currentPrimaryDelivery == null || isPrimary(info, currentPrimaryDelivery)) {
+            return false;
+        }
+        String currentStreet = safeString(currentPrimaryDelivery.getStreetName());
+        String infoStreet = safeString(info.getStreetName());
+        return !currentStreet.isEmpty() && currentStreet.equalsIgnoreCase(infoStreet)
+                && currentPrimaryDelivery.getCivilNumber() != null
+                && info.getCivilNumber() != null
+                && currentPrimaryDelivery.getCivilNumber().intValue() == info.getCivilNumber().intValue();
+    }
+
+    private boolean isNearPrimary(@NonNull DeliveryInfo info, @Nullable DeliveryInfo currentPrimaryDelivery) {
+        if (currentPrimaryDelivery == null || isPrimary(info, currentPrimaryDelivery)
+                || isSameStop(info, currentPrimaryDelivery)) {
+            return false;
+        }
+        return haversineMeters(
+                currentPrimaryDelivery.getLatitude(),
+                currentPrimaryDelivery.getLongitude(),
+                info.getLatitude(),
+                info.getLongitude()) <= 120d;
     }
 
     private double distanceScore(@Nullable DriverLocationSnapshot driverLocation, @NonNull DeliveryInfo info) {

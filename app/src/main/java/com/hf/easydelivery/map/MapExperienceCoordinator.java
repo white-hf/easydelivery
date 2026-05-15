@@ -22,6 +22,8 @@ final class MapExperienceCoordinator {
     private final ParcelPresentationPolicy powerSaverBrowseParcelPresentationPolicy = new PowerSaverBrowseParcelPresentationPolicy();
     private final ClusterPolicy defaultClusterPolicy = new DefaultClusterPolicy();
     private final ClusterPolicy powerSaverBrowseClusterPolicy = new PowerSaverBrowseClusterPolicy();
+    private final MarkerStylePolicy defaultMarkerStylePolicy = new DefaultMarkerStylePolicy();
+    private final MarkerStylePolicy powerSaverBrowseMarkerStylePolicy = new PowerSaverBrowseMarkerStylePolicy();
 
     @NonNull
     MapExperience evaluate(@NonNull ProfileManager.AppProfile profile,
@@ -46,6 +48,9 @@ final class MapExperienceCoordinator {
         ClusterPolicy clusterPolicy = displayMode == MapDisplayMode.POWER_SAVER_BROWSE
                 ? powerSaverBrowseClusterPolicy
                 : defaultClusterPolicy;
+        MarkerStylePolicy markerStylePolicy = displayMode == MapDisplayMode.POWER_SAVER_BROWSE
+                ? powerSaverBrowseMarkerStylePolicy
+                : defaultMarkerStylePolicy;
 
         List<DeliveryInfo> visibleDeliveries = parcelPolicy.selectVisibleParcels(
                 deliveries,
@@ -58,6 +63,6 @@ final class MapExperienceCoordinator {
                     visibleDeliveries.subList(0, clusterDecision.maxVisibleMarkers));
         }
 
-        return new MapExperience(displayMode, visibleDeliveries, clusterDecision);
+        return new MapExperience(displayMode, visibleDeliveries, clusterDecision, markerStylePolicy);
     }
 }

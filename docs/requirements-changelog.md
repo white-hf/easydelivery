@@ -155,3 +155,34 @@ This file tracks product requirement changes that affect app behavior across ver
   - In `PowerSaver browse`, show a larger-area parcel map with clustering disabled by default.
   - Limit visible parcels to a bounded subset so dense areas stay readable even without cluster aggregation.
   - Keep the initial implementation strategy-based so future map modes, camera behavior, and marker presentation can evolve without adding more page-level condition branches.
+
+### PowerSaver map browse mode iteration 2
+
+- Status: Android implemented and verified. iOS implemented, build environment still needs follow-up validation.
+- Scope:
+  - `app/src/main/java/com/hf/easydelivery/map/MarkerColorTone.java`
+  - `app/src/main/java/com/hf/easydelivery/map/MarkerStyleDecision.java`
+  - `app/src/main/java/com/hf/easydelivery/map/MarkerStylePolicy.java`
+  - `app/src/main/java/com/hf/easydelivery/map/DefaultMarkerStylePolicy.java`
+  - `app/src/main/java/com/hf/easydelivery/map/PowerSaverBrowseMarkerStylePolicy.java`
+  - `app/src/main/java/com/hf/easydelivery/map/MapExperience.java`
+  - `app/src/main/java/com/hf/easydelivery/map/MapExperienceCoordinator.java`
+  - `app/src/main/java/com/hf/easydelivery/map/PowerSaverBrowseParcelPresentationPolicy.java`
+  - `app/src/main/java/com/hf/easydelivery/map/MyClusterRenderer.java`
+  - `app/src/main/java/com/hf/easydelivery/map/MapInnerFragment.java`
+  - `app/src/test/java/com/hf/easydelivery/map/PowerSaverBrowseMarkerStylePolicyTest.java`
+  - `app/src/test/java/com/hf/easydelivery/map/PowerSaverBrowseParcelPresentationPolicyTest.java`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MarkerColorTone.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MarkerStyleDecision.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MarkerStylePolicy.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/DefaultMarkerStylePolicy.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/PowerSaverBrowseMarkerStylePolicy.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapExperience.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapExperienceCoordinator.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/PowerSaverBrowseParcelPresentationPolicy.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapViewController.swift`
+- Requirement:
+  - Add a dedicated `MarkerStylePolicy` layer so `PowerSaver browse` marker rendering is no longer hardcoded inside the map controller or renderer.
+  - In `PowerSaver browse`, render lighter and smaller parcel markers while preserving clear cues for the current focus parcel and large parcels.
+  - Prioritize the current primary parcel first, then same-stop parcels, then nearby parcels when selecting the visible browse subset.
+  - Keep Android and iOS marker semantics aligned: same focus highlight intent, same large-parcel badge intent, and same browse-vs-follow visual weight split.
