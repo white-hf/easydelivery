@@ -104,6 +104,8 @@ public class CameraFollowController {
     private long lastAutoFollowResumeMs = 0L;
     private long lastAutoFollowPauseMs = 0L;
     private FollowPolicy followPolicy = new RealtimeFollowPolicy();
+    @NonNull
+    private DrivingCameraBehavior drivingCameraBehavior = new DefaultDrivingCameraBehavior();
 
     // ==== Auto-Follow Strategy (Basic/Standard/Advanced) ====
     public enum FollowProfile {
@@ -343,6 +345,9 @@ public class CameraFollowController {
                 : FollowProfile.STANDARD;
         logD("applyAppProfile(" + appProfile + ") -> followProfile=" + mapped);
         setFollowProfile(mapped);
+        drivingCameraBehavior = (appProfile == ProfileManager.AppProfile.POWERSAVER)
+                ? new PowerSaverBrowseDrivingCameraBehavior()
+                : new DefaultDrivingCameraBehavior();
         applyFollowPolicy(appProfile == ProfileManager.AppProfile.POWERSAVER
                 ? new EcoFollowPolicy()
                 : new RealtimeFollowPolicy());
@@ -752,11 +757,11 @@ public class CameraFollowController {
         CameraPosition targetCamera;
 
         if (navMode) {
-            targetCamera = buildDrivingCamera(context.location, preferredZoom);
+            targetCamera = drivingCameraBehavior.buildCamera(this, context.location, preferredZoom);
         } else if (lowSpeedInside) {
             targetCamera = buildCenteredCamera(context.location, preferredZoom);
         } else if (driving) {
-            targetCamera = buildDrivingCamera(context.location, preferredZoom);
+            targetCamera = drivingCameraBehavior.buildCamera(this, context.location, preferredZoom);
         } else if (!hasEverEnteredDrivingMode || shouldForce) {
             targetCamera = buildCenteredCamera(context.location, preferredZoom);
         } else if (!isUserInteracting &&
@@ -1056,11 +1061,11 @@ public class CameraFollowController {
 
         CameraPosition targetCamera;
         if (navMode) {
-            targetCamera = buildDrivingCamera(location, preferredFollowZoom);
+            targetCamera = drivingCameraBehavior.buildCamera(this, location, preferredFollowZoom);
         } else if (lowSpeedInside) {
             targetCamera = buildCenteredCamera(location, preferredFollowZoom);
         } else if (driving) {
-            targetCamera = buildDrivingCamera(location, preferredFollowZoom);
+            targetCamera = drivingCameraBehavior.buildCamera(this, location, preferredFollowZoom);
         } else if (!hasEverEnteredDrivingMode || force) {
             targetCamera = buildCenteredCamera(location, preferredFollowZoom);
         } else if (!isUserInteracting && followStrategy.shouldUpdateCamera(location, state, lastCameraUpdateUptime,
@@ -1205,7 +1210,7 @@ public class CameraFollowController {
     }
 
     @Nullable
-    private CameraPosition buildDrivingCamera(@NonNull Location location, float preferredFollowZoom) {
+    CameraPosition buildDefaultDrivingCamera(@NonNull Location location, float preferredFollowZoom) {
         LatLng driverLatLng = new LatLng(location.getLatitude(), location.getLongitude());
         CameraPosition current = googleMap.getCameraPosition();
         float bearing = resolveBearing(location, current);
@@ -1240,6 +1245,44 @@ public class CameraFollowController {
         return new CameraPosition.Builder(current)
                 .target(targetLatLng)
                 .zoom(zoom)
+                .tilt(tilt)
+                .bearing(bearing)
+                .build();
+    }
+
+    @Nullable
+    CameraPosition buildPowerSaverBrowseDrivingCamera(@NonNull Location location) {
+        LatLng driverLatLng = new LatLng(location.getLatitude(), location.getLongitude());
+        CameraPosition current = googleMap.getCameraPosition();
+        float bearing = resolveBearing(location, current);
+
+        double lookAheadMeters;
+        float speedMps = location.hasSpeed() ? Math.max(0f, location.getSpeed()) : 0f;
+        if (speedMps < 4f) {
+            lookAheadMeters = 40d;
+        } else if (speedMps < 10f) {
+            lookAheadMeters = 55d;
+        } else {
+            lookAheadMeters = 70d;
+        }
+
+        LatLng targetLatLng;
+        try {
+            targetLatLng = SphericalUtil.computeOffset(driverLatLng, lookAheadMeters, bearing);
+        } catch (Exception ignore) {
+            targetLatLng = driverLatLng;
+        }
+
+        float browseZoom = Math.min(ZOOM_TUNING_CONFIG.defaultFollowZoom, 14.8f);
+        browseZoom = Math.max(browseZoom, 14.5f);
+        if (location.getSpeed() < 1.5f) {
+            browseZoom = Math.min(browseZoom + 0.3f, 15.1f);
+        }
+
+        float tilt = Math.max(22f, Math.min(current.tilt, 30f));
+        return new CameraPosition.Builder(current)
+                .target(targetLatLng)
+                .zoom(browseZoom)
                 .tilt(tilt)
                 .bearing(bearing)
                 .build();
@@ -1637,7 +1680,7 @@ public class CameraFollowController {
                 || (insideDeliveryZone && state != MovementState.NORMAL_DRIVING);
         CameraPosition targetCamera = useCentered
                 ? buildCenteredCamera(loc)
-                : buildDrivingCamera(loc, preferredZoom);
+                : drivingCameraBehavior.buildCamera(this, loc, preferredZoom);
         if (targetCamera == null) {
             LatLng target = new LatLng(loc.getLatitude(), loc.getLongitude());
             try {

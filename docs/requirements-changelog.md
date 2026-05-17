@@ -186,3 +186,24 @@ This file tracks product requirement changes that affect app behavior across ver
   - In `PowerSaver browse`, render lighter and smaller parcel markers while preserving clear cues for the current focus parcel and large parcels.
   - Prioritize the current primary parcel first, then same-stop parcels, then nearby parcels when selecting the visible browse subset.
   - Keep Android and iOS marker semantics aligned: same focus highlight intent, same large-parcel badge intent, and same browse-vs-follow visual weight split.
+
+## 2026-05-17
+
+### PowerSaver browse camera step 1
+
+- Status: Android implemented and verified. iOS implemented, pending build validation in the local Apple toolchain environment.
+- Scope:
+  - `app/src/main/java/com/hf/easydelivery/map/DrivingCameraBehavior.java`
+  - `app/src/main/java/com/hf/easydelivery/map/DefaultDrivingCameraBehavior.java`
+  - `app/src/main/java/com/hf/easydelivery/map/PowerSaverBrowseDrivingCameraBehavior.java`
+  - `app/src/main/java/com/hf/easydelivery/map/CameraFollowController.java`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/DrivingCameraBehavior.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/DefaultDrivingCameraBehavior.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/PowerSaverBrowseDrivingCameraBehavior.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/CameraFollowController.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapViewController.swift`
+- Requirement:
+  - Keep `PowerSaver browse` driving camera separate from realtime follow driving camera by introducing a dedicated driving camera behavior layer.
+  - In `PowerSaver browse` while the driver is moving, stop using aggressive speed-band zoom and stop using parcel-approach zoom so the map remains a stable browse view.
+  - Use a lower tilt and a restrained look-ahead target in `PowerSaver browse` driving mode so the visible road/building scale matches the browse-mode product goal more closely.
+  - Preserve the existing low-speed or inside-stop centered behavior so drivers can still get a more local view only when they are actually slowing to stop and handle a nearby parcel.
