@@ -6,6 +6,6 @@ final class PowerSaverBrowseClusterPolicy implements ClusterPolicy {
     @NonNull
     @Override
     public ClusterPolicyDecision evaluate() {
-        return new ClusterPolicyDecision(false, PowerSaverBrowseParcelPresentationPolicy.MAX_VISIBLE_MARKERS);
+        return new ClusterPolicyDecision(false, Integer.MAX_VALUE);
     }
 }

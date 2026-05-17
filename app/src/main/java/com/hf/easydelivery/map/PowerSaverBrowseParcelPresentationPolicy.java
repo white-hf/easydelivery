@@ -16,7 +16,6 @@ import java.util.List;
  */
 final class PowerSaverBrowseParcelPresentationPolicy implements ParcelPresentationPolicy {
 
-    static final int MAX_VISIBLE_MARKERS = 24;
     private static final double EARTH_RADIUS_METERS = 6_371_000d;
 
     @NonNull
@@ -37,10 +36,7 @@ final class PowerSaverBrowseParcelPresentationPolicy implements ParcelPresentati
                 .thenComparing(info -> safeString(info.getRouteNumber()))
                 .thenComparing(info -> safeString(info.getOrderSn())));
 
-        if (ordered.size() <= MAX_VISIBLE_MARKERS) {
-            return ordered;
-        }
-        return new ArrayList<>(ordered.subList(0, MAX_VISIBLE_MARKERS));
+        return ordered;
     }
 
     private boolean isPrimary(@NonNull DeliveryInfo info, @Nullable DeliveryInfo currentPrimaryDelivery) {

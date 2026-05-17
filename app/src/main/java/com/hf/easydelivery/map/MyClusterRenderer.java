@@ -73,6 +73,13 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
 
     @Override
     protected void onBeforeClusterItemRendered(T item, MarkerOptions markerOptions) {
+        if (item instanceof StopGroupItem) {
+            StopGroupItem groupItem = (StopGroupItem) item;
+            markerOptions.position(groupItem.getPosition());
+            markerOptions.icon(createStopGroupMarker(groupItem.getDeliveries().size()));
+            markerOptions.zIndex(4f);
+            return;
+        }
         if (item instanceof DeliveryInfo) {
             DeliveryInfo info = (DeliveryInfo) item;
             String key = info.getStableKey();
@@ -95,6 +102,13 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
     @Override
     protected void onClusterItemUpdated(T item, Marker marker) {
         super.onClusterItemUpdated(item, marker);
+        if (item instanceof StopGroupItem) {
+            StopGroupItem groupItem = (StopGroupItem) item;
+            marker.setPosition(groupItem.getPosition());
+            marker.setIcon(createStopGroupMarker(groupItem.getDeliveries().size()));
+            marker.setZIndex(4f);
+            return;
+        }
         if (item instanceof DeliveryInfo) {
             DeliveryInfo info = (DeliveryInfo) item;
             String key = info.getStableKey();
@@ -117,6 +131,47 @@ public class MyClusterRenderer<T extends ClusterItem> extends DefaultClusterRend
     private BitmapDescriptor createFallbackMarker(String title) {
         MarkerStyleDecision decision = new MarkerStyleDecision(markerColorTone, false, false, false);
         return createCustomMarker(title, decision);
+    }
+
+    private BitmapDescriptor createStopGroupMarker(int count) {
+        String cacheKey = "group|" + count;
+        BitmapDescriptor cached = markerIconCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
+        int size = dp(38);
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+
+        float radius = size / 2f - dp(2);
+        float cx = size / 2f;
+        float cy = size / 2f;
+
+        Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        fillPaint.setStyle(Paint.Style.FILL);
+        fillPaint.setColor(Color.parseColor("#1F2937"));
+        canvas.drawCircle(cx, cy, radius, fillPaint);
+
+        Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        ringPaint.setStyle(Paint.Style.STROKE);
+        ringPaint.setStrokeWidth(dp(2));
+        ringPaint.setColor(Color.parseColor("#60A5FA"));
+        canvas.drawCircle(cx, cy, radius, ringPaint);
+
+        String text = String.valueOf(count);
+        Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        textPaint.setColor(Color.WHITE);
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        textPaint.setTextAlign(Paint.Align.CENTER);
+        textPaint.setTextSize(dp(count >= 10 ? 11 : 13));
+        Rect bounds = new Rect();
+        textPaint.getTextBounds(text, 0, text.length(), bounds);
+        canvas.drawText(text, cx, cy + bounds.height() / 2f, textPaint);
+
+        BitmapDescriptor descriptor = BitmapDescriptorFactory.fromBitmap(bitmap);
+        markerIconCache.put(cacheKey, descriptor);
+        return descriptor;
     }
 
     private BitmapDescriptor createCustomMarker(String title, MarkerStyleDecision styleDecision) {

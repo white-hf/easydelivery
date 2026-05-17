@@ -9,7 +9,6 @@ import com.hf.easydelivery.core.facade.MovementState;
 import com.hf.easydelivery.dao.DeliveryInfo;
 import com.hf.easydelivery.map.config.ProfileManager;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -57,11 +56,6 @@ final class MapExperienceCoordinator {
                 driverLocationSnapshot,
                 currentPrimaryDelivery);
         ClusterPolicyDecision clusterDecision = clusterPolicy.evaluate();
-
-        if (visibleDeliveries.size() > clusterDecision.maxVisibleMarkers) {
-            visibleDeliveries = new ArrayList<>(
-                    visibleDeliveries.subList(0, clusterDecision.maxVisibleMarkers));
-        }
 
         return new MapExperience(displayMode, visibleDeliveries, clusterDecision, markerStylePolicy);
     }

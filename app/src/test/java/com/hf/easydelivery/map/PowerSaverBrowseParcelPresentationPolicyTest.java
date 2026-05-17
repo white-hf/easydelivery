@@ -28,13 +28,13 @@ public class PowerSaverBrowseParcelPresentationPolicyTest {
     }
 
     @Test
-    public void limitsVisibleMarkers() {
+    public void doesNotHideFartherMarkers() {
         List<DeliveryInfo> items = new ArrayList<>();
         for (int i = 0; i < 30; i++) {
             items.add(parcel("R" + i, 44.64 + i * 0.001, -63.57));
         }
         List<DeliveryInfo> result = policy.selectVisibleParcels(items, location(44.646, -63.575), null);
-        assertEquals(PowerSaverBrowseParcelPresentationPolicy.MAX_VISIBLE_MARKERS, result.size());
+        assertEquals(30, result.size());
     }
 
     @Test

@@ -69,6 +69,7 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
 import com.google.maps.android.clustering.ClusterManager;
+import com.google.maps.android.clustering.ClusterItem;
 import com.hf.courierservice.apihelper.FileLog;
 import com.hf.easydelivery.R;
 import com.hf.easydelivery.ResourceMgr;
@@ -149,8 +150,8 @@ public class MapInnerFragment extends Fragment
 
     private MapView mapView;
     private GoogleMap googleMap;
-    private ClusterManager<DeliveryInfo> clusterManager;
-    private MyClusterRenderer<DeliveryInfo> myClusterRenderer;
+    private ClusterManager<ClusterItem> clusterManager;
+    private MyClusterRenderer<ClusterItem> myClusterRenderer;
     private LatLng savedPosition;
     private MaterialToolbar mToolbar;
     private TextView statusSummaryText;
@@ -170,6 +171,7 @@ public class MapInnerFragment extends Fragment
     private CameraFollowController cameraController;
     private final EmptyScreenRescueCoordinator emptyScreenRescueCoordinator = new EmptyScreenRescueCoordinator();
     private final MapExperienceCoordinator mapExperienceCoordinator = new MapExperienceCoordinator();
+    private final StopGroupBuilder stopGroupBuilder = new StopGroupBuilder();
     private InfoPillProximityController proximityController;
     private ProximityCoordinator proximityCoordinator;
     // Profile (PowerSaver / Advanced)
@@ -778,10 +780,16 @@ public class MapInnerFragment extends Fragment
                 + " mode=" + currentDisplayMode);
         clusterManager.clearItems();
         firstItem = null;
-        for (DeliveryInfo info : visibleDeliveries) {
-            clusterManager.addItem(info);
-            if (firstItem == null) {
-                firstItem = info;
+        List<ClusterItem> renderItems = buildRenderItems(mapExperience, visibleDeliveries);
+        for (ClusterItem item : renderItems) {
+            clusterManager.addItem(item);
+            if (firstItem == null && item instanceof DeliveryInfo) {
+                firstItem = (DeliveryInfo) item;
+            } else if (firstItem == null && item instanceof StopGroupItem) {
+                List<DeliveryInfo> groupDeliveries = ((StopGroupItem) item).getDeliveries();
+                if (!groupDeliveries.isEmpty()) {
+                    firstItem = groupDeliveries.get(0);
+                }
             }
         }
         if (myClusterRenderer != null) {
@@ -1008,14 +1016,21 @@ public class MapInnerFragment extends Fragment
         });
 
         clusterManager.setOnClusterClickListener(cluster -> {
-            showClusterItemListBottomSheet(new ArrayList<>(cluster.getItems()));
+            showClusterItemListBottomSheet(extractDeliveries(cluster.getItems()));
             return true;
         });
 
         clusterManager.setOnClusterItemClickListener(item -> {
-            ArrayList<DeliveryInfo> arrayList = new ArrayList<>();
-            arrayList.add(item);
-            showClusterItemListBottomSheet(arrayList);
+            if (item instanceof StopGroupItem) {
+                showClusterItemListBottomSheet(new ArrayList<>(((StopGroupItem) item).getDeliveries()));
+                return true;
+            }
+            if (item instanceof DeliveryInfo) {
+                ArrayList<DeliveryInfo> arrayList = new ArrayList<>();
+                arrayList.add((DeliveryInfo) item);
+                showClusterItemListBottomSheet(arrayList);
+                return true;
+            }
             return true;
         });
 
@@ -1031,6 +1046,25 @@ public class MapInnerFragment extends Fragment
         }
         // Patch 3: Start edge check
         edgeCheckHandler.postDelayed(edgeCheckRunnable, 2000);
+    }
+
+    @NonNull
+    private List<ClusterItem> buildRenderItems(@NonNull MapExperience mapExperience,
+            @NonNull List<DeliveryInfo> visibleDeliveries) {
+        if (mapExperience.displayMode != MapDisplayMode.POWER_SAVER_BROWSE
+                || mapExperience.clusterDecision.clusteringEnabled) {
+            return new ArrayList<>(visibleDeliveries);
+        }
+        List<StopGroup> stopGroups = stopGroupBuilder.build(visibleDeliveries);
+        List<ClusterItem> items = new ArrayList<>();
+        for (StopGroup group : stopGroups) {
+            if (group.size() > 1) {
+                items.add(new StopGroupItem(group));
+            } else if (!group.getDeliveries().isEmpty()) {
+                items.add(group.getDeliveries().get(0));
+            }
+        }
+        return items;
     }
 
     private void showClusterItemListBottomSheet(List<DeliveryInfo> items) {
@@ -1104,6 +1138,19 @@ public class MapInnerFragment extends Fragment
             }
         }));
         dialog.show();
+    }
+
+    @NonNull
+    private ArrayList<DeliveryInfo> extractDeliveries(@NonNull Iterable<? extends ClusterItem> items) {
+        ArrayList<DeliveryInfo> deliveries = new ArrayList<>();
+        for (ClusterItem item : items) {
+            if (item instanceof DeliveryInfo) {
+                deliveries.add((DeliveryInfo) item);
+            } else if (item instanceof StopGroupItem) {
+                deliveries.addAll(((StopGroupItem) item).getDeliveries());
+            }
+        }
+        return deliveries;
     }
 
     private void showInfoPill(DeliveryInfo info, List<DeliveryInfo> focusGroup) {
