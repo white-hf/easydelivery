@@ -1273,10 +1273,10 @@ public class CameraFollowController {
             targetLatLng = driverLatLng;
         }
 
-        float browseZoom = Math.min(ZOOM_TUNING_CONFIG.defaultFollowZoom, 14.8f);
-        browseZoom = Math.max(browseZoom, 14.5f);
+        float browseZoom = Math.min(ZOOM_TUNING_CONFIG.defaultFollowZoom, 15.55f);
+        browseZoom = Math.max(browseZoom, 15.35f);
         if (location.getSpeed() < 1.5f) {
-            browseZoom = Math.min(browseZoom + 0.3f, 15.1f);
+            browseZoom = Math.min(browseZoom + 0.15f, 15.7f);
         }
 
         float tilt = Math.max(22f, Math.min(current.tilt, 30f));
