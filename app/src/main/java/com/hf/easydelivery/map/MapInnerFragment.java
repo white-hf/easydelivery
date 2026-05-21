@@ -803,7 +803,6 @@ public class MapInnerFragment extends Fragment
                     : MarkerColorTone.DELIVERING);
         }
         clusterManager.cluster();
-        maybeApplyPowerSaverBrowseViewport(mapExperience, visibleDeliveries);
 
         if (!isCurrentPrimaryStillPending() && currentPrimaryDelivery != null) {
             logD("current primary removed -> hiding pill and forcing refresh");
@@ -847,30 +846,6 @@ public class MapInnerFragment extends Fragment
         }
         if (visibleDeliveries.isEmpty()) {
             hideInfoPillCompletely();
-        }
-    }
-
-    private void maybeApplyPowerSaverBrowseViewport(@NonNull MapExperience mapExperience,
-            @NonNull List<DeliveryInfo> visibleDeliveries) {
-        if (mapExperience.displayMode != MapDisplayMode.POWER_SAVER_BROWSE
-                || googleMap == null
-                || visibleDeliveries.isEmpty()
-                || isUserInteracting
-                || autoFollowPausedByGesture
-                || navigationModeEnabled) {
-            return;
-        }
-        try {
-            LatLngBounds.Builder builder = new LatLngBounds.Builder();
-            for (DeliveryInfo info : visibleDeliveries) {
-                builder.include(new LatLng(info.getLatitude(), info.getLongitude()));
-            }
-            Location anchor = mLastEffectiveUiLocation != null ? mLastEffectiveUiLocation : mLastLocation;
-            if (anchor != null) {
-                builder.include(new LatLng(anchor.getLatitude(), anchor.getLongitude()));
-            }
-            googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 120));
-        } catch (Throwable ignore) {
         }
     }
 

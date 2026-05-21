@@ -20,7 +20,7 @@ final class StopGroupBuilder {
         }
         List<StopGroup> groups = new ArrayList<>();
         for (DeliveryInfo delivery : deliveries) {
-            StopGroup match = findNearestGroup(groups, delivery);
+            StopGroup match = findCompatibleGroup(groups, delivery);
             if (match == null) {
                 groups.add(new StopGroup(delivery));
             } else {
@@ -30,19 +30,29 @@ final class StopGroupBuilder {
         return groups;
     }
 
-    private StopGroup findNearestGroup(@NonNull List<StopGroup> groups, @NonNull DeliveryInfo delivery) {
+    private StopGroup findCompatibleGroup(@NonNull List<StopGroup> groups, @NonNull DeliveryInfo delivery) {
         StopGroup best = null;
         double bestDistance = Double.MAX_VALUE;
         for (StopGroup group : groups) {
-            LatLng center = group.getCenter();
-            double distance = haversineMeters(center.latitude, center.longitude,
-                    delivery.getLatitude(), delivery.getLongitude());
+            double distance = maxDistanceToGroup(group, delivery);
             if (distance <= DEFAULT_GROUP_RADIUS_METERS && distance < bestDistance) {
                 best = group;
                 bestDistance = distance;
             }
         }
         return best;
+    }
+
+    private double maxDistanceToGroup(@NonNull StopGroup group, @NonNull DeliveryInfo delivery) {
+        double maxDistance = 0d;
+        for (DeliveryInfo existing : group.getDeliveries()) {
+            double distance = haversineMeters(existing.getLatitude(), existing.getLongitude(),
+                    delivery.getLatitude(), delivery.getLongitude());
+            if (distance > maxDistance) {
+                maxDistance = distance;
+            }
+        }
+        return maxDistance;
     }
 
     private double haversineMeters(double lat1, double lng1, double lat2, double lng2) {

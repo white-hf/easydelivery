@@ -30,6 +30,15 @@ public class StopGroupBuilderTest {
         assertEquals(2, groups.size());
     }
 
+    @Test
+    public void chainExpansionDoesNotMergeBeyondRadius() {
+        DeliveryInfo a = parcel("A", 44.645000, -63.575000);
+        DeliveryInfo b = parcel("B", 44.645090, -63.575000);
+        DeliveryInfo c = parcel("C", 44.645180, -63.575000);
+        List<StopGroup> groups = builder.build(Arrays.asList(a, b, c));
+        assertEquals(2, groups.size());
+    }
+
     private DeliveryInfo parcel(String route, double lat, double lng) {
         DeliveryInfo info = new DeliveryInfo();
         info.setRouteNumber(route);

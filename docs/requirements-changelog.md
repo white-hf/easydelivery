@@ -207,3 +207,18 @@ This file tracks product requirement changes that affect app behavior across ver
   - In `PowerSaver browse` while the driver is moving, stop using aggressive speed-band zoom and stop using parcel-approach zoom so the map remains a stable browse view.
   - Use a lower tilt and a restrained look-ahead target in `PowerSaver browse` driving mode so the visible road/building scale matches the browse-mode product goal more closely.
   - Preserve the existing low-speed or inside-stop centered behavior so drivers can still get a more local view only when they are actually slowing to stop and handle a nearby parcel.
+
+## 2026-05-21
+
+### PowerSaver browse interaction and stop-group correction
+
+- Status: Android implemented and verified. iOS implemented, pending build validation in the local Apple toolchain environment.
+- Scope:
+  - `app/src/main/java/com/hf/easydelivery/map/MapInnerFragment.java`
+  - `app/src/main/java/com/hf/easydelivery/map/StopGroupBuilder.java`
+  - `app/src/test/java/com/hf/easydelivery/map/StopGroupBuilderTest.java`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapViewController.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/StopGroupBuilder.swift`
+- Requirement:
+  - In `PowerSaver browse`, stop re-fitting the map to all remaining parcels on each refresh so the driver can keep manual map control and the camera zoom is no longer silently overridden by a global bounds update.
+  - Keep `PowerSaver browse` stop grouping limited to true near-neighbor parcels by rejecting chain-style expansion beyond the configured `20m` stop radius.
