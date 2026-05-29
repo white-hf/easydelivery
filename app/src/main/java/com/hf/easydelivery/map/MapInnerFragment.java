@@ -811,7 +811,9 @@ public class MapInnerFragment extends Fragment
             requestImmediateProximityRefresh();
         }
 
-        if (currentMode == DataMode.DELIVERY && !sanitized.isEmpty()) {
+        if (currentMode == DataMode.DELIVERY
+                && currentDisplayMode != MapDisplayMode.POWER_SAVER_BROWSE
+                && !sanitized.isEmpty()) {
             if (savedPosition == null) {
                 LatLngBounds.Builder builder = new LatLngBounds.Builder();
                 for (DeliveryInfo info : visibleDeliveries) {
