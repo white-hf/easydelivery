@@ -170,6 +170,7 @@ public class MapInnerFragment extends Fragment
     private final SimpleEtaEstimator simpleEtaEstimator = new SimpleEtaEstimator();
     private CameraFollowController cameraController;
     private final EmptyScreenRescueCoordinator emptyScreenRescueCoordinator = new EmptyScreenRescueCoordinator();
+    private final PostDeliveryRecenterCoordinator postDeliveryRecenterCoordinator = new PostDeliveryRecenterCoordinator();
     private final MapExperienceCoordinator mapExperienceCoordinator = new MapExperienceCoordinator();
     private final StopGroupBuilder stopGroupBuilder = new StopGroupBuilder();
     private InfoPillProximityController proximityController;
@@ -738,6 +739,7 @@ public class MapInnerFragment extends Fragment
 
                 clearCommuteSuppression();
                 proximityCoordinator.onDeliveryCompleted(info);
+                postDeliveryRecenterCoordinator.noteDeliveryCompleted(info);
                 requestImmediateProximityRefresh();
             }
         });
@@ -1638,6 +1640,22 @@ public class MapInnerFragment extends Fragment
                 googleMap,
                 mapView,
                 cameraController,
+                effective,
+                state,
+                currentMapDeliveries,
+                currentPrimaryDelivery,
+                navigationModeEnabled,
+                autoFollowPausedByGesture,
+                isUserInteracting,
+                isManualCenterHoldActive())) {
+            pendingCameraContext = null;
+            cameraUpdateHandler.removeCallbacks(cameraUpdateRunnable);
+            return;
+        }
+
+        if (postDeliveryRecenterCoordinator.maybeTrigger(
+                googleMap,
+                mapView,
                 effective,
                 state,
                 currentMapDeliveries,

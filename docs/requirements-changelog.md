@@ -222,3 +222,15 @@ This file tracks product requirement changes that affect app behavior across ver
 - Requirement:
   - In `PowerSaver browse`, stop re-fitting the map to all remaining parcels on each refresh so the driver can keep manual map control and the camera zoom is no longer silently overridden by a global bounds update.
   - Keep `PowerSaver browse` stop grouping limited to true near-neighbor parcels by rejecting chain-style expansion beyond the configured `20m` stop radius.
+
+### Post-delivery next-parcel recenter
+
+- Status: Android implemented and verified. iOS implemented, pending local Apple toolchain build validation.
+- Scope:
+  - `app/src/main/java/com/hf/easydelivery/map/PostDeliveryRecenterCoordinator.java`
+  - `app/src/main/java/com/hf/easydelivery/map/MapInnerFragment.java`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/PostDeliveryRecenterCoordinator.swift`
+  - `/Users/whitetang/Desktop/Code/easydelivery_v2/easydelivery_v2/Map/MapViewController.swift`
+- Requirement:
+  - After a parcel is completed, if the current near-view no longer contains any parcel, perform one narrow recenter toward the next nearby parcel instead of leaving the map stuck in the finished stop's zoomed-in state.
+  - Keep this recenter as a one-shot post-completion behavior only; do not restore the old global `fit bounds` behavior for all remaining parcels.

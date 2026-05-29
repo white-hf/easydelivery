@@ -72,7 +72,7 @@
     <string name="txt_delivered_packages">已派送包裹</string>
     <string name="txt_company">      由 3324959 NS LTD. 开发。</string>
     <string name="txt_slogan">易派送，快乐派送在哈利法克斯</string>
-    <string name="login_copyright">3324959 NS LTD. 版权所有。v2.8</string>
+    <string name="login_copyright">3324959 NS LTD. 版权所有。v2.9</string>
     <string name="str_courierservice_failure">CourierService 创建失败</string>
     <string name="str_package_id">包裹号：—</string>
     <string name="str_scan_status">已扫描 0 / 0</string>

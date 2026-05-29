@@ -78,7 +78,7 @@
     <string name="txt_delivered_packages">Delivered Packages</string>
     <string name="txt_company">      Developed by 3324959 NS LTD.</string>
     <string name="txt_slogan">Easy delivery, happy working in Halifax</string>
-    <string name="login_copyright">Copyright 3324959 NS LTD. All rights reserved. v2.8</string>
+    <string name="login_copyright">Copyright 3324959 NS LTD. All rights reserved. v2.9</string>
     <string name="str_courierservice_failure">CourierService creation failed</string>
     <string name="str_package_id">Package ID: —</string>
     <string name="str_scan_status">Scanned 0 / 0</string>
