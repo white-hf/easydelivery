@@ -47,15 +47,35 @@
             android:contentDescription="@string/action_expand"/>
     </LinearLayout>
 
-    <!-- 详情 多行 17sp，黑色 -->
     <TextView
-        android:id="@+id/tv_detail"
+        android:id="@+id/tv_line1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="17sp"
         android:textColor="@android:color/black"
         android:layout_marginTop="4dp"
-        android:maxLines="4"
+        android:maxLines="1"
+        android:ellipsize="end"/>
+
+    <TextView
+        android:id="@+id/tv_recipient"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="15sp"
+        android:textColor="#FF374151"
+        android:layout_marginTop="2dp"
+        android:maxLines="1"
+        android:ellipsize="end"/>
+
+    <!-- Address must be a single line for fast scanning -->
+    <TextView
+        android:id="@+id/tv_address"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="15sp"
+        android:textColor="#FF374151"
+        android:layout_marginTop="2dp"
+        android:maxLines="1"
         android:ellipsize="end"/>
 
     <LinearLayout

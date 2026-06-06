@@ -66,14 +66,16 @@ public class ClusterParcelAdapter extends RecyclerView.Adapter<ClusterParcelAdap
         String unitNo = TextUtils.isEmpty(unitRaw)
                 ? context.getString(R.string.parcel_unit_unknown)
                 : context.getString(R.string.package_list_unit_format, unitRaw);
-        String name = info.getName() == null ? "" : info.getName();
-        // Simplified: removed name, keeping only street and unit
+        String name = info.getName() == null ? "" : info.getName().trim();
         String line1 = context.getString(R.string.cluster_line1_format, streetNo, unitNo, "").trim();
         String address = info.getAddress() == null
                 ? context.getString(R.string.map_placeholder)
                 : info.getAddress();
         String line2 = context.getString(R.string.cluster_line2_format, address);
-        h.tvDetail.setText(line1 + "\n" + line2);
+        h.tvLine1.setText(line1);
+        h.tvRecipient.setText(TextUtils.isEmpty(name) ? "" : name);
+        h.tvRecipient.setVisibility(TextUtils.isEmpty(name) ? View.GONE : View.VISIBLE);
+        h.tvAddress.setText(line2);
 
         h.itemView.setOnClickListener(v -> {
             expandedPosition = -1;
@@ -114,7 +116,7 @@ public class ClusterParcelAdapter extends RecyclerView.Adapter<ClusterParcelAdap
     }
 
     static class VH extends RecyclerView.ViewHolder {
-        final TextView tvRoute, tvDetail, tvLargeBadge;
+        final TextView tvRoute, tvLine1, tvRecipient, tvAddress, tvLargeBadge;
         final View btnExpand;
         final View actions;
         final View btnCall, btnSms, btnShare, btnLocate;
@@ -123,7 +125,9 @@ public class ClusterParcelAdapter extends RecyclerView.Adapter<ClusterParcelAdap
             super(itemView);
             tvRoute = itemView.findViewById(R.id.tv_route);
             tvLargeBadge = itemView.findViewById(R.id.tv_large_badge);
-            tvDetail = itemView.findViewById(R.id.tv_detail);
+            tvLine1 = itemView.findViewById(R.id.tv_line1);
+            tvRecipient = itemView.findViewById(R.id.tv_recipient);
+            tvAddress = itemView.findViewById(R.id.tv_address);
             btnExpand = itemView.findViewById(R.id.btn_expand);
             actions = itemView.findViewById(R.id.actions_container);
             btnCall = itemView.findViewById(R.id.btn_call);

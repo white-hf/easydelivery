@@ -21,7 +21,7 @@
     <string name="str_login_failure">Login failed</string>
     <string name="str_login_user_failure">Incorrect username or password</string>
     <string name="str_req_timeout">Request timed out</string>
-    <string name="version">1.0_0406_1</string>
+    <string name="version">1.0_0605_1</string>
     <string name="title_activity_settings">Settings</string>
     <string name="str_login">Log in</string>
     <string name="str_confirm">Confirm</string>

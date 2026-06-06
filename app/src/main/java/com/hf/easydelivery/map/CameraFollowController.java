@@ -58,11 +58,11 @@ public class CameraFollowController {
     // Tunable zoom parameters (developer panel).
     public static final class ZoomTuningConfig {
         public float defaultFollowZoom = 15.0f;
-        public float drivingMinZoom = 14.5f;
+        public float drivingMinZoom = 16.5f;
         public float speedZoomNear = 18.8f;
         public float speedZoomCity = 17.5f;
-        public float speedZoomSuburb = 16.5f;
-        public float speedZoomHighway = 15.5f;
+        public float speedZoomSuburb = 17.0f;
+        public float speedZoomHighway = 16.5f;
     }
 
     private static final ZoomTuningConfig ZOOM_TUNING_CONFIG = new ZoomTuningConfig();
@@ -1258,6 +1258,8 @@ public class CameraFollowController {
 
         double lookAheadMeters;
         float speedMps = location.hasSpeed() ? Math.max(0f, location.getSpeed()) : 0f;
+        float kmh = speedMps * 3.6f;
+
         if (speedMps < 4f) {
             lookAheadMeters = 40d;
         } else if (speedMps < 10f) {
@@ -1273,10 +1275,18 @@ public class CameraFollowController {
             targetLatLng = driverLatLng;
         }
 
-        float browseZoom = Math.min(ZOOM_TUNING_CONFIG.defaultFollowZoom, 15.55f);
-        browseZoom = Math.max(browseZoom, 15.35f);
+        // Target range: 2.5km - 3.5km => Zoom 15.8 - 16.2
+        float browseZoom;
+        if (kmh < 20f) {
+            browseZoom = 16.15f; // ~2.5km
+        } else if (kmh < 55f) {
+            browseZoom = 16.0f;  // ~2.8km
+        } else {
+            browseZoom = 15.85f; // ~3.4km
+        }
+
         if (location.getSpeed() < 1.5f) {
-            browseZoom = Math.min(browseZoom + 0.15f, 15.7f);
+            browseZoom = Math.min(browseZoom + 0.15f, 16.3f);
         }
 
         float tilt = Math.max(22f, Math.min(current.tilt, 30f));
