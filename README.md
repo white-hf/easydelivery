@@ -144,15 +144,15 @@ flowchart TB
 
 ### Map Overview Reference
 
-<img src="docs/media/Map%20overlook.png" alt="Map overview reference" width="900" />
+<img src="docs/media/Map%20overlook.png" alt="Map overview reference" width="300" />
 
 ### Large Parcel Marker Reference
 
-<img src="docs/media/Map%20with%20large%20package%20sign.png" alt="Large parcel marker reference" width="900" />
+<img src="docs/media/Map%20with%20large%20package%20sign.png" alt="Large parcel marker reference" width="300" />
 
 ### Multi-parcel Map Reference
 
-<img src="docs/media/Map%20with%20multipe%20packages.png" alt="Multi parcel map reference" width="900" />
+<img src="docs/media/Map%20with%20multipe%20packages.png" alt="Multi parcel map reference" width="300" />
 
 ## How to Install and Run the Project
 
