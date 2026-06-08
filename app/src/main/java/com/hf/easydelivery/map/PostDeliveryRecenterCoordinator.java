@@ -26,11 +26,11 @@ import java.util.List;
  */
 final class PostDeliveryRecenterCoordinator {
 
-    private static final float CORE_MARGIN_X = 0.25f;
-    private static final float CORE_MARGIN_Y = 0.25f;
+    private static final float CORE_MARGIN_X = 0.12f;
+    private static final float CORE_MARGIN_Y = 0.14f;
     private static final long PENDING_WINDOW_MS = 8_000L;
     private static final float MAX_TRIGGER_SPEED_MPS = 6f;
-    private static final float MAX_CANDIDATE_DISTANCE_METERS = 5_000f;
+    private static final float MAX_CANDIDATE_DISTANCE_METERS = 2_000f;
 
     private long pendingUntilUptimeMs = 0L;
     @Nullable
@@ -105,7 +105,7 @@ final class PostDeliveryRecenterCoordinator {
                     .include(driverLatLng)
                     .include(candidateLatLng)
                     .build();
-            googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 128));
+            googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 96));
             clearPending();
             return true;
         } catch (Throwable ignore) {
