@@ -203,6 +203,7 @@ public class ApartmentPhotoService {
         if (entity == null) return;
         entity.addressKey = newKey;
         entity.displayAddress = displayAddress;
+        entity.source = ApartmentPhotoEntity.SOURCE_MANUAL;
         repository.update(entity);
     }
 

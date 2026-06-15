@@ -43,6 +43,7 @@ final class PostDeliveryRecenterCoordinator {
 
     boolean maybeTrigger(@NonNull GoogleMap googleMap,
             @NonNull MapView mapView,
+            @NonNull CameraFollowController cameraController,
             @NonNull Location driverLocation,
             @NonNull MovementState movementState,
             @Nullable List<DeliveryInfo> deliveries,
@@ -105,7 +106,8 @@ final class PostDeliveryRecenterCoordinator {
                     .include(driverLatLng)
                     .include(candidateLatLng)
                     .build();
-            googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 96));
+            googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 128));
+            cameraController.refreshCameraActivityLock();
             clearPending();
             return true;
         } catch (Throwable ignore) {

@@ -21,7 +21,7 @@
     <string name="str_login_failure">Login failed</string>
     <string name="str_login_user_failure">Incorrect username or password</string>
     <string name="str_req_timeout">Request timed out</string>
-    <string name="version">1.0_0605_1</string>
+    <string name="version">1.0_0607_2</string>
     <string name="title_activity_settings">Settings</string>
     <string name="str_login">Log in</string>
     <string name="str_confirm">Confirm</string>
@@ -78,7 +78,7 @@
     <string name="txt_delivered_packages">Delivered Packages</string>
     <string name="txt_company">      Developed by 3324959 NS LTD.</string>
     <string name="txt_slogan">Easy delivery, happy working in Halifax</string>
-    <string name="login_copyright">Copyright 3324959 NS LTD. All rights reserved. v2.9</string>
+    <string name="login_copyright">Copyright 3324959 NS LTD. All rights reserved. v3.0</string>
     <string name="str_courierservice_failure">CourierService creation failed</string>
     <string name="str_package_id">Package ID: —</string>
     <string name="str_scan_status">Scanned 0 / 0</string>
@@ -330,7 +330,6 @@
     <string name="retake">Retake</string>
     <string name="parcel_list">Parcel list</string>
     <string name="my_location">My location</string>
-    <string name="map_type_toggle">Switch map type</string>
     <string name="status_help">Status help</string>
     <string name="camera_not_ready">Camera is not ready. Please try again later.</string>
     <string name="switch_view">Switch view</string>

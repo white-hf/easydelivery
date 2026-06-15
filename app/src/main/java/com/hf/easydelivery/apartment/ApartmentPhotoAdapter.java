@@ -89,10 +89,9 @@ class ApartmentPhotoAdapter extends RecyclerView.Adapter<ApartmentPhotoAdapter.P
                     ? R.string.my_apartment_source_manual
                     : R.string.my_apartment_source_auto);
             if (!ApartmentPhotoEntity.SOURCE_MANUAL.equals(entity.source)) {
-                editBtn.setVisibility(View.GONE);
-            } else {
-                editBtn.setVisibility(View.VISIBLE);
+                // Keep visible for all now, we want to allow editing auto-generated keys
             }
+            editBtn.setVisibility(View.VISIBLE);
 
             if (!TextUtils.isEmpty(entity.filePath)) {
                 File file = new File(entity.filePath);

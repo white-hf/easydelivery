@@ -84,6 +84,8 @@ public class CameraFollowController {
     private static final float EMPTY_SCREEN_RESCUE_INSET_TOP = 0.14f;
     private static final float EMPTY_SCREEN_RESCUE_INSET_BOTTOM = 0.22f;
 
+    private static final float VISIBILITY_SAFE_MARGIN = 0.25f;
+
     // Adaptive animation + lookAhead smoothing
     private static final long CAMERA_ANIM_MIN_MS = 120L;
     private static final long CAMERA_ANIM_MAX_MS = 350L;
@@ -402,6 +404,7 @@ public class CameraFollowController {
     // Paused-by-user state (map gestures or light intervention)
     private boolean pausedByUser = false;
     private long lastCameraUpdateUptime = 0L;
+    private float lastGuardedZoom = Float.NaN;
     private long lastCameraAnimStartUptime = 0L;
     @Nullable
     private LatLng lastCameraTargetLatLng = null;
@@ -779,6 +782,8 @@ public class CameraFollowController {
         if (targetCamera == null)
             return false;
 
+        targetCamera = applyVisibilityGuard(targetCamera, context);
+
         if (isDuplicateCameraRequest(targetCamera, context)) {
             logD("updateCamera(): duplicate request skipped");
             return false;
@@ -848,6 +853,79 @@ public class CameraFollowController {
         }
 
         return true;
+    }
+
+    private CameraPosition applyVisibilityGuard(@NonNull CameraPosition target, @NonNull CameraUpdateContext context) {
+        if (context.targetDelivery == null || googleMap == null) {
+            lastGuardedZoom = Float.NaN;
+            return target;
+        }
+
+        DeliveryInfo targetParcel = context.targetDelivery;
+        LatLng parcelLatLng = new LatLng(targetParcel.getLatitude(), targetParcel.getLongitude());
+
+        try {
+            // Check where the parcel is NOW on screen
+            Point p = googleMap.getProjection().toScreenLocation(parcelLatLng);
+            int w = mapView != null ? mapView.getWidth() : 0;
+            int h = mapView != null ? mapView.getHeight() : 0;
+            if (w <= 0 || h <= 0)
+                return target;
+
+            // Use asymmetric margins because of the info pill at the bottom
+            float marginX = w * VISIBILITY_SAFE_MARGIN;
+            float marginYTop = h * 0.20f;
+            float marginYBottom = h * 0.35f; // Leave more room for info pill
+            RectF safeRect = new RectF(marginX, marginYTop, w - marginX, h - marginYBottom);
+
+            // Use a slightly larger "recovery" rect to prevent immediate snap-back (hysteresis)
+            RectF recoveryRect = new RectF(w * 0.15f, h * 0.15f, w * 0.85f, h * 0.70f);
+
+            boolean isSafe = safeRect.contains(p.x, p.y);
+            boolean isStillInRecovery = !Float.isNaN(lastGuardedZoom) && recoveryRect.contains(p.x, p.y);
+
+            if (isSafe && !isStillInRecovery) {
+                // Parcel is well within the safe zone, reset guard
+                lastGuardedZoom = Float.NaN;
+                return target;
+            }
+
+            // Parcel is in a corner or off-screen, or we are in recovery state.
+            // 1. Zoom logic: If we need to guard, we limit the maximum zoom.
+            float guardedZoom = target.zoom;
+            if (target.zoom > 17.5f) {
+                guardedZoom = 17.5f;
+            }
+
+            // Smooth the zoom transition if we are already guarding
+            if (!Float.isNaN(lastGuardedZoom)) {
+                guardedZoom = lastGuardedZoom + 0.2f * (guardedZoom - lastGuardedZoom);
+            }
+            lastGuardedZoom = guardedZoom;
+
+            // 2. Nudge logic
+            LatLng nudgedTarget = target.target;
+            if (context.isDriving()) {
+                double distToTargetMeters = SphericalUtil.computeDistanceBetween(target.target, parcelLatLng);
+                if (distToTargetMeters > 50) {
+                    // Nudge 25% towards the parcel to keep it in FOV
+                    nudgedTarget = SphericalUtil.interpolate(target.target, parcelLatLng, 0.25);
+                }
+            }
+
+            return new CameraPosition.Builder(target)
+                    .target(nudgedTarget)
+                    .zoom(guardedZoom)
+                    .build();
+
+        } catch (Throwable ignore) {
+            return target;
+        }
+    }
+
+    public void refreshCameraActivityLock() {
+        this.lastCameraUpdateUptime = SystemClock.uptimeMillis();
+        logD("refreshCameraActivityLock(): camera activity lock refreshed");
     }
 
     private boolean isDuplicateCameraRequest(@NonNull CameraPosition targetCamera,

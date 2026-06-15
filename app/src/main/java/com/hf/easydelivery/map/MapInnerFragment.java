@@ -500,12 +500,9 @@ public class MapInnerFragment extends Fragment
         View mini = view.findViewById(R.id.include_minibar);
         if (mini != null) {
             ImageButton btnMyLoc = mini.findViewById(R.id.btn_my_loc);
-            ImageButton btnMapType = mini.findViewById(R.id.btn_map_type);
             ImageButton btnSwitchView = mini.findViewById(R.id.btn_switch_view);
             if (btnMyLoc != null)
                 btnMyLoc.setOnClickListener(v -> centerOnMyLocation(false));
-            if (btnMapType != null)
-                btnMapType.setOnClickListener(v -> toggleMapType(btnMapType));
             if (btnSwitchView != null) {
                 btnSwitchView.setOnClickListener(v -> {
                     if (getParentFragment() instanceof MapHostFragment) {
@@ -931,6 +928,22 @@ public class MapInnerFragment extends Fragment
         FileLog.i(TAG, "onMapReady: enter");
         googleMap = map;
         googleMap.setMyLocationEnabled(false);
+        try {
+            googleMap.resetMinMaxZoomPreference();
+        } catch (Throwable ignore) {
+        }
+        try {
+            googleMap.setMaxZoomPreference(21.0f);
+        } catch (Throwable ignore) {
+        }
+        try {
+            googleMap.setBuildingsEnabled(true);
+        } catch (Throwable ignore) {
+        }
+        try {
+            googleMap.setIndoorEnabled(true);
+        } catch (Throwable ignore) {
+        }
         cameraController = new CameraFollowController(googleMap, mapView);
         cameraController.setLocationProviders(locationFacade, locationControls);
         cameraController.setNavigationModeEnabled(navigationModeEnabled);
@@ -943,6 +956,15 @@ public class MapInnerFragment extends Fragment
         }
         updateUiTickInterval();
         initClusterManager();
+        try {
+            CameraPosition cameraPosition = googleMap.getCameraPosition();
+            FileLog.i(TAG,
+                    "onMapReady mapState: type=" + googleMap.getMapType()
+                            + ", zoom=" + cameraPosition.zoom
+                            + ", tilt=" + cameraPosition.tilt
+                            + ", bearing=" + cameraPosition.bearing);
+        } catch (Throwable ignore) {
+        }
         if (savedPosition != null) {
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPosition, googleMap.getCameraPosition().zoom));
         }
@@ -1425,17 +1447,6 @@ public class MapInnerFragment extends Fragment
 
     // import: CameraUpdate, CameraUpdateFactory, LatLng, SystemClock, @NonNull
 
-    private void toggleMapType(ImageButton btn) {
-        if (googleMap == null)
-            return;
-        int type = googleMap.getMapType();
-        if (type == GoogleMap.MAP_TYPE_NORMAL) {
-            googleMap.setMapType(GoogleMap.MAP_TYPE_SATELLITE);
-        } else {
-            googleMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
-        }
-    }
-
     private void toggleNavigationMode() {
         navigationModeEnabled = !navigationModeEnabled;
         if (navigationModeEnabled) {
@@ -1621,6 +1632,7 @@ public class MapInnerFragment extends Fragment
                 currentHeading,
                 distanceMeters,
                 stationaryDurationMs,
+                currentPrimaryDelivery,
                 cameraNearby,
                 insideZone,
                 getRealMapVisibleHeightPx(),
@@ -1656,6 +1668,7 @@ public class MapInnerFragment extends Fragment
         if (postDeliveryRecenterCoordinator.maybeTrigger(
                 googleMap,
                 mapView,
+                cameraController,
                 effective,
                 state,
                 currentMapDeliveries,
@@ -1749,6 +1762,7 @@ public class MapInnerFragment extends Fragment
                 currentHeading,
                 distanceMeters,
                 stationaryDurationMs,
+                currentPrimaryDelivery,
                 cameraNearby,
                 insideZone,
                 getRealMapVisibleHeightPx(),

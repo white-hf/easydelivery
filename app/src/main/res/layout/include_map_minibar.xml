@@ -30,22 +30,6 @@
         android:layout_width="1dp"
         android:layout_height="8dp" />
 
-    <!-- 地图类型切换（卫星/普通） -->
-    <ImageButton
-        android:id="@+id/btn_map_type"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:padding="8dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="@string/map_type_toggle"
-        android:src="@android:drawable/ic_menu_mapmode"
-        android:tint="@android:color/white" />
-
-    <!-- 间隔 -->
-    <Space
-        android:layout_width="1dp"
-        android:layout_height="8dp" />
-
     <!-- 地图/列表切换（放在右侧工具栏底部） -->
     <ImageButton
         android:id="@+id/btn_switch_view"

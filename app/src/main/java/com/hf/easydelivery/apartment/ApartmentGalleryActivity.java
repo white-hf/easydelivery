@@ -82,21 +82,32 @@ public class ApartmentGalleryActivity extends AppCompatActivity implements Apart
 
     @Override
     public void onEdit(@NonNull ApartmentPhotoEntity entity) {
-        final EditText input = new EditText(this);
-        input.setHint(R.string.my_apartment_edit_hint);
-        input.setText(TextUtils.isEmpty(entity.displayAddress) ? entity.addressKey : entity.displayAddress);
+        final android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(50, 20, 50, 20);
+
+        final EditText displayInput = new EditText(this);
+        displayInput.setHint(R.string.my_apartment_edit_hint);
+        displayInput.setText(TextUtils.isEmpty(entity.displayAddress) ? entity.addressKey : entity.displayAddress);
+        layout.addView(displayInput);
+
+        final EditText keyInput = new EditText(this);
+        keyInput.setHint("Address Key");
+        keyInput.setText(entity.addressKey);
+        layout.addView(keyInput);
+
         new AlertDialog.Builder(this)
                 .setTitle(R.string.my_apartment_edit_title)
-                .setView(input)
+                .setView(layout)
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                    String raw = input.getText().toString();
-                    String normalized = ApartmentAddressKeyBuilder.manualKeyFromInput(raw);
-                    if (TextUtils.isEmpty(normalized)) {
+                    String raw = displayInput.getText().toString();
+                    String key = keyInput.getText().toString();
+                    if (TextUtils.isEmpty(key)) {
                         showError();
                         return;
                     }
                     executor.execute(() -> {
-                        service.updateAddressKey(entity.id, normalized, raw);
+                        service.updateAddressKey(entity.id, key, raw);
                         loadData();
                     });
                 })

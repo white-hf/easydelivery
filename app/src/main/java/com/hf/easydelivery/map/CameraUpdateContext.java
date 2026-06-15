@@ -32,6 +32,8 @@ public class CameraUpdateContext {
     public final float nearestPackageDistanceMeters;
     public final long stationaryDurationMs;
     @Nullable
+    public final DeliveryInfo targetDelivery;
+    @Nullable
     public final List<DeliveryInfo> nearbyDeliveries;
     public final boolean insideDeliveryZone;
     public final int visibleMapHeightPx;
@@ -51,6 +53,7 @@ public class CameraUpdateContext {
             float headingDeg,
             float nearestPackageDistanceMeters,
             long stationaryDurationMs,
+            @Nullable DeliveryInfo targetDelivery,
             @Nullable List<DeliveryInfo> nearbyDeliveries,
             boolean insideDeliveryZone,
             int visibleMapHeightPx,
@@ -68,6 +71,7 @@ public class CameraUpdateContext {
         this.headingDeg = headingDeg;
         this.nearestPackageDistanceMeters = nearestPackageDistanceMeters;
         this.stationaryDurationMs = stationaryDurationMs;
+        this.targetDelivery = targetDelivery;
         this.nearbyDeliveries = nearbyDeliveries;
         this.insideDeliveryZone = insideDeliveryZone;
         this.visibleMapHeightPx = visibleMapHeightPx;
