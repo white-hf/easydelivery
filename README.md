@@ -136,19 +136,28 @@ flowchart TB
   class L1S,L4S spacer;
 ```
 
-## Demo Media
+## 🎥 Product Demo
 
-### Photo Flow
+### 📸 Smart Delivery Workflow
+This video demonstrates our high-efficiency camera engine designed for high-volume delivery operations.
 
 <a href="https://www.youtube.com/watch?v=pon8pqhOicM" target="_blank">
-  <img src="https://img.youtube.com/vi/pon8pqhOicM/maxresdefault.jpg" width="400" alt="Watch the video">
+  <img src="https://img.youtube.com/vi/pon8pqhOicM/maxresdefault.jpg" width="600" alt="Watch the Smart Camera Workflow Demo">
 </a>
 
+**Key Highlights:**
+*   **Seamless Parcel Handoff**: Automatic switching between multiple parcels at the same stop, maintaining workflow continuity.
+*   **Intelligent Auto-Capture**: Computer vision detects and matches the shipping label, triggering the shutter automatically—zero manual taps required.
+*   **Rapid-Fire Batching**: Continuous capture mode for multi-item deliveries.
+*   **Hands-Free Submission**: Fully automated background data syncing and submission once the delivery sequence is complete.
 
-### Driving Map Follow
+*EasyDelivery turns a 30-second manual process into a 5-second automated flow.*
+
+### 🗺️ Driving Map Follow
+Real-time navigation with adaptive auto-zoom and parcel visibility protection.
 
 <a href="https://www.youtube.com/watch?v=DM9m_VVtZhA" target="_blank">
-  <img src="https://img.youtube.com/vi/DM9m_VVtZhA/maxresdefault.jpg" width="400" alt="Watch the video">
+  <img src="https://img.youtube.com/vi/DM9m_VVtZhA/maxresdefault.jpg" width="600" alt="Watch the Map Follow Demo">
 </a>
 
 ### Map Overview Reference
