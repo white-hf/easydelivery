@@ -140,11 +140,16 @@ flowchart TB
 
 ### Photo Flow
 
-<video src="docs/media/Take%20photos.mp4" controls width="360"></video>
+<a href="https://www.youtube.com/watch?v=pon8pqhOicM" target="_blank">
+  <img src="https://img.youtube.com/vi/pon8pqhOicM/maxresdefault.jpg" width="400" alt="Watch the video">
+</a>
+
 
 ### Driving Map Follow
 
-<video src="docs/media/Travel%20and%20show%20a%20package.mp4" controls width="360"></video>
+<a href="https://www.youtube.com/watch?v=DM9m_VVtZhA" target="_blank">
+  <img src="https://img.youtube.com/vi/DM9m_VVtZhA/maxresdefault.jpg" width="400" alt="Watch the video">
+</a>
 
 ### Map Overview Reference
 
