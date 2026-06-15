@@ -1,5 +1,9 @@
 # EasyDelivery
 
+<video src="https://raw.githubusercontent.com/white-hf/easydelivery/branch_delivery_driver/docs/media/Travel_and_show_a_package.mp4" width="100%" controls muted>
+  您的浏览器不支持 video 标签.
+</video>
+
 **EasyDelivery** is a package delivery Android app designed to be efficient, user-friendly, and capable of functioning without a network connection. With a clean and intuitive interface, EasyDelivery can be easily extended to support various courier services.
 
 ## Why I Created This Project
