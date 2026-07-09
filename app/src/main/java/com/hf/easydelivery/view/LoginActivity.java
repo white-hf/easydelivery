@@ -48,6 +48,16 @@ public class LoginActivity extends AppCompatActivity {
         String lastId = sp.getString("lastDriverId", "");
         etDriverId.setText(lastId);
 
+        TextView versionLabel = findViewById(R.id.versionLabel);
+        if (versionLabel != null) {
+            try {
+                String versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+                versionLabel.setText("v" + versionName);
+            } catch (Exception e) {
+                versionLabel.setText("v2.0");
+            }
+        }
+
         btnLogin.setOnClickListener(v -> {
             String driverId = etDriverId.getText().toString().trim();
             String password = etPassword.getText().toString().trim();
